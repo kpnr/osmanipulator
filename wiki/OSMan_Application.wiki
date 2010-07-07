@@ -1,0 +1,15 @@
+#root OSMan object.
+
+= Introduction =
+
+Application is root OSMan object. This object supports methods for listing of availaible modules and objects, object creation and accessing OSMan global settings.
+
+
+= Details =
+
+Application interface
+
+Add your content here.  Format your content with:
+  * Text in *bold* or _italic_
+  * Headings, paragraphs, and lists
+  * Automatic links to other wiki pages
