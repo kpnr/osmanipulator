@@ -1,15 +1,21 @@
-#root OSMan object.
+#labels Phase-Implementation
+# root OSMan object.
 
-= Introduction =
+= Summary =
 
 Application is root OSMan object. This object supports methods for listing of availaible modules and objects, object creation and accessing OSMan global settings.
 
 
-= Details =
+= Interface =
 
-Application interface
-
-Add your content here.  Format your content with:
-  * Text in *bold* or _italic_
-  * Headings, paragraphs, and lists
-  * Automatic links to other wiki pages
+  # [IOSManAll OSManAll interface]
+  # `createObject(string objClassName)`
+  Create object by short or full [class_name object class name] and returns it. If no object class found exception raised.
+  # `getModules()`
+  Returns list of loaded [module modules] as [safe_array safe array] of string [variant variants].
+  # `getModuleClasses(string moduleName)`
+  Get available classes in module `moduleName`. Returns list of [class_name short class names] of available objects as [safe_array safe array] of string [variant variants]. If no module found zero-length array returned.
+  # `log(string logMessage)`
+  Write `logMessage` into global logger. If no logger set then nothing happen.
+  # `logger`
+  Global [ILog logging] interface set & get property.
