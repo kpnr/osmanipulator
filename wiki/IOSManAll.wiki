@@ -1,0 +1,17 @@
+#labels Phase-Implementation
+#summary common OSMan objects interface.
+
+= Summary =
+
+*ISManAll* supported by almost all OSMan objects by default. It used to retrieve object type and instance information.
+
+= Interface =
+
+  * *toString()* <br> Returns string representation of object instance. By default returns *ModuleName.ClassName.InstanceAddress*. <br>*Example:* `var man=WScript.CreateObject("OSMan.Application");
+echo("App="+man.toString());`
+Should print:
+`App=OSMan.Application.01718030`
+  * *getClassName()* <br> Returns [class_name short class name] (type) of object instance. *getClassName()* is only way to get object typeinfo used in OSMan. This method used in multitype methods like *IMap.putObject(obj)* to distinguish between different object types like *Node*, *Way* and *Relation*.
+
+= Usage =
+See *modlist.js* script in examples, *TAbstractMap.putObject* implementation in *uMap.pas* in OSman sources.
