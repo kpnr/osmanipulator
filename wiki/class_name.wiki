@@ -11,7 +11,7 @@ There are two forms of *class name* - *short* and *full*.
 
 *Short name* returned by *getClassName()* method of *IOSManAll* interface and accepted in *createObject(objClassName)* method of [OSMan_Application Application]. Short name used to identify object type in multitype methods in OSMan. *Examples:* _Node_, _Way_, _Map_, _Storage_, _FileWriter_.
 
-*Full name* used to create object from certain module in *!createObject(!objClassName)* method of [OSMan_Application Application]. Full name consits of module name and short name delimited by dot symbol (.). *Examples:* _"OSMan.FileReader"_, _"OSManPack.UnGZ"_.
+*Full name* used to create object from certain module in *!createObject(!objClassName)* method of [OSMan_Application Application]. Full name consits of module name and short name delimited by dot symbol (.). *Examples:* _OSMan.!FileReader_, _OSManPack.UnGZ_.
 
 
 = Usage =
