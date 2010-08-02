@@ -7,10 +7,11 @@
 
 = Interface =
 
-  * *toString()* <br> Returns string representation of object instance. By default returns *ModuleName.ClassName.InstanceAddress*. <br>*Example:* `var man=WScript.CreateObject("OSMan.Application");
-echo("App="+man.toString());`
+  * *toString()* <br> Returns string representation of object instance. By default returns *!ModuleName.ClassName.InstanceAddress*. <br>*Example:*
+{{{var man=WScript.CreateObject("OSMan.Application");
+echo("App="+man.toString());}}}
 Should print:
-`App=OSMan.Application.01718030`
+{{{App=OSMan.Application.01718030}}}
   * *getClassName()* <br> Returns [class_name short class name] (type) of object instance. *getClassName()* is only way to get object typeinfo used in OSMan. This method used in multitype methods like *IMap.putObject(obj)* to distinguish between different object types like *Node*, *Way* and *Relation*.
 
 = Usage =

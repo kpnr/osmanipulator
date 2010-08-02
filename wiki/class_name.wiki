@@ -1,0 +1,18 @@
+#labels Phase-Implementation
+#summary Object type info string.
+
+= Summary =
+
+*Class name* used in object creation and processing methods to identify object type.
+
+= Details =
+
+There are two forms of *class name* - *short* and *full*.
+
+*Short name* returned by *!getClassName()* method of *IOSManAll* interface and accepted in *!createObject(!objClassName)* method of [OSMan_Application Application]. Short name used to identify object type in multitype methods in OSMan. *Examples:* _Node_, _Way_, _Map_, _Storage_, _FileWriter_.
+
+*Full name* used to create object from certain module in *!createObject(!objClassName)* method of [OSMan_Application Application]. Full name consits of module name and short name delimited by dot symbol (.). *Examples:* _OSMan.FileReader_, _OSManPack.UnGZ_.
+
+
+= Usage =
+See *modlist.js* script in examples, *TAbstractMap.putObject* implementation in *uMap.pas* in OSman sources.
