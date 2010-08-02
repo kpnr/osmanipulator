@@ -1,5 +1,5 @@
-#labels Phase-Implementation
 #summary OSMan module.
+#labels Phase-Implementation,Phase-Deploy
 
 = Summary =
 
@@ -7,7 +7,7 @@ OSMan *module* is Win32 dll containing OLE-Automation objects.
 
 = Details =
 
-OSMan module file extention must be *omm* (OsManModule). Module must export OSManModule function.
-Module load order is undefined, so module implementation should not rely or depend on loading order.
+OSMan module file extention must be *omm* (!OsManModule). Module must export [OSManModule] function.
+Module load order is undefined, so implementation should not rely or depend on loading order.
 
-If any error occured during module loading or OSManModule function call then no module and objects registered in OSMan.
+If any error occured during dll loading or OSManModule function call then no module and objects registered in OSMan.
