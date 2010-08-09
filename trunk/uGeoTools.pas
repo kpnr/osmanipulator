@@ -441,13 +441,15 @@ var
               rtRelation: begin
                   //resolve relation ref into relation
                   v := srcMap.getRelation(m.RefId);
-                  if v then begin
-                    grow(1);
-                    gr := TGTRelation.create();
-                    gr.AddRelation(v);
-                    newInList[nn] := gr;
-                    inc(nn);
-                    doRepeat := true;
+                  if varIsType(v,varDispatch)then begin
+                    if (v.tags.getByKey('type')<>'collection') then begin
+                      grow(1);
+                      gr := TGTRelation.create();
+                      gr.AddRelation(v);
+                      newInList[nn] := gr;
+                      inc(nn);
+                      doRepeat := true;
+                    end;
                   end
                   else begin
                     addNotResolved(m);
