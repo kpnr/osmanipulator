@@ -11,6 +11,11 @@ type
     function getClassName(): WideString;
   end;
 
+  //logger interface
+  ILogger = interface(IOSManAll)
+    procedure log(const logMessage:WideString);
+  end;
+  
   //Read only byte stream interface
   IInputStream = interface(IOSManAll)
     //maxBufSize: read buffer size

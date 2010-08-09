@@ -459,7 +459,7 @@ end;
 
 function TOSMDecompressStream.get_eos: WordBool;
 begin
-  result := inStreamAdaptor.EOS and fEOS;
+  result := inStreamAdaptor.EOS or fEOS;
 end;
 
 function TOSMDecompressStream.Read(const maxBufSize: Integer): OleVariant;

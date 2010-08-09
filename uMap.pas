@@ -1803,7 +1803,7 @@ procedure TAbstractMap.putObject(const aObj: OleVariant);
 var
   s: WideString;
 begin
-  s := aObj.getClassName;
+  s := aObj.getClassName();
   if s = 'Node' then
     putNode(aObj)
   else if s = 'Way' then
