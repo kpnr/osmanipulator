@@ -1,7 +1,7 @@
 unit uGeoTools;
 
 interface
-uses SysUtils,Variants, uInterfaces, uOSMCommon, uModule;
+uses Math, SysUtils, Variants, uInterfaces, uOSMCommon, uModule;
 
 type
   TGTShape = class(TObject)
@@ -28,19 +28,27 @@ type
   TGTRect = class(TGTShape)
   protected
     fLeft, fRight, fTop, fBottom: integer;
-    class function between(const v, min, max: integer): boolean;
-    function get_height:cardinal;
-    function get_width:cardinal;
+    //returns:
+    //0 - v outside (min,max)
+    //1 - (v = min) or (v=max)
+    //2 - min<v<max
+    class function between(const v, min, max: integer): integer;
+    function get_height: cardinal;
+    function get_width: cardinal;
     procedure resetBounds();
   public
     constructor create();
-    function isIn(const pt: TGTPoint): boolean; virtual;
+    //returns:
+    //0 - pt outside
+    //1 - pt is on bound
+    //2 - pt is inside
+    function isIn(const pt: TGTPoint): integer; virtual;
     property left: integer read fLeft write fLeft;
     property right: integer read fRight write fRight;
     property top: integer read fTop write fTop;
     property bottom: integer read fBottom write fBottom;
-    property width:cardinal read get_width;
-    property height:cardinal read get_height;
+    property width: cardinal read get_width;
+    property height: cardinal read get_height;
   end;
 
 implementation
@@ -48,8 +56,8 @@ implementation
 const
   geoToolsClassGUID: TGUID = '{DF3ADB6E-3168-4C6B-9775-BA46C638E1A2}';
   //constants for TMultiPoly bbox hashing
-  hashBits=8;
-  hashSize=1 shl hashBits;
+  hashBits = 8;
+  hashSize = 1 shl hashBits;
 
 type
 
@@ -67,14 +75,14 @@ type
     function get_capacity: integer;
     procedure set_capacity(const Value: integer);
     procedure addExtraNode();
-    procedure updateBoundRect(const pt:TGTPoint);
+    procedure updateBoundRect(const pt: TGTPoint);
   public
     destructor destroy; override;
-    function isIn(const pt: TGTPoint): boolean; override;
+    function isIn(const pt: TGTPoint): integer; override;
     //if x outside poly nil returned, else returns right half of poly
-    function splitX(x:integer):TGTPoly;
+    function splitX(x: integer): TGTPoly;
     //if y outside poly nil returned, else returns top half of poly
-    function splitY(y:integer):TGTPoly;
+    function splitY(y: integer): TGTPoly;
     procedure addNode(const aNode: OleVariant);
     property count: integer read fCount;
     property capacity: integer read get_capacity write set_capacity;
@@ -116,10 +124,10 @@ type
   TMultiPoly = class(TOSManObject, IMultiPoly)
   protected
     inList: TGTShapeArray;
-    hash:array of array of TGTShapeArray;
+    hash: array of array of TGTShapeArray;
     fUnResolved: TRefList;
     allResolved: boolean;
-    class function intToHash(i:integer):cardinal;
+    class function intToHash(i: integer): cardinal;
     procedure putRelation(const OSMRelation: OleVariant);
     procedure putWay(const osmWay: OleVariant);
     procedure clearInList();
@@ -133,12 +141,12 @@ type
     //in Relation node-members ignored
     procedure addObject(const aMapObject: OleVariant);
     //returns true if all relations/way/nodes resolved, false otherwise
-    function resolve(const srcMap:OleVariant): boolean;
+    function resolve(const srcMap: OleVariant): boolean;
     //IRefList of unresolved references
     function getUnresolved(): OleVariant;
     //returns true if node is in poly (including border)
     function isIn(const aNode: OleVariant): boolean;
-    function getBBox():OleVariant;
+    function getBBox(): OleVariant;
   end;
 
   { TGeoTools }
@@ -171,63 +179,68 @@ end;
 
 function TMultiPoly.getBBox: OleVariant;
 var
-  n,e,s,w,t:integer;
-  i:integer;
-  poly:TGTPoly;
+  n, e, s, w, t: integer;
+  i: integer;
+  poly: TGTPoly;
 begin
   if not allResolved then
-    raise EConvertError.Create(toString()+'.bbox: polygon must be resolved');
-  if length(inList)>0 then begin
-    n:=low(integer);
-    s:=high(integer);
-    e:=low(integer);
-    w:=high(integer);
-    for i:=0 to high(inList) do begin
-      poly:=TGTPoly(inList[i]);
-      t:=poly.left;
-      if t<w then w:=t;
-      t:=poly.right;
-      if e<t then e:=t;
-      t:=poly.top;
-      if n<t then n:=t;
-      t:=poly.bottom;
-      if t<s then s:=t;
+    raise EConvertError.create(toString() + '.bbox: polygon must be resolved');
+  if length(inList) > 0 then begin
+    n := low(integer);
+    s := high(integer);
+    e := low(integer);
+    w := high(integer);
+    for i := 0 to high(inList) do begin
+      poly := TGTPoly(inList[i]);
+      t := poly.left;
+      if t < w then w := t;
+      t := poly.right;
+      if e < t then e := t;
+      t := poly.top;
+      if n < t then n := t;
+      t := poly.bottom;
+      if t < s then s := t;
     end;
   end
   else begin
-    n:=0;e:=0;s:=0;w:=0;
+    n := 0;
+    e := 0;
+    s := 0;
+    w := 0;
   end;
-  result:=VarArrayOf([TGTPoint.intToDeg(n),TGTPoint.intToDeg(e),TGTPoint.intToDeg(s),TGTPoint.intToDeg(w)]);
+  result := VarArrayOf([TGTPoint.IntToDeg(n), TGTPoint.IntToDeg(e), TGTPoint.IntToDeg(s),
+    TGTPoint.IntToDeg(w)]);
 end;
 
 procedure TMultiPoly.buildHash;
-  procedure putPoly(const x,y:cardinal;const p:TGTPoly);
+
+procedure putPoly(const x, y: cardinal; const p: TGTPoly);
   var
-    l:integer;
+    l: integer;
   begin
-    if cardinal(length(hash[x]))<=y then
-      setlength(hash[x],y+1);
-    l:=length(hash[x][y]);
-    setLength(hash[x][y],l+1);
-    hash[x][y][l]:=p;
+    if cardinal(length(hash[x])) <= y then
+      setlength(hash[x], y + 1);
+    l := length(hash[x][y]);
+    setlength(hash[x][y], l + 1);
+    hash[x][y][l] := p;
   end;
 var
-  xidx,yidx,polyidx:integer;
-  poly:TGTPoly;
-  xminhash,xmaxhash,yminhash,ymaxhash:cardinal;
+  xidx, yidx, polyidx: integer;
+  poly: TGTPoly;
+  xminhash, xmaxhash, yminhash, ymaxhash: cardinal;
 begin
   //hash clean up
-  setLength(hash,0);
-  setLength(hash,hashSize);
-  for polyidx:=0 to high(inList) do begin
-    poly:=TGTPoly(inList[polyidx]);
-    xminhash:=intToHash(poly.left);
-    xmaxhash:=intToHash(poly.right);
-    yminhash:=intToHash(poly.bottom);
-    ymaxhash:=intToHash(poly.top);
-    for xidx:=xminhash to xmaxhash do begin
-      for yidx:=yminhash to ymaxhash do begin
-        putPoly(xidx,yidx,poly);
+  setlength(hash, 0);
+  setlength(hash, hashSize);
+  for polyidx := 0 to high(inList) do begin
+    poly := TGTPoly(inList[polyidx]);
+    xminhash := intToHash(poly.left);
+    xmaxhash := intToHash(poly.right);
+    yminhash := intToHash(poly.bottom);
+    ymaxhash := intToHash(poly.top);
+    for xidx := xminhash to xmaxhash do begin
+      for yidx := yminhash to ymaxhash do begin
+        putPoly(xidx, yidx, poly);
       end;
     end;
   end;
@@ -240,7 +253,7 @@ begin
   for i := 0 to high(inList) do begin
     freeAndNil(inList[i]);
   end;
-  setLength(inList, 0);
+  setlength(inList, 0);
 end;
 
 procedure TMultiPoly.createUnresolved;
@@ -256,7 +269,7 @@ begin
   clearInList();
   if assigned(fUnResolved) then begin
     (fUnResolved as IDispatch)._Release();
-    fUnResolved:=nil;
+    fUnResolved := nil;
   end;
   inherited;
 end;
@@ -269,18 +282,18 @@ end;
 
 class function TMultiPoly.intToHash(i: integer): cardinal;
 begin
-  i:=i div (1 shl (32-hashBits));
-  inc(i,hashSize div 2);
-  result:=cardinal(i);
+  i := i div (1 shl (32 - hashBits));
+  inc(i, hashSize div 2);
+  result := cardinal(i);
 end;
 
 function TMultiPoly.isIn(const aNode: OleVariant): boolean;
 var
-  i,xhash,yhash: integer;
+  i, xhash, yhash: integer;
   pt: TGTPoint;
-  pl:TGTShapeArray;
-  p:TGTPoly;
-{$WARNINGS OFF}
+  pl: TGTShapeArray;
+  p: TGTPoly;
+  {$WARNINGS OFF}
 begin
   if not allResolved then
     raise EConvertError.create(toString() + '.isIn : not all references resolved');
@@ -289,15 +302,22 @@ begin
   try
     pt.lat := aNode.lat;
     pt.lon := aNode.lon;
-    xhash:=intToHash(pt.fx);
-    yhash:=intToHash(pt.fy);
-    if length(hash[xhash])<=yhash then
+    xhash := intToHash(pt.fx);
+    yhash := intToHash(pt.fy);
+    if length(hash[xhash]) <= yhash then
       exit;
-    pl:=hash[xhash][yhash];
+    pl := hash[xhash][yhash];
     for i := 0 to high(pl) do begin
       //all refernces resolved, so all objects in list is TGTPoly
-      p:=TGTPoly(pl[i]);
-      result := result xor p.isIn(pt);
+      p := TGTPoly(pl[i]);
+      case p.isIn(pt) of
+        0: ;
+        1: begin
+            result := true;
+            break;
+          end;
+        2: result := not result;
+      end;
     end;
   finally
     freeAndNil(pt);
@@ -307,46 +327,46 @@ end;
 
 procedure TMultiPoly.optimize;
 var
-  nCnt,nOpt,pCnt,i:integer;
-  newInList:TGTShapeArray;
+  nCnt, nOpt, pCnt, i: integer;
+  newInList: TGTShapeArray;
 
-  procedure split(const pl:TGTPoly);
+  procedure split(const pl: TGTPoly);
   begin
-    if pl.width>pl.height then
-      newInList[pCnt]:=pl.splitX(pl.left+integer(pl.width shr 1))
+    if pl.width > pl.height then
+      newInList[pCnt] := pl.splitX(pl.left + integer(pl.width shr 1))
     else
-      newInList[pCnt]:=pl.splitY(pl.bottom+integer(pl.height shr 1));
+      newInList[pCnt] := pl.splitY(pl.bottom + integer(pl.height shr 1));
     if assigned(newInList[pCnt]) then
       inc(pCnt);
   end;
 
 var
-  maxCnt,maxIdx:integer;
+  maxCnt, maxIdx: integer;
 begin
-  nCnt:=0;
-  for i:=0 to high(inList) do begin
-    inc(nCnt,TGTPoly(inList[i]).count);
+  nCnt := 0;
+  for i := 0 to high(inList) do begin
+    inc(nCnt, TGTPoly(inList[i]).count);
   end;
-  nOpt:=round(sqrt(nCnt));
-  pCnt:=length(inList);
-  if (nCnt<100)or(pCnt>=nOpt) then
+  nOpt := round(sqrt(nCnt));
+  pCnt := length(inList);
+  if (nCnt < 100) or (pCnt >= nOpt) then
     //no optimization needed
     exit;
-  setlength(newInList,nOpt);
-  move(inList[0],newInList[0],pCnt*sizeof(newInList[0]));
-  while (pCnt<nOpt) do begin
-    maxCnt:=0;
-    maxIdx:=0;
-    for i:=0 to pCnt-1 do begin
-      if maxCnt<TGTPoly(newInList[i]).count then begin
-        maxCnt:=TGTPoly(newInList[i]).count;
-        maxIdx:=i;
+  setlength(newInList, nOpt);
+  move(inList[0], newInList[0], pCnt * sizeof(newInList[0]));
+  while (pCnt < nOpt) do begin
+    maxCnt := 0;
+    maxIdx := 0;
+    for i := 0 to pCnt - 1 do begin
+      if maxCnt < TGTPoly(newInList[i]).count then begin
+        maxCnt := TGTPoly(newInList[i]).count;
+        maxIdx := i;
       end;
     end;
     split(TGTPoly(newInList[maxIdx]));
   end;
-  setlength(newInList,pCnt);
-  inList:=newInList;
+  setlength(newInList, pCnt);
+  inList := newInList;
 end;
 
 procedure TMultiPoly.putRelation(const OSMRelation: OleVariant);
@@ -356,7 +376,7 @@ begin
   //obj checked in addObject. obj is Relation
   gr := TGTRelation.create();
   gr.AddRelation(OSMRelation);
-  setLength(inList, length(inList) + 1);
+  setlength(inList, length(inList) + 1);
   inList[length(inList) - 1] := gr;
   allResolved := false;
 end;
@@ -368,12 +388,12 @@ begin
   //obj checked in addObject. obj is Way
   gp := TGTWay.create();
   gp.AddWay(osmWay);
-  setLength(inList, length(inList) + 1);
+  setlength(inList, length(inList) + 1);
   inList[length(inList) - 1] := gp;
   allResolved := false;
 end;
 
-function TMultiPoly.resolve(const srcMap:OleVariant): boolean;
+function TMultiPoly.resolve(const srcMap: OleVariant): boolean;
 var
   nn: integer;
   newInList: TGTShapeArray;
@@ -381,7 +401,7 @@ var
   procedure grow(const delta: cardinal);
   begin
     while cardinal(nn) + delta >= cardinal(length(newInList)) do
-      setLength(newInList, length(newInList) * 2);
+      setlength(newInList, length(newInList) * 2);
   end;
 
   procedure clearNotResolved();
@@ -441,8 +461,8 @@ var
               rtRelation: begin
                   //resolve relation ref into relation
                   v := srcMap.getRelation(m.RefId);
-                  if varIsType(v,varDispatch)then begin
-                    if (v.tags.getByKey('type')<>'collection') then begin
+                  if varIsType(v, varDispatch) then begin
+                    if (v.tags.getByKey('type') <> 'collection') then begin
                       grow(1);
                       gr := TGTRelation.create();
                       gr.AddRelation(v);
@@ -522,7 +542,7 @@ var
     gw: TGTWay;
     vn: OleVariant;
     isResolved: boolean;
-    m:TGTRefItem;
+    m: TGTRefItem;
   begin
     gp := nil;
     try
@@ -531,11 +551,11 @@ var
           continue;
         gw := TGTWay(newInList[i]);
         if gw.firstId <> gw.lastId then begin
-        //not closed way - so not resolved
-          allResolved:=false;
-          m.RefId:=gw.id;
-          m.RefRole:='not closed polygon';
-          m.RefType:=rtWay;
+          //not closed way - so not resolved
+          allResolved := false;
+          m.RefId := gw.id;
+          m.RefRole := 'not closed polygon';
+          m.RefType := rtWay;
           addNotResolved(m);
         end;
         gp := TGTPoly.create();
@@ -573,7 +593,7 @@ begin
   //resolve all dependencies
   allResolved := true;
   nn := 0;
-  setLength(newInList, 4);
+  setlength(newInList, 4);
   try
     //recursive replace relations with ways
     resolveToWays();
@@ -582,9 +602,9 @@ begin
     //resolve node ref into nodes
     resolveToPoly();
     clearInList();
-    setLength(newInList, nn);
+    setlength(newInList, nn);
     inList := newInList;
-    setLength(newInList, 0);
+    setlength(newInList, 0);
     nn := -1;
   finally
     for i := 0 to nn do
@@ -631,7 +651,7 @@ begin
   if n <= 1 then
     exit;
   i := length(fRefList);
-  setLength(fRefList, i + n);
+  setlength(fRefList, i + n);
   pv := VarArrayLock(members);
   pr := @fRefList[i];
   try
@@ -664,7 +684,7 @@ var
 
   procedure grow();
   begin
-    setLength(fRefList, i + j - 1);
+    setlength(fRefList, i + j - 1);
   end;
 begin
   i := length(fRefList);
@@ -728,7 +748,7 @@ begin
   if n <= 0 then
     exit;
   i := length(fRefList);
-  setLength(fRefList, i + n);
+  setlength(fRefList, i + n);
   pv := VarArrayLock(members);
   pr := @fRefList[i];
   try
@@ -809,7 +829,7 @@ begin
     //remove extra node
     dec(fCount);
     freeAndNil(fPoints[count]);
-    hasExtraNode:=false;
+    hasExtraNode := false;
   end;
   pt := TGTPoint.create;
   pt.lat := aNode.lat;
@@ -833,7 +853,6 @@ begin
   end;
 end;
 
-
 destructor TGTPoly.destroy;
 var
   i: integer;
@@ -848,12 +867,12 @@ begin
   result := length(fPoints);
 end;
 
-function TGTPoly.isIn(const pt: TGTPoint): boolean;
+function TGTPoly.isIn(const pt: TGTPoint): integer;
 //returns 0 if edge(e1,e2) not intersects edge(a,pt(+inf,a.y))
 //returns 1 if point a lay on edge(e1,e2)
 //returns 2 if edge(e1,e2) intersects edge(a,pt(+inf,a.y))
 
-function intersects(const a, e1, e2: TGTPoint): integer;
+  function intersects(const a, e1, e2: TGTPoint): integer;
     //precondition: (a.x between e1.x and e2.x) & (a.y between e1.y and e2.y)
   var
     k: double;
@@ -870,15 +889,15 @@ function intersects(const a, e1, e2: TGTPoint): integer;
   end;
 var
   i: integer;
-  xcase, ycase:byte;
+  xcase, ycase: byte;
   b1, b2: TGTPoint;
 begin
   if not hasExtraNode then begin
     addExtraNode();
   end;
   result := inherited isIn(pt);
-  if not result then exit;
-  result := false;
+  if result = 0 then exit;
+  result := 0;
   i := count;
   while (i > 1) do begin
     dec(i);
@@ -900,42 +919,43 @@ begin
       lea ecx,[ecx+eax*8];
       mov xcase,cl;
     end;
-//    xcase := ord(b1.fx < pt.fx) + 2 * ord(b2.fx < pt.fx) +
-// 4 * ord(b1.fx > pt.fx) +  8 * ord(b2.fx > pt.fx);
-    asm mov eax,pt; mov eax,TGTPoint(eax).fy; mov ecx,b1; cmp eax,TGTPoint(ecx).fy; setg cl; setl dl; lea ecx,[ecx+edx*4]; mov edx,b2; cmp eax,TGTPoint(edx).fy; setg dl; setl al; lea ecx,[ecx+edx*2]; lea ecx,[ecx+eax*8]; mov ycase,cl; end;
-//    ycase := ord(b1.fy < pt.fy) + 2 * ord(b2.fy < pt.fy) +
-//      4 * ord(b1.fy > pt.fy) + 8 * ord(b2.fy > pt.fy);
-    //cases 5,7,10,11,13,14,15 are impossible
-    //case 3 - no intersection
-    //ycase=12 - no intersection
+    //    xcase := ord(b1.fx < pt.fx) + 2 * ord(b2.fx < pt.fx) +
+    // 4 * ord(b1.fx > pt.fx) +  8 * ord(b2.fx > pt.fx);
+    asm mov eax,pt; mov eax,TGTPoint(eax).fy; mov ecx,b1; cmp eax,TGTPoint(ecx).fy; setg cl; setl dl; lea ecx,[ecx+edx*4]; mov edx,b2; cmp eax,TGTPoint(edx).fy; setg dl; setl al; lea ecx,[ecx+edx*2]; lea ecx,[ecx+eax*8]; mov ycase,cl;
+    end;
+    //    ycase := ord(b1.fy < pt.fy) + 2 * ord(b2.fy < pt.fy) +
+    //      4 * ord(b1.fy > pt.fy) + 8 * ord(b2.fy > pt.fy);
+        //cases 5,7,10,11,13,14,15 are impossible
+        //case 3 - no intersection
+        //ycase=12 - no intersection
     case ycase of
       0: {y1==y==y2}
         case xcase of
           0, 1, 2, 4, 6, 8, 9: begin
-              result := true;
+              result := 1;
               break;
             end;
         end;
       1: {y1<y==y2}
         case xcase of
           0, 1, 4: begin
-              result := true;
+              result := 1;
               break;
             end;
-          8, 9, 12: result := not result;
+          8, 9, 12: result := 2 - result;
         end;
       2: {y2<y==y1}
         case xcase of
           0, 2, 8: begin
-              result := true;
+              result := 1;
               break;
             end;
-          4, 6, 12: result := not result;
+          4, 6, 12: result := 2 - result;
         end;
       4: {y1>y=y2}
         case xcase of
           0, 1, 4: begin
-              result := true;
+              result := 1;
               break;
             end;
         end;
@@ -943,27 +963,27 @@ begin
       9: {y1<y<y2}
         case xcase of
           0: begin
-              result := true;
+              result := 1;
               break;
             end;
           4, 8, 12: begin
-            result := not result;
-          end;
+              result := 2 - result;
+            end;
           6, 9:
             case intersects(pt, b1, b2) of
               0: {no intersection};
               1: {on edge} begin
-                  result := true;
+                  result := 1;
                   break;
                 end;
               2: {intersects}
-                result := not result;
+                result := 2 - result;
             end;
         end;
       8: {y1=y<y2}
         case xcase of
           0, 2, 8: begin
-              result := true;
+              result := 1;
               break;
             end;
         end;
@@ -974,164 +994,162 @@ end;
 procedure TGTPoly.set_capacity(const Value: integer);
 begin
   if Value <= count then exit;
-  setLength(fPoints, Value);
+  setlength(fPoints, Value);
 end;
 
-function approx(const x1,y1,x2,y2,x:integer):integer;
+function approx(const x1, y1, x2, y2, x: integer): integer;
 begin
-  result:=round((1.0*y2-y1)/(1.0*x2-x1)*(1.0*x-x1)+y1);
+  result := round((1.0 * y2 - y1) / (1.0 * x2 - x1) * (1.0 * x - x1) + y1);
 end;
 
 function TGTPoly.splitX(x: integer): TGTPoly;
 var
-  i,li,ri:integer;
-  xcase:byte;
-  rightPoly:TGTPoly;
-  pt1,pt2,pt1b,pt2b:TGTPoint;
-  newPoints:array of TGTPoint;
-  procedure saveRight(const pt:TGTPoint);
+  i, li, ri: integer;
+  xcase: byte;
+  rightPoly: TGTPoly;
+  pt1, pt2, pt1b, pt2b: TGTPoint;
+  newPoints: array of TGTPoint;
+
+  procedure saveRight(const pt: TGTPoint);
   begin
-    rightPoly.fPoints[ri]:=pt;
+    rightPoly.fPoints[ri] := pt;
     rightPoly.updateBoundRect(pt);
     inc(ri);
   end;
 
-  procedure saveLeft(const pt:TGTPoint);
+  procedure saveLeft(const pt: TGTPoint);
   begin
-    newPoints[li]:=pt;
+    newPoints[li] := pt;
     updateBoundRect(pt);
     inc(li);
   end;
 begin
-  result:=nil;
-  if(x<=left)or(x>=right) then exit;
+  result := nil;
+  if (x <= left) or (x >= right) then exit;
   if not hasExtraNode then
     addExtraNode;
-  result:=TGTPoly.create();
-  result.capacity:=count*2;
-  rightPoly:=result;
-  setLength(newPoints,count*2);
-  li:=0;
-  ri:=0;
+  result := TGTPoly.create();
+  result.capacity := count * 2;
+  rightPoly := result;
+  setlength(newPoints, count * 2);
+  li := 0;
+  ri := 0;
   resetBounds();
-  for i:=0 to count-2 do begin
-    pt1:=fPoints[i];
-    pt2:=fPoints[i+1];
-    xcase:=ord(pt1.fx<=x)+2*ord(pt2.fx<=x);
+  for i := 0 to count - 2 do begin
+    pt1 := fPoints[i];
+    pt2 := fPoints[i + 1];
+    xcase := ord(pt1.fx <= x) + 2 * ord(pt2.fx <= x);
     case xcase of
-    0:{this point goes right poly}
-      saveRight(pt1);
-    1:{pt1 on left, pt2 on right}
-      begin
-        pt1b:=TGTPoint.Create();
-        pt1b.fx:=x;
-        pt1b.fy:=approx(pt1.fx,pt1.fy,pt2.fx,pt2.fy,x);
-        pt2b:=TGTPoint.Create();
-        pt2b.fx:=x+1;
-        pt2b.fy:=approx(pt1.fx,pt1.fy,pt2.fx,pt2.fy,x+1);
-        saveLeft(pt1);
-        saveLeft(pt1b);
-        saveRight(pt2b);
-      end;
-    2:{pt1 on right, pt2 on left}
-      begin
-        pt1b:=TGTPoint.Create();
-        pt1b.fx:=x+1;
-        pt1b.fy:=approx(pt1.fx,pt1.fy,pt2.fx,pt2.fy,x+1);
-        pt2b:=TGTPoint.Create();
-        pt2b.fx:=x;
-        pt2b.fy:=approx(pt1.fx,pt1.fy,pt2.fx,pt2.fy,x);
+      0: {this point goes right poly}
         saveRight(pt1);
-        saveRight(pt1b);
-        saveLeft(pt2b);
-      end;
-    3:{keep this point left}
-      saveLeft(pt1);
+      1: {pt1 on left, pt2 on right} begin
+          pt1b := TGTPoint.create();
+          pt1b.fx := x;
+          pt1b.fy := approx(pt1.fx, pt1.fy, pt2.fx, pt2.fy, x);
+          pt2b := TGTPoint.create();
+          pt2b.fx := x + 1;
+          pt2b.fy := approx(pt1.fx, pt1.fy, pt2.fx, pt2.fy, x + 1);
+          saveLeft(pt1);
+          saveLeft(pt1b);
+          saveRight(pt2b);
+        end;
+      2: {pt1 on right, pt2 on left} begin
+          pt1b := TGTPoint.create();
+          pt1b.fx := x + 1;
+          pt1b.fy := approx(pt1.fx, pt1.fy, pt2.fx, pt2.fy, x + 1);
+          pt2b := TGTPoint.create();
+          pt2b.fx := x;
+          pt2b.fy := approx(pt1.fx, pt1.fy, pt2.fx, pt2.fy, x);
+          saveRight(pt1);
+          saveRight(pt1b);
+          saveLeft(pt2b);
+        end;
+      3: {keep this point left}
+        saveLeft(pt1);
     end;
   end;
-  fCount:=li;
-  capacity:=li+1;
-  move(newPoints[0],fPoints[0],sizeof(fPoints[0])*li);
-  result.fCount:=ri;
-  result.capacity:=ri+1;
-  result.hasExtraNode:=false;
-  hasExtraNode:=false;
+  fCount := li;
+  capacity := li + 1;
+  move(newPoints[0], fPoints[0], sizeof(fPoints[0]) * li);
+  result.fCount := ri;
+  result.capacity := ri + 1;
+  result.hasExtraNode := false;
+  hasExtraNode := false;
 end;
 
 function TGTPoly.splitY(y: integer): TGTPoly;
 var
-  i,ti,bi:integer;
-  ycase:byte;
-  topPoly:TGTPoly;
-  pt1,pt2,pt1b,pt2b:TGTPoint;
-  newPoints:array of TGTPoint;
-  procedure saveTop(const pt:TGTPoint);
+  i, ti, bi: integer;
+  ycase: byte;
+  topPoly: TGTPoly;
+  pt1, pt2, pt1b, pt2b: TGTPoint;
+  newPoints: array of TGTPoint;
+
+  procedure saveTop(const pt: TGTPoint);
   begin
-    topPoly.fPoints[ti]:=pt;
+    topPoly.fPoints[ti] := pt;
     topPoly.updateBoundRect(pt);
     inc(ti);
   end;
 
-  procedure saveBottom(const pt:TGTPoint);
+  procedure saveBottom(const pt: TGTPoint);
   begin
-    newPoints[bi]:=pt;
+    newPoints[bi] := pt;
     updateBoundRect(pt);
     inc(bi);
   end;
 begin
-  result:=nil;
-  if(y<=bottom)or(y>=top) then exit;
+  result := nil;
+  if (y <= bottom) or (y >= top) then exit;
   if not hasExtraNode then
     addExtraNode;
-  result:=TGTPoly.create();
-  result.capacity:=count*2;
-  topPoly:=result;
-  setLength(newPoints,count*2);
-  bi:=0;
-  ti:=0;
+  result := TGTPoly.create();
+  result.capacity := count * 2;
+  topPoly := result;
+  setlength(newPoints, count * 2);
+  bi := 0;
+  ti := 0;
   resetBounds();
-  for i:=0 to count-2 do begin
-    pt1:=fPoints[i];
-    pt2:=fPoints[i+1];
-    ycase:=ord(pt1.fy<=y)+2*ord(pt2.fy<=y);
+  for i := 0 to count - 2 do begin
+    pt1 := fPoints[i];
+    pt2 := fPoints[i + 1];
+    ycase := ord(pt1.fy <= y) + 2 * ord(pt2.fy <= y);
     case ycase of
-    0:{this point goes top poly}
-      saveTop(pt1);
-    1:{pt1 on bottom, pt2 on top}
-      begin
-        pt1b:=TGTPoint.Create();
-        pt1b.fy:=y;
-        pt1b.fx:=approx(pt1.fy,pt1.fx,pt2.fy,pt2.fx,y);
-        pt2b:=TGTPoint.Create();
-        pt2b.fy:=y+1;
-        pt2b.fx:=approx(pt1.fy,pt1.fx,pt2.fy,pt2.fx,y+1);
-        saveBottom(pt1);
-        saveBottom(pt1b);
-        saveTop(pt2b);
-      end;
-    2:{pt1 on top, pt2 on bottom}
-      begin
-        pt1b:=TGTPoint.Create();
-        pt1b.fy:=y+1;
-        pt1b.fx:=approx(pt1.fy,pt1.fx,pt2.fy,pt2.fx,y+1);
-        pt2b:=TGTPoint.Create();
-        pt2b.fy:=y;
-        pt2b.fx:=approx(pt1.fy,pt1.fx,pt2.fy,pt2.fx,y);
+      0: {this point goes top poly}
         saveTop(pt1);
-        saveTop(pt1b);
-        saveBottom(pt2b);
-      end;
-    3:{keep this point bottom}
-      saveBottom(pt1);
+      1: {pt1 on bottom, pt2 on top} begin
+          pt1b := TGTPoint.create();
+          pt1b.fy := y;
+          pt1b.fx := approx(pt1.fy, pt1.fx, pt2.fy, pt2.fx, y);
+          pt2b := TGTPoint.create();
+          pt2b.fy := y + 1;
+          pt2b.fx := approx(pt1.fy, pt1.fx, pt2.fy, pt2.fx, y + 1);
+          saveBottom(pt1);
+          saveBottom(pt1b);
+          saveTop(pt2b);
+        end;
+      2: {pt1 on top, pt2 on bottom} begin
+          pt1b := TGTPoint.create();
+          pt1b.fy := y + 1;
+          pt1b.fx := approx(pt1.fy, pt1.fx, pt2.fy, pt2.fx, y + 1);
+          pt2b := TGTPoint.create();
+          pt2b.fy := y;
+          pt2b.fx := approx(pt1.fy, pt1.fx, pt2.fy, pt2.fx, y);
+          saveTop(pt1);
+          saveTop(pt1b);
+          saveBottom(pt2b);
+        end;
+      3: {keep this point bottom}
+        saveBottom(pt1);
     end;
   end;
-  fCount:=bi;
-  capacity:=bi+1;
-  move(newPoints[0],fPoints[0],sizeof(fPoints[0])*bi);
-  result.fCount:=ti;
-  result.capacity:=ti+1;
-  result.hasExtraNode:=false;
-  hasExtraNode:=false;
+  fCount := bi;
+  capacity := bi + 1;
+  move(newPoints[0], fPoints[0], sizeof(fPoints[0]) * bi);
+  result.fCount := ti;
+  result.capacity := ti + 1;
+  result.hasExtraNode := false;
+  hasExtraNode := false;
 end;
 
 procedure TGTPoly.updateBoundRect(const pt: TGTPoint);
@@ -1150,9 +1168,9 @@ end;
 
 { TGTRect }
 
-class function TGTRect.between(const v, min, max: integer): boolean;
+class function TGTRect.between(const v, min, max: integer): integer;
 begin
-  result := (v >= min) and (v <= max);
+  result := 2 * ord((v > min) and (v < max)) + ord((v = min) or (v = max));
 end;
 
 constructor TGTRect.create;
@@ -1163,19 +1181,19 @@ end;
 
 function TGTRect.get_height: cardinal;
 begin
-{$R-}
-  result:=cardinal(fTop)-cardinal(fBottom)
+  {$R-}
+  result := cardinal(fTop) - cardinal(fBottom)
 end;
 
 function TGTRect.get_width: cardinal;
 begin
-{$R-}
-  result:=cardinal(fRight)-cardinal(fLeft);
+  {$R-}
+  result := cardinal(fRight) - cardinal(fLeft);
 end;
 
-function TGTRect.isIn(const pt: TGTPoint): boolean;
+function TGTRect.isIn(const pt: TGTPoint): integer;
 begin
-  result := between(pt.x, left, right) and between(pt.y, bottom, top);
+  result := min(between(pt.x, left, right), between(pt.y, bottom, top));
 end;
 
 procedure TGTRect.resetBounds;
