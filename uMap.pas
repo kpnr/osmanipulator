@@ -1,59 +1,59 @@
 unit uMap;
 interface
-uses SysUtils,Variants,uGeoTools,ActiveX,uModule, uOSMCommon, uInterfaces;
+uses SysUtils, Variants, uGeoTools, ActiveX, uModule, uOSMCommon, uInterfaces;
 
 type
-  TAbstractMap=class(TOSManObject, IMap)
+  TAbstractMap = class(TOSManObject, IMap)
   protected
-    fStorage:OleVariant;
+    fStorage: OleVariant;
   public
-    function get_storage:OleVariant;virtual;
-    procedure set_storage(const newStorage:OleVariant);virtual;
-    function get_onPutFilter:OleVariant;virtual;abstract;
-    procedure set_onPutFilter(const aFilter:OleVariant);virtual;abstract;
+    function get_storage: OleVariant; virtual;
+    procedure set_storage(const newStorage: OleVariant); virtual;
+    function get_onPutFilter: OleVariant; virtual; abstract;
+    procedure set_onPutFilter(const aFilter: OleVariant); virtual; abstract;
   published
     //create epmty node
-    function createNode(): IDispatch;virtual;
+    function createNode(): IDispatch; virtual;
     //create epmty way
-    function createWay(): IDispatch;virtual;
+    function createWay(): IDispatch; virtual;
     //create epmty relation
-    function createRelation(): IDispatch;virtual;
+    function createRelation(): IDispatch; virtual;
 
     //store Node into Storage
-    procedure putNode(const aNode: OleVariant);virtual;abstract;
+    procedure putNode(const aNode: OleVariant); virtual; abstract;
     //store Way into Storage
-    procedure putWay(const aWay: OleVariant);virtual;abstract;
+    procedure putWay(const aWay: OleVariant); virtual; abstract;
     //store Relation into Storage
-    procedure putRelation(const aRelation: OleVariant);virtual;abstract;
+    procedure putRelation(const aRelation: OleVariant); virtual; abstract;
     //store MapObject (Node,Way or Relation) into Store
-    procedure putObject(const aObj: OleVariant);virtual;
+    procedure putObject(const aObj: OleVariant); virtual;
 
     //delete Node and its tags from Storage
-    procedure deleteNode(const nodeId: int64);virtual;abstract;
+    procedure deleteNode(const nodeId: int64); virtual; abstract;
     //delete Way, its tags and node-list from Storage
-    procedure deleteWay(const wayId: int64);virtual;abstract;
+    procedure deleteWay(const wayId: int64); virtual; abstract;
     //delete Relation, its tags and ref-list from Storage
-    procedure deleteRelation(const relationId: int64);virtual;abstract;
+    procedure deleteRelation(const relationId: int64); virtual; abstract;
 
     //get node by ID. If no node found returns false
-    function getNode(const id: int64): OleVariant;virtual;abstract;
+    function getNode(const id: int64): OleVariant; virtual; abstract;
     //get way by ID. If no way found returns false
-    function getWay(const id: int64): OleVariant;virtual;abstract;
+    function getWay(const id: int64): OleVariant; virtual; abstract;
     //get relation by ID. If no relation found returns false
-    function getRelation(const id: int64): OleVariant;virtual;abstract;
+    function getRelation(const id: int64): OleVariant; virtual; abstract;
 
     //get filtered object set
-    function getObjects(const filterOptions: OleVariant): OleVariant;virtual;abstract;
+    function getObjects(const filterOptions: OleVariant): OleVariant; virtual; abstract;
 
     //IMapOnPutFilter
-    property onPutFilter:Olevariant read get_onPutFilter write set_onPutFilter;
+    property onPutFilter: OleVariant read get_onPutFilter write set_onPutFilter;
 
     //initialize new storage - drop and create tables
-    procedure initStorage();virtual;abstract;
+    procedure initStorage(); virtual; abstract;
 
     //set storage. Suppoted storage interface see in descendants. To free
     //  system resource set storage to unassigned.
-    property storage:OleVariant read get_storage write set_storage;
+    property storage: OleVariant read get_storage write set_storage;
   end;
 implementation
 
@@ -184,93 +184,93 @@ type
       fQryPutObjTag,
       fQryDeleteNode, fQryDeleteWay, fQryDeleteRelation,
       fQryGetNode,
-      fQryGetWay,fQryGetWayNodes,
-      fQryGetRelation,fQryGetRelationMembers: OleVariant;
-    fOnPutFilter:TPutFilterAdaptor;
+      fQryGetWay, fQryGetWayNodes,
+      fQryGetRelation, fQryGetRelationMembers: OleVariant;
+    fOnPutFilter: TPutFilterAdaptor;
     procedure putTags(const objId: int64; const objType: byte {0-node,1-way,2-relation};
       const tagNamesValuesInterlived: OleVariant);
-    function doOnPutNode(const aNode:OleVariant):boolean;
-    function doOnPutWay(const aWay:OleVariant):boolean;
-    function doOnPutRelation(const aRelation:OleVariant):boolean;
+    function doOnPutNode(const aNode: OleVariant): boolean;
+    function doOnPutWay(const aWay: OleVariant): boolean;
+    function doOnPutRelation(const aRelation: OleVariant): boolean;
   public
-    procedure set_storage(const newStorage:OleVariant);override;
-    function get_onPutFilter:OleVariant;override;
-    procedure set_onPutFilter(const aFilter:OleVariant);override;
-    destructor destroy;override;
+    procedure set_storage(const newStorage: OleVariant); override;
+    function get_onPutFilter: OleVariant; override;
+    procedure set_onPutFilter(const aFilter: OleVariant); override;
+    destructor destroy; override;
   published
 
     //store Node into Storage
-    procedure putNode(const aNode: OleVariant);override;
+    procedure putNode(const aNode: OleVariant); override;
     //store Way into Storage
-    procedure putWay(const aWay: OleVariant);override;
+    procedure putWay(const aWay: OleVariant); override;
     //store Relation into Storage
-    procedure putRelation(const aRelation: OleVariant);override;
+    procedure putRelation(const aRelation: OleVariant); override;
 
     //delete Node and its tags from Storage
-    procedure deleteNode(const nodeId: int64);override;
+    procedure deleteNode(const nodeId: int64); override;
     //delete Way, its tags and node-list from Storage
-    procedure deleteWay(const wayId: int64);override;
+    procedure deleteWay(const wayId: int64); override;
     //delete Relation, its tags and ref-list from Storage
-    procedure deleteRelation(const relationId: int64);override;
+    procedure deleteRelation(const relationId: int64); override;
 
     //get node by ID. If no node found returns false
-    function getNode(const id: int64): OleVariant;override;
+    function getNode(const id: int64): OleVariant; override;
     //get way by ID. If no way found returns false
-    function getWay(const id: int64): OleVariant;override;
+    function getWay(const id: int64): OleVariant; override;
     //get relation by ID. If no relation found returns false
-    function getRelation(const id: int64): OleVariant;override;
+    function getRelation(const id: int64): OleVariant; override;
 
     //get filtered object set
-    function getObjects(const filterOptions: OleVariant): OleVariant;override;
+    function getObjects(const filterOptions: OleVariant): OleVariant; override;
 
     //IMapOnPutFilter
-    property onPutFilter:Olevariant read get_onPutFilter write set_onPutFilter;
+    property onPutFilter: OleVariant read get_onPutFilter write set_onPutFilter;
 
     //initialize new storage - drop and create tables
-    procedure initStorage();override;
+    procedure initStorage(); override;
 
     //set SQL-storage (IStorage). To free system resource set storage to unassigned
     //property storage:OleVariant read get_storage write set_storage;
   end;
 
-  TStoredIdList=class
+  TStoredIdList = class
   protected
-    fStorage:OleVariant;
-    fQryAdd:OleVariant;
-    fQryIsIn:OleVariant;
-    fQryDelete:OleVariant;
-    fTableName:WideString;
-    fTableCreated:boolean;
-    function get_tableName:WideString;
+    fStorage: OleVariant;
+    fQryAdd: OleVariant;
+    fQryIsIn: OleVariant;
+    fQryDelete: OleVariant;
+    fTableName: WideString;
+    fTableCreated: boolean;
+    function get_tableName: WideString;
     procedure createTable();
     procedure deleteTable();
   public
-    constructor create(const aStorage:OleVariant);
-    destructor destroy;override;
-    function isIn(const id:int64):boolean;
-    procedure add(const id:int64);
-    procedure delete(const id:int64);
-    property tableName:WideString read get_tableName;
+    constructor create(const aStorage: OleVariant);
+    destructor destroy; override;
+    function isIn(const id: int64): boolean;
+    procedure add(const id: int64);
+    procedure delete(const id: int64);
+    property tableName: WideString read get_tableName;
   end;
 
   TMapObjectStream = class(TOSManObject, IInputStream)
   protected
-    fMap:TMap;
+    fMap: TMap;
     fStorage, fQry: OleVariant;
-    fBPolies:array of OleVariant;
-    fCustomFilters:array of TPutFilterAdaptor;
-    fNodeList,fWayList,fRelList,fToDoRelList:TStoredIdList;
-    fNodeSelectCondition:WideString;
+    fBPolies: array of OleVariant;
+    fCustomFilters: array of TPutFilterAdaptor;
+    fNodeList, fWayList, fRelList, fToDoRelList: TStoredIdList;
+    fNodeSelectCondition: WideString;
     fOutMode: TRefType;
     fEOS: boolean;
-    fClipIncompleteWays:boolean;
+    fClipIncompleteWays: boolean;
     //read one object
     function read1: OleVariant;
     procedure set_eos(const aEOS: boolean);
   public
-    procedure initialize(const aMap:TMap;const aStorage, aFilter: OleVariant);
+    procedure initialize(const aMap: TMap; const aStorage, aFilter: OleVariant);
     constructor create(); override;
-    destructor destroy();override;
+    destructor destroy(); override;
   published
     //maxBufSize: read buffer size
     //Readed data in zero-based one dimensional SafeArray of MapObjects
@@ -284,7 +284,7 @@ type
 
 procedure TMap.deleteNode(const nodeId: int64);
 begin
-  if not varIsType(fStorage,varDispatch) then
+  if not varIsType(fStorage, varDispatch) then
     raise EInOutError.create(toString() + '.deleteNode: storage not assigned');
   if VarIsEmpty(fQryDeleteNode) then begin
     fQryDeleteNode := fStorage.sqlPrepare(
@@ -296,7 +296,7 @@ end;
 
 procedure TMap.deleteRelation(const relationId: int64);
 begin
-  if not VarIsType(fStorage,varDispatch) then
+  if not varIsType(fStorage, varDispatch) then
     raise EInOutError.create(toString() + '.deleteRelation: storage not assigned');
   if VarIsEmpty(fQryDeleteRelation) then begin
     fQryDeleteRelation := fStorage.sqlPrepare(
@@ -308,7 +308,7 @@ end;
 
 procedure TMap.deleteWay(const wayId: int64);
 begin
-  if not VarIsType(fStorage,varDispatch) then
+  if not varIsType(fStorage, varDispatch) then
     raise EInOutError.create(toString() + '.deleteWay: storage not assigned');
   if VarIsEmpty(fQryDeleteWay) then begin
     fQryDeleteWay := fStorage.sqlPrepare(
@@ -327,74 +327,74 @@ end;
 function TMap.doOnPutNode(const aNode: OleVariant): boolean;
 begin
   if assigned(fOnPutFilter) then
-    result:=fOnPutFilter.onPutNode(aNode)
+    result := fOnPutFilter.onPutNode(aNode)
   else
-    result:=true;
+    result := true;
 end;
 
 function TMap.doOnPutRelation(const aRelation: OleVariant): boolean;
 begin
   if assigned(fOnPutFilter) then
-    result:=fOnPutFilter.onPutRelation(aRelation)
+    result := fOnPutFilter.onPutRelation(aRelation)
   else
-    result:=true;
+    result := true;
 end;
 
 function TMap.doOnPutWay(const aWay: OleVariant): boolean;
 begin
   if assigned(fOnPutFilter) then
-    result:=fOnPutFilter.onPutWay(aWay)
+    result := fOnPutFilter.onPutWay(aWay)
   else
-    result:=true;
+    result := true;
 end;
 
 function TMap.getNode(const id: int64): OleVariant;
 const
-  sQry='SELECT nodes.id AS id,'+
-    'nodes.version AS version,'+
-    'nodes.userId as userId,'+
-    'nodes.name as userName,'+
-    'nodes.changeset AS changeset,'+
-    'nodes.timestamp as timestamp,'+
-    'nodes.lat as lat,'+
-    'nodes.lon as lon,'+
-    'tags.tagname as k,'+
-    'tags.tagvalue as v '+
-    'FROM (SELECT * FROM nodes,users WHERE nodes.id=:id AND nodes.userId=users.id)AS nodes '+
-    'LEFT JOIN objtags ON nodes.id*4=objtags.objid '+
-    'LEFT JOIN tags ON objtags.tagid=tags.id '+
+  sQry = 'SELECT nodes.id AS id,' +
+    'nodes.version AS version,' +
+    'nodes.userId as userId,' +
+    'nodes.name as userName,' +
+    'nodes.changeset AS changeset,' +
+    'nodes.timestamp as timestamp,' +
+    'nodes.lat as lat,' +
+    'nodes.lon as lon,' +
+    'tags.tagname as k,' +
+    'tags.tagvalue as v ' +
+    'FROM (SELECT * FROM nodes,users WHERE nodes.id=:id AND nodes.userId=users.id)AS nodes ' +
+    'LEFT JOIN objtags ON nodes.id*4=objtags.objid ' +
+    'LEFT JOIN tags ON objtags.tagid=tags.id ' +
     'ORDER BY tags.tagname ';
 var
   //IQueryResult
-  qr,row,t:OleVariant;
+  qr, row, t: OleVariant;
 begin
-  if not VarIsType(fStorage,varDispatch) then
+  if not varIsType(fStorage, varDispatch) then
     raise EInOutError.create(toString() + '.getNode: storage not assigned');
   if VarIsEmpty(fQryGetNode) then begin
-    fQryGetNode:=fStorage.sqlPrepare(sQry);
+    fQryGetNode := fStorage.sqlPrepare(sQry);
   end;
-  qr:=fStorage.sqlExec(fQryGetNode,VarArrayOf([':id']),VarArrayOf([id]));
-  result:=false;
+  qr := fStorage.sqlExec(fQryGetNode, VarArrayOf([':id']), VarArrayOf([id]));
+  result := false;
   if qr.eos then exit;
-  row:=qr.read(1);
-  result:=createNode;
-  result.id:=row[0];
-  result.version:=row[1];
-  result.userId:=row[2];
-  result.userName:=row[3];
-  result.changeset:=row[4];
-  result.timestamp:=row[5];
-  result.lat:=row[6];
-  result.lon:=row[7];
+  row := qr.read(1);
+  result := createNode;
+  result.id := row[0];
+  result.version := row[1];
+  result.userId := row[2];
+  result.userName := row[3];
+  result.changeset := row[4];
+  result.timestamp := row[5];
+  result.lat := row[6];
+  result.lon := row[7];
   if VarIsNull(row[8]) then
-  //no tags
+    //no tags
     exit;
-  t:=result.tags;
-  t.setByKey(row[8],row[9]);
+  t := result.tags;
+  t.setByKey(row[8], row[9]);
   while not qr.eos do begin
-    row:=qr.read(1);
+    row := qr.read(1);
     if VarIsArray(row) then
-      t.setByKey(row[8],row[9]);
+      t.setByKey(row[8], row[9]);
   end;
 end;
 
@@ -409,147 +409,148 @@ end;
 
 function TMap.getRelation(const id: int64): OleVariant;
 const
-  sQry='SELECT relations.id AS id, '+
-    'relations.version AS version, '+
-    'relations.userId as userId, '+
-    'relations.name as userName, '+
-    'relations.changeset AS changeset, '+
-    'relations.timestamp as timestamp, '+
-    'tags.tagname as k, '+
-    'tags.tagvalue as v '+
-    'FROM (SELECT * FROM relations,users WHERE relations.id=:id AND relations.userId=users.id)AS relations '+
-    'LEFT JOIN objtags ON relations.id*4+2=objtags.objid '+
-    'LEFT JOIN tags ON objtags.tagid=tags.id '+
+  sQry = 'SELECT relations.id AS id, ' +
+    'relations.version AS version, ' +
+    'relations.userId as userId, ' +
+    'relations.name as userName, ' +
+    'relations.changeset AS changeset, ' +
+    'relations.timestamp as timestamp, ' +
+    'tags.tagname as k, ' +
+    'tags.tagvalue as v ' +
+    'FROM (SELECT * FROM relations,users WHERE relations.id=:id AND relations.userId=users.id)AS relations ' +
+    'LEFT JOIN objtags ON relations.id*4+2=objtags.objid ' +
+    'LEFT JOIN tags ON objtags.tagid=tags.id ' +
     'ORDER BY tags.tagname';
-  sQryMembers='SELECT membertype as membertype, '+
-    'memberid as memberid, '+
-    'memberrole as memberrole '+
-    'FROM strrelationmembers '+
-    'WHERE relationid=:id '+
+  sQryMembers = 'SELECT membertype as membertype, ' +
+    'memberid as memberid, ' +
+    'memberrole as memberrole ' +
+    'FROM strrelationmembers ' +
+    'WHERE relationid=:id ' +
     'ORDER BY memberidx';
 var
   //IQueryResult
-  qr,row,t:OleVariant;
+  qr, row, t: OleVariant;
 begin
-  if not VarIsType(fStorage,varDispatch) then
+  if not varIsType(fStorage, varDispatch) then
     raise EInOutError.create(toString() + '.getRelation: storage not assigned');
   if VarIsEmpty(fQryGetRelation) then begin
-    fQryGetRelation:=fStorage.sqlPrepare(sQry);
+    fQryGetRelation := fStorage.sqlPrepare(sQry);
   end;
-  qr:=fStorage.sqlExec(fQryGetRelation,VarArrayOf([':id']),VarArrayOf([id]));
-  result:=false;
+  qr := fStorage.sqlExec(fQryGetRelation, VarArrayOf([':id']), VarArrayOf([id]));
+  result := false;
   if qr.eos then exit;
-  row:=qr.read(1);
-  result:=createRelation;
-  result.id:=row[0];
-  result.version:=row[1];
-  result.userId:=row[2];
-  result.userName:=row[3];
-  result.changeset:=row[4];
-  result.timestamp:=row[5];
+  row := qr.read(1);
+  result := createRelation;
+  result.id := row[0];
+  result.version := row[1];
+  result.userId := row[2];
+  result.userName := row[3];
+  result.changeset := row[4];
+  result.timestamp := row[5];
   if not VarIsNull(row[6]) then begin
     //relation has tags
-    t:=result.tags;
-    t.setByKey(row[6],row[7]);
+    t := result.tags;
+    t.setByKey(row[6], row[7]);
     while not qr.eos do begin
-      row:=qr.read(1);
+      row := qr.read(1);
       if VarIsArray(row) then
-        t.setByKey(row[6],row[7]);
+        t.setByKey(row[6], row[7]);
     end;
   end;
   if VarIsEmpty(fQryGetRelationMembers) then begin
-    fQryGetRelationMembers:=fStorage.sqlPrepare(sQryMembers);
+    fQryGetRelationMembers := fStorage.sqlPrepare(sQryMembers);
   end;
-  qr:=fStorage.sqlExec(fQryGetRelationMembers,VarArrayOf([':id']),VarArrayOf([id]));
+  qr := fStorage.sqlExec(fQryGetRelationMembers, VarArrayOf([':id']), VarArrayOf([id]));
   if not qr.eos then begin
-  //relation has members
-    t:=result.members;
+    //relation has members
+    t := result.members;
     while not qr.eos do begin
-      row:=qr.read(1);
-      t.insertBefore(MaxInt,row[0],row[1],row[2]);
+      row := qr.read(1);
+      t.insertBefore(MaxInt, row[0], row[1], row[2]);
     end;
   end;
 end;
 
 function TMap.getWay(const id: int64): OleVariant;
 const
-  sQry='SELECT ways.id AS id, '+
-    'ways.version AS version, '+
-    'ways.userId as userId, '+
-    'ways.name as userName, '+
-    'ways.changeset AS changeset, '+
-    'ways.timestamp as timestamp, '+
-    'tags.tagname as k, '+
-    'tags.tagvalue as v '+
-    'FROM (SELECT * FROM ways,users WHERE ways.id=:id AND ways.userId=users.id)AS ways '+
-    'LEFT JOIN objtags ON ways.id*4+1=objtags.objid '+
-    'LEFT JOIN tags ON objtags.tagid=tags.id '+
+  sQry = 'SELECT ways.id AS id, ' +
+    'ways.version AS version, ' +
+    'ways.userId as userId, ' +
+    'ways.name as userName, ' +
+    'ways.changeset AS changeset, ' +
+    'ways.timestamp as timestamp, ' +
+    'tags.tagname as k, ' +
+    'tags.tagvalue as v ' +
+    'FROM (SELECT * FROM ways,users WHERE ways.id=:id AND ways.userId=users.id)AS ways ' +
+    'LEFT JOIN objtags ON ways.id*4+1=objtags.objid ' +
+    'LEFT JOIN tags ON objtags.tagid=tags.id ' +
     'ORDER BY tags.tagname';
-  sQryNodes='SELECT nodeid AS nodeid '+
-    'FROM waynodes '+
+  sQryNodes = 'SELECT nodeid AS nodeid ' +
+    'FROM waynodes ' +
     'WHERE wayid=:id ORDER BY nodeidx';
 var
-  ndList:array of int64;
-  ndCount:integer;
+  ndList: array of int64;
+  ndCount: integer;
+
   procedure grow();
   begin
-    if length(ndList)<=ndCount then
-      setLength(ndList,ndCount*2);
+    if length(ndList) <= ndCount then
+      setLength(ndList, ndCount * 2);
   end;
 var
   //IQueryResult
-  qr,row,t:OleVariant;
-  pv:PVarData;
-  pi64:PInt64;
+  qr, row, t: OleVariant;
+  pv: PVarData;
+  pi64: PInt64;
 begin
-  if not VarIsType(fStorage,varDispatch) then
+  if not varIsType(fStorage, varDispatch) then
     raise EInOutError.create(toString() + '.getWay: storage not assigned');
   if VarIsEmpty(fQryGetWay) then begin
-    fQryGetWay:=fStorage.sqlPrepare(sQry);
+    fQryGetWay := fStorage.sqlPrepare(sQry);
   end;
-  qr:=fStorage.sqlExec(fQryGetWay,VarArrayOf([':id']),VarArrayOf([id]));
-  result:=false;
+  qr := fStorage.sqlExec(fQryGetWay, VarArrayOf([':id']), VarArrayOf([id]));
+  result := false;
   if qr.eos then exit;
-  row:=qr.read(1);
-  result:=createWay;
-  result.id:=row[0];
-  result.version:=row[1];
-  result.userId:=row[2];
-  result.userName:=row[3];
-  result.changeset:=row[4];
-  result.timestamp:=row[5];
+  row := qr.read(1);
+  result := createWay;
+  result.id := row[0];
+  result.version := row[1];
+  result.userId := row[2];
+  result.userName := row[3];
+  result.changeset := row[4];
+  result.timestamp := row[5];
   if not VarIsNull(row[6]) then begin
     //way has tags
-    t:=result.tags;
-    t.setByKey(row[6],row[7]);
+    t := result.tags;
+    t.setByKey(row[6], row[7]);
     while not qr.eos do begin
-      row:=qr.read(1);
+      row := qr.read(1);
       if VarIsArray(row) then
-        t.setByKey(row[6],row[7]);
+        t.setByKey(row[6], row[7]);
     end;
   end;
   if VarIsEmpty(fQryGetWayNodes) then begin
-    fQryGetWayNodes:=fStorage.sqlPrepare(sQryNodes);
+    fQryGetWayNodes := fStorage.sqlPrepare(sQryNodes);
   end;
-  qr:=fStorage.sqlExec(fQryGetWayNodes,VarArrayOf([':id']),VarArrayOf([id]));
+  qr := fStorage.sqlExec(fQryGetWayNodes, VarArrayOf([':id']), VarArrayOf([id]));
   if not qr.eos then begin
-  //way has nodes
-    ndCount:=0;
-    setlength(ndList,4);
+    //way has nodes
+    ndCount := 0;
+    setLength(ndList, 4);
     while not qr.eos do begin
-      row:=qr.read(1);
+      row := qr.read(1);
       inc(ndCount);
       grow();
-      ndList[ndCount-1]:=row[0];
+      ndList[ndCount - 1] := row[0];
     end;
-    t:=VarArrayCreate([0,ndCount-1],varVariant);
-    if ndCount>0 then begin
-      pi64:=@ndList[0];
-      pv:=VarArrayLock(t);
+    t := VarArrayCreate([0, ndCount - 1], varVariant);
+    if ndCount > 0 then begin
+      pi64 := @ndList[0];
+      pv := VarArrayLock(t);
       try
-        while ndCount>0 do begin
-          pv^.VType:=varInt64;
-          pv^.VInt64:=pi64^;
+        while ndCount > 0 do begin
+          pv^.VType := varInt64;
+          pv^.VInt64 := pi64^;
           inc(pv);
           inc(pi64);
           dec(ndCount);
@@ -557,7 +558,7 @@ begin
       finally
         VarArrayUnlock(t);
       end;
-      result.nodes:=t;
+      result.nodes := t;
     end;
   end;
 end;
@@ -565,9 +566,9 @@ end;
 function TMap.get_onPutFilter: OleVariant;
 begin
   if assigned(fOnPutFilter) then
-    result:=fOnPutFilter.getFilter()
+    result := fOnPutFilter.getFilter()
   else
-    result:=unassigned;
+    result := unassigned;
 end;
 
 procedure TMap.initStorage;
@@ -748,7 +749,7 @@ var
 begin
   if not doOnPutNode(aNode) then
     exit;
-  if not VarIsType(fStorage,varDispatch) then
+  if not varIsType(fStorage, varDispatch) then
     raise EInOutError.create(toString() + '.putNode: storage not assigned');
   id := aNode.id;
   if VarIsEmpty(fQryPutNode) then begin
@@ -776,7 +777,7 @@ var
 begin
   if not doOnPutRelation(aRelation) then
     exit;
-  if not VarIsType(fStorage,varDispatch) then
+  if not varIsType(fStorage, varDispatch) then
     raise EInOutError.create(toString() + '.putRelation: storage not assigned');
   id := aRelation.id;
   if VarIsEmpty(fQryPutRelation) then begin
@@ -794,7 +795,7 @@ begin
   putTags(id, 2, k.getAll);
   k := aRelation.members.getAll;
   if (VarArrayDimCount(k) <> 1) or ((VarType(k) and varTypeMask) <> varVariant) then
-    raise EInOutError.Create(toString() + '.putRelation: illegal members set');
+    raise EInOutError.create(toString() + '.putRelation: illegal members set');
   n := (VarArrayHighBound(k, 1) - VarArrayLowBound(k, 1) + 1) div 3;
   if n <= 0 then
     exit;
@@ -832,7 +833,8 @@ var
   pnvi, pqp: PVariant;
   vQryParams: OleVariant;
 begin
-  nTags := (VarArrayHighBound(tagNamesValuesInterlived, 1)-VarArrayLowBound(tagNamesValuesInterlived, 1) + 1) div 2;
+  nTags := (VarArrayHighBound(tagNamesValuesInterlived, 1) -
+    VarArrayLowBound(tagNamesValuesInterlived, 1) + 1) div 2;
   if nTags <= 0 then
     exit;
   if VarIsEmpty(fQryPutObjTag) then begin
@@ -873,7 +875,7 @@ var
 begin
   if not doOnPutWay(aWay) then
     exit;
-  if not VarIsType(fStorage,varDispatch) then
+  if not varIsType(fStorage, varDispatch) then
     raise EInOutError.create(toString() + '.putWay: storage not assigned');
   id := aWay.id;
   if VarIsEmpty(fQryPutWay) then begin
@@ -925,7 +927,7 @@ end;
 procedure TMap.set_onPutFilter(const aFilter: OleVariant);
 begin
   FreeAndNil(fOnPutFilter);
-  fOnPutFilter:=TPutFilterAdaptor.create(aFilter);
+  fOnPutFilter := TPutFilterAdaptor.create(aFilter);
 end;
 
 procedure TMap.set_storage(const newStorage: OleVariant);
@@ -939,11 +941,11 @@ begin
   fQryDeleteNode := unassigned;
   fQryDeleteWay := unassigned;
   fQryDeleteRelation := unassigned;
-  fQryGetNode:=unassigned;
-  fQryGetWay:=unassigned;
-  fQryGetWayNodes:=unassigned;
-  fQryGetRelation:=unassigned;
-  fQryGetRelationMembers:=unassigned;
+  fQryGetNode := unassigned;
+  fQryGetWay := unassigned;
+  fQryGetWayNodes := unassigned;
+  fQryGetRelation := unassigned;
+  fQryGetRelationMembers := unassigned;
   inherited set_storage(newStorage);
 end;
 
@@ -1198,22 +1200,21 @@ end;
 
 { TWay }
 
-
 function TWay.get_nodes: OleVariant;
 var
-  i:integer;
-  pv:PVarData;
-  pi:PInt64;
+  i: integer;
+  pv: PVarData;
+  pi: PInt64;
 begin
-  i:=length(fNodes);
-  result:=VarArrayCreate([0,i-1],varVariant);
-  if i>0 then begin
-    pi:=@fNodes[0];
-    pv:=VarArrayLock(result);
+  i := length(fNodes);
+  result := VarArrayCreate([0, i - 1], varVariant);
+  if i > 0 then begin
+    pi := @fNodes[0];
+    pv := VarArrayLock(result);
     try
-      while i>0 do begin
-        pv^.VType:=varInt64;
-        pv^.VInt64:=pi^;
+      while i > 0 do begin
+        pv^.VType := varInt64;
+        pv^.VInt64 := pi^;
         inc(pi);
         inc(pv);
         dec(i);
@@ -1226,20 +1227,20 @@ end;
 
 procedure TWay.set_nodes(const newNodes: OleVariant);
 var
-  i:integer;
-  pv:PVarData;
-  pi:PInt64;
+  i: integer;
+  pv: PVarData;
+  pi: PInt64;
 begin
-  if (VarArrayDimCount(newNodes)<>1) or ((VarType(newNodes) and varTypeMask) <> varVariant) then
+  if (VarArrayDimCount(newNodes) <> 1) or ((VarType(newNodes) and varTypeMask) <> varVariant) then
     raise EConvertError.create(toString() + '.set_nodes: array of variants expected');
-  i:=VarArrayHighBound(newNodes,1)-VarArrayLowBound(newNodes,1)+1;
-  setLength(fNodes,i);
-  if i>0 then begin
-    pi:=@fNodes[0];
-    pv:=VarArrayLock(newNodes);
+  i := VarArrayHighBound(newNodes, 1) - VarArrayLowBound(newNodes, 1) + 1;
+  setLength(fNodes, i);
+  if i > 0 then begin
+    pi := @fNodes[0];
+    pv := VarArrayLock(newNodes);
     try
-      while i>0 do begin
-        pi^:=PVariant(pv)^;
+      while i > 0 do begin
+        pi^ := PVariant(pv)^;
         inc(pi);
         inc(pv);
         dec(i);
@@ -1249,7 +1250,6 @@ begin
     end;
   end;
 end;
-
 
 { TRelation }
 
@@ -1290,102 +1290,103 @@ begin
   result := fEOS;
 end;
 
-procedure TMapObjectStream.initialize(const aMap:TMap;const aStorage, aFilter: OleVariant);
-  procedure parseBox(var pv:POleVariant;var idx:integer;cnt:integer);
+procedure TMapObjectStream.initialize(const aMap: TMap; const aStorage, aFilter: OleVariant);
+
+procedure parseBox(var pv: POleVariant; var idx: integer; cnt: integer);
   var
-    n,e,s,w:double;
+    n, e, s, w: double;
   begin
-    if((idx+4)>=cnt)then exit;
+    if ((idx + 4) >= cnt) then exit;
     //set pv to north
     inc(pv);
     inc(idx);
-    n:=pv^;
+    n := pv^;
     inc(pv);
     inc(idx);
-    e:=pv^;
+    e := pv^;
     inc(pv);
     inc(idx);
-    s:=pv^;
+    s := pv^;
     inc(pv);
     inc(idx);
-    w:=pv^;
-    if fNodeSelectCondition<>'' then
-      fNodeSelectCondition:=fNodeSelectCondition+' OR '
+    w := pv^;
+    if fNodeSelectCondition <> '' then
+      fNodeSelectCondition := fNodeSelectCondition + ' OR '
     else
-      fNodeSelectCondition:=' WHERE ';
-    fNodeSelectCondition:=fNodeSelectCondition+
-      '( (lat BETWEEN '+degToStr(s)+' AND '+degToStr(n)+') AND '+
-      '(lon BETWEEN '+degToStr(w)+' AND '+degToStr(e)+') )';
+      fNodeSelectCondition := ' WHERE ';
+    fNodeSelectCondition := fNodeSelectCondition +
+      '( (lat BETWEEN ' + degToStr(s) + ' AND ' + degToStr(n) + ') AND ' +
+      '(lon BETWEEN ' + degToStr(w) + ' AND ' + degToStr(e) + ') )';
   end;
 
-  procedure parsePoly(var pv:POleVariant;var idx:integer;cnt:integer);
+  procedure parsePoly(var pv: POleVariant; var idx: integer; cnt: integer);
   var
-    l:integer;
+    l: integer;
   begin
-    if(idx+1)>=cnt then
+    if (idx + 1) >= cnt then
       exit;
     inc(pv);
     inc(idx);
-    if varIsType(pv^,varDispatch) and isDispNameExists(pv^,'isIn') then begin
-      l:=length(fBPolies);
-      setLength(fBPolies,l+1);
-      fBPolies[l]:=pv^;
+    if varIsType(pv^, varDispatch) and isDispNameExists(pv^, 'isIn') then begin
+      l := length(fBPolies);
+      setLength(fBPolies, l + 1);
+      fBPolies[l] := pv^;
     end;
   end;
 
-  procedure parseClipIncompleteWays(var pv:POleVariant;var idx:integer;cnt:integer);
+  procedure parseClipIncompleteWays(var pv: POleVariant; var idx: integer; cnt: integer);
   begin
-    fClipIncompleteWays:=true;
+    fClipIncompleteWays := true;
   end;
 
-  procedure parseCustomFilter(var pv:POleVariant;var idx:integer;cnt:integer);
+  procedure parseCustomFilter(var pv: POleVariant; var idx: integer; cnt: integer);
   var
-    l:integer;
+    l: integer;
   begin
-    if(idx+1)>=cnt then
+    if (idx + 1) >= cnt then
       exit;
     inc(pv);
     inc(idx);
-    if varIsType(pv^,varDispatch) then begin
-      l:=length(fCustomFilters);
-      setLength(fCustomFilters,l+1);
-      fCustomFilters[l]:=TPutFilterAdaptor.create(pv^);
+    if varIsType(pv^, varDispatch) then begin
+      l := length(fCustomFilters);
+      setLength(fCustomFilters, l + 1);
+      fCustomFilters[l] := TPutFilterAdaptor.create(pv^);
     end;
   end;
 var
-  pv:POleVariant;
-  ws:WideString;
-  i,n:integer;
+  pv: POleVariant;
+  ws: WideString;
+  i, n: integer;
 begin
   if assigned(fMap) then fMap._Release();
-  fMap:=aMap;
+  fMap := aMap;
   if assigned(fMap) then fMap._AddRef();
-  fStorage:=aStorage;
-  fClipIncompleteWays:=false;
+  fStorage := aStorage;
+  fClipIncompleteWays := false;
   //parse filter options
-  if (varArrayDimCount(aFilter)<>1) then
+  if (VarArrayDimCount(aFilter) <> 1) then
     //no multi-dim or scalar options support
     exit;
-  n:=varArrayHighBound(aFilter,1)-varArrayLowBound(aFilter,1)+1;
-  i:=0;
-  pv:=varArrayLock(aFilter);
+  n := VarArrayHighBound(aFilter, 1) - VarArrayLowBound(aFilter, 1) + 1;
+  i := 0;
+  pv := VarArrayLock(aFilter);
   try
-    while(i<n)do begin
-      if varIsType(pv^,varOleStr) then begin
-        ws:=pv^;
-        if (ws<>'')and(ws[1]=':') then begin
-          if (ws=':bbox') then begin
-          //parse bbox n,e,s,w parameters
-            parseBox(pv,i,n);
+    while (i < n) do begin
+      if varIsType(pv^, varOleStr) then begin
+        ws := pv^;
+        if (ws <> '') and (ws[1] = ':') then begin
+          if (ws = ':bbox') then begin
+            //parse bbox n,e,s,w parameters
+            parseBox(pv, i, n);
           end
-          else if(ws=':bpoly') then begin
-            parsePoly(pv,i,n);
+          else if (ws = ':bpoly') then begin
+            parsePoly(pv, i, n);
           end
-          else if(ws=':clipIncompleteWays') then begin
-            parseClipIncompleteWays(pv,i,n);
+          else if (ws = ':clipIncompleteWays') then begin
+            parseClipIncompleteWays(pv, i, n);
           end
-          else if(ws=':customFilter') then begin
-            parseCustomFilter(pv,i,n);
+          else if (ws = ':customFilter') then begin
+            parseCustomFilter(pv, i, n);
           end;
         end;
       end;
@@ -1393,7 +1394,7 @@ begin
       inc(i);
     end;
   finally
-    varArrayUnlock(aFilter)
+    VarArrayUnlock(aFilter)
   end;
 end;
 
@@ -1413,7 +1414,7 @@ begin
     try
       while (i < maxBufSize) and not eos do begin
         pv^ := read1;
-        if varIsType(pv^,varDispatch) then begin
+        if varIsType(pv^, varDispatch) then begin
           inc(pv);
           inc(i);
         end;
@@ -1421,43 +1422,46 @@ begin
     finally
       VarArrayUnlock(result);
     end;
+    if i < maxBufSize then
+      VarArrayRedim(result, i - 1);
   end;
 end;
 
 function TMapObjectStream.read1: OleVariant;
-  procedure addNodeToList(const nodeId:int64);
+
+procedure addNodeToList(const nodeId: int64);
   begin
     fNodeList.add(nodeId);
   end;
 
-  procedure addWayToList(const wayId:int64);
+  procedure addWayToList(const wayId: int64);
   begin
     fWayList.add(wayId);
   end;
 
-  procedure addRelToList(const relId:int64);
+  procedure addRelToList(const relId: int64);
   begin
     fRelList.add(relId);
   end;
 
-  procedure addToDoList(const memArray:OleVariant);
+  procedure addToDoList(const memArray: OleVariant);
   var
-    pv:POleVariant;
-    n:integer;
-    id:int64;
+    pv: POleVariant;
+    n: integer;
+    id: int64;
   begin
-    n:= varArrayLength(memArray) div 3;
-    pv:=VarArrayLock(memArray);
+    n := varArrayLength(memArray) div 3;
+    pv := VarArrayLock(memArray);
     try
-      while(n>0) do begin
+      while (n > 0) do begin
         dec(n);
-        if pv^<>'relation' then begin
-          inc(pv,3);
+        if pv^ <> 'relation' then begin
+          inc(pv, 3);
           continue;
         end;
         inc(pv);
-        id:=pv^;
-        inc(pv,2);
+        id := pv^;
+        inc(pv, 2);
         fToDoRelList.add(id);
       end;
     finally
@@ -1465,59 +1469,60 @@ function TMapObjectStream.read1: OleVariant;
     end;
   end;
 
-  function checkNodeFilter(aNode:OleVariant):boolean;
+  function checkNodeFilter(aNode: OleVariant): boolean;
   var
-    i,l:integer;
-    v:OleVariant;
+    i, l: integer;
+    v: OleVariant;
   begin
-    l:=length(fBPolies);
-    result:=l=0;
+    l := length(fBPolies);
+    result := l = 0;
     //check bpolies (OR short eval)
-    for i:=0 to l-1 do begin
+    for i := 0 to l - 1 do begin
       if fBPolies[i].isIn(aNode) then begin
-        if(i>0) then begin
-          v:=fBPolies[i];
-          fBPolies[i]:=fBPolies[i-1];
-          fBPolies[i-1]:=v;
+        if (i > 0) then begin
+          v := fBPolies[i];
+          fBPolies[i] := fBPolies[i - 1];
+          fBPolies[i - 1] := v;
         end;
-        result:=true;
+        result := true;
         break;
       end;
     end;
     if not result then
       exit;
     //check custom filters (AND short eval)
-    l:=length(fCustomFilters);
-    for i:=0 to l-1 do begin
+    l := length(fCustomFilters);
+    for i := 0 to l - 1 do begin
       if not fCustomFilters[i].onPutNode(aNode) then begin
-        result:=false;
+        result := false;
         break;
       end;
     end;
   end;
 
-  function checkWayFilter(const aWay:Variant):boolean;
+  function checkWayFilter(const aWay: Variant): boolean;
 
     //returns true if length(node-list)>=2
-    function clipWay(const aWay:Variant):boolean;
+
+    function clipWay(const aWay: Variant): boolean;
     var
-      nodes:Variant;
-      pvs,pvt:PVariant;
-      n,i,cnt:integer;
-      nid:int64;
+      nodes: Variant;
+      pvs, pvt: PVariant;
+      n, i, cnt: integer;
+      nid: int64;
     begin
-      nodes:=aWay.nodes;
-      n:=varArrayLength(nodes);
-      cnt:=0;
-      i:=n;
-      pvs:=VarArrayLock(nodes);
-      pvt:=pvs;
+      nodes := aWay.nodes;
+      n := varArrayLength(nodes);
+      cnt := 0;
+      i := n;
+      pvs := VarArrayLock(nodes);
+      pvt := pvs;
       try
-        while i>0 do begin
-          nid:=pvs^;
+        while i > 0 do begin
+          nid := pvs^;
           if fNodeList.isIn(nid) then begin
-            if pvt<>pvs then
-              pvt^:=pvs^;
+            if pvt <> pvs then
+              pvt^ := pvs^;
             inc(pvt);
             inc(cnt);
           end;
@@ -1525,41 +1530,41 @@ function TMapObjectStream.read1: OleVariant;
           dec(i);
         end;
       finally
-        varArrayUnlock(nodes);
+        VarArrayUnlock(nodes);
       end;
-      if n<>cnt then begin
-        varArrayRedim(nodes,cnt-1);
-        aWay.nodes:=nodes;
+      if n <> cnt then begin
+        VarArrayRedim(nodes, cnt - 1);
+        aWay.nodes := nodes;
       end;
-      result:=cnt>=2;
+      result := cnt >= 2;
     end;
   var
-    i:integer;
+    i: integer;
   begin
     if fClipIncompleteWays then
-      result:=clipWay(aWay)
+      result := clipWay(aWay)
     else
-      result:=true;
+      result := true;
     if not result then
       exit;
-    for i:=0 to high(fCustomFilters) do begin
+    for i := 0 to high(fCustomFilters) do begin
       if not fCustomFilters[i].onPutWay(aWay) then begin
-        result:=false;
+        result := false;
         break;
       end;
     end;
   end;
 
-  function checkRelationFilter(aRelation:OleVariant):boolean;
+  function checkRelationFilter(aRelation: OleVariant): boolean;
   var
-    i,l:integer;
+    i, l: integer;
   begin
-    result:=true;
+    result := true;
     //check custom filters (AND short eval)
-    l:=length(fCustomFilters);
-    for i:=0 to l-1 do begin
+    l := length(fCustomFilters);
+    for i := 0 to l - 1 do begin
       if not fCustomFilters[i].onPutRelation(aRelation) then begin
-        result:=false;
+        result := false;
         break;
       end;
     end;
@@ -1567,23 +1572,23 @@ function TMapObjectStream.read1: OleVariant;
 
 var
   id: int64;
-  resultValid:boolean;
+  resultValid: boolean;
 begin
   result := unassigned;
-  resultValid:=false;
+  resultValid := false;
   if not assigned(fNodeList) then
-    fNodeList:=TStoredIdList.create(fStorage);
+    fNodeList := TStoredIdList.create(fStorage);
   if not assigned(fWayList) then
-    fWayList:=TStoredIdList.create(fStorage);
+    fWayList := TStoredIdList.create(fStorage);
   if not assigned(fRelList) then
-    fRelList:=TStoredIdList.create(fStorage);
+    fRelList := TStoredIdList.create(fStorage);
   if not assigned(fToDoRelList) then
-    fToDoRelList:=TStoredIdList.create(fStorage);
+    fToDoRelList := TStoredIdList.create(fStorage);
   repeat
     case fOutMode of
       rtNode: begin
           if VarIsEmpty(fQry) then begin
-            fQry := fStorage.sqlPrepare('SELECT id AS id FROM nodes '+fNodeSelectCondition);
+            fQry := fStorage.sqlPrepare('SELECT id AS id FROM nodes ' + fNodeSelectCondition);
             fQry := fStorage.sqlExec(fQry, 0, 0);
           end;
           if not fQry.eos then begin
@@ -1591,26 +1596,26 @@ begin
             result := fMap.getNode(id);
             if checkNodeFilter(result) then begin
               addNodeToList(id);
-              resultValid:=true;
+              resultValid := true;
             end;
           end
           else begin
-            fQry:=fStorage.sqlPrepare(
-              'INSERT OR IGNORE INTO '+fToDoRelList.tableName+'(id) '+
-              'SELECT relationid FROM relationmembers '+
-              'WHERE memberid IN (SELECT id FROM '+fNodeList.tableName+') AND '+
+            fQry := fStorage.sqlPrepare(
+              'INSERT OR IGNORE INTO ' + fToDoRelList.tableName + '(id) ' +
+              'SELECT relationid FROM relationmembers ' +
+              'WHERE memberid IN (SELECT id FROM ' + fNodeList.tableName + ') AND ' +
               '(memberidxtype & 3)=0'
-            );
-            fStorage.sqlExec(fQry,0,0);
+              );
+            fStorage.sqlExec(fQry, 0, 0);
             fQry := unassigned;
             fOutMode := rtWay;
           end;
         end;
       rtWay: begin
           if VarIsEmpty(fQry) then begin
-            fQry := fStorage.sqlPrepare('SELECT DISTINCT(wayid) AS id FROM waynodes '+
+            fQry := fStorage.sqlPrepare('SELECT DISTINCT(wayid) AS id FROM waynodes ' +
               'WHERE waynodes.nodeid IN (' +
-              'SELECT id FROM '+fNodeList.tableName+
+              'SELECT id FROM ' + fNodeList.tableName +
               ')');
             fQry := fStorage.sqlExec(fQry, 0, 0);
           end;
@@ -1619,52 +1624,52 @@ begin
             result := fMap.getWay(id);
             if checkWayFilter(result) then begin
               addWayToList(id);
-              resultValid:=true;
+              resultValid := true;
             end;
           end
           else begin
-            fQry:=fStorage.sqlPrepare(
-              'INSERT OR IGNORE INTO '+fToDoRelList.tableName+'(id) '+
-              'SELECT relationid FROM relationmembers '+
-              'WHERE memberid IN (SELECT id FROM '+fWayList.tableName+') AND '+
+            fQry := fStorage.sqlPrepare(
+              'INSERT OR IGNORE INTO ' + fToDoRelList.tableName + '(id) ' +
+              'SELECT relationid FROM relationmembers ' +
+              'WHERE memberid IN (SELECT id FROM ' + fWayList.tableName + ') AND ' +
               '(memberidxtype & 3)=1'
-            );
-            fStorage.sqlExec(fQry,0,0);
+              );
+            fStorage.sqlExec(fQry, 0, 0);
             fQry := unassigned;
             fOutMode := rtRelation;
           end;
         end;
       rtRelation: begin
           if VarIsEmpty(fQry) then begin
-            fQry := fStorage.sqlPrepare('SELECT id FROM '+fToDoRelList.tableName+' ');
+            fQry := fStorage.sqlPrepare('SELECT id FROM ' + fToDoRelList.tableName + ' ');
             fQry := fStorage.sqlExec(fQry, 0, 0);
           end;
           if not fQry.eos then begin
             id := fQry.read(1)[0];
             result := fMap.getRelation(id);
             addRelToList(id);
-            if varIsType(result,varDispatch) and checkRelationFilter(result) then begin
+            if varIsType(result, varDispatch) and checkRelationFilter(result) then begin
               addToDoList(result.members.getAll);
-              resultValid:=true;
+              resultValid := true;
             end;
             if fQry.eos then begin
-              fQry:=fStorage.sqlPrepare(
-              'INSERT OR IGNORE INTO '+fToDoRelList.tableName+'(id) '+
-              'SELECT relationid FROM relationmembers '+
-              'WHERE memberid IN (SELECT id FROM '+fRelList.tableName+') AND '+
-              '(memberidxtype & 3)=2'
-              );
-              fStorage.sqlExec(fQry,0,0);
-              fQry:=fStorage.sqlPrepare('DELETE FROM '+fToDoRelList.tableName+
-                ' WHERE id IN (SELECT id FROM '+fRelList.tableName+')');
-              fStorage.sqlExec(fQry,0,0);
-              fQry:=unassigned;
+              fQry := fStorage.sqlPrepare(
+                'INSERT OR IGNORE INTO ' + fToDoRelList.tableName + '(id) ' +
+                'SELECT relationid FROM relationmembers ' +
+                'WHERE memberid IN (SELECT id FROM ' + fRelList.tableName + ') AND ' +
+                '(memberidxtype & 3)=2'
+                );
+              fStorage.sqlExec(fQry, 0, 0);
+              fQry := fStorage.sqlPrepare('DELETE FROM ' + fToDoRelList.tableName +
+                ' WHERE id IN (SELECT id FROM ' + fRelList.tableName + ')');
+              fStorage.sqlExec(fQry, 0, 0);
+              fQry := unassigned;
             end;
           end
           else begin
             fOutMode := rtNode;
             set_eos(true);
-            resultValid:=true;
+            resultValid := true;
           end;
         end;
     else
@@ -1675,17 +1680,17 @@ end;
 
 procedure TMapObjectStream.set_eos(const aEOS: boolean);
 var
-  i:integer;
+  i: integer;
 begin
   if aEOS and not fEOS then begin
     FreeAndNil(fNodeList);
     FreeAndNil(fWayList);
     FreeAndNil(fRelList);
     FreeAndNil(fToDoRelList);
-    for i:=0 to high(fCustomFilters) do
+    for i := 0 to high(fCustomFilters) do
       FreeAndNil(fCustomFilters[i]);
-    setLength(fCustomFilters,0);
-    setLength(fBPolies,0);
+    setLength(fCustomFilters, 0);
+    setLength(fBPolies, 0);
     fQry := unassigned;
     fStorage := unassigned;
     if assigned(fMap) then
@@ -1699,82 +1704,82 @@ end;
 
 procedure TStoredIdList.add(const id: int64);
 begin
-  if varIsEmpty(fQryAdd) then begin
+  if VarIsEmpty(fQryAdd) then begin
     createTable();
-    fQryAdd:=fStorage.sqlPrepare(
-      'INSERT INTO '+tableName+'(id) VALUES (:id)');
+    fQryAdd := fStorage.sqlPrepare(
+      'INSERT INTO ' + tableName + '(id) VALUES (:id)');
   end;
-  fStorage.sqlExec(fQryAdd,varArrayOf([':id']),varArrayOf([Id]));
+  fStorage.sqlExec(fQryAdd, VarArrayOf([':id']), VarArrayOf([id]));
 end;
 
 constructor TStoredIdList.create(const aStorage: OleVariant);
 begin
   inherited create();
-  fStorage:=aStorage;
+  fStorage := aStorage;
   createTable();
 end;
 
 procedure TStoredIdList.createTable;
 var
-  q:OleVariant;
+  q: OleVariant;
 begin
   if fTableCreated then
     exit;
-  q:=fStorage.sqlPrepare(
-    'CREATE TEMPORARY TABLE '+tableName+
+  q := fStorage.sqlPrepare(
+    'CREATE TEMPORARY TABLE ' + tableName +
     '(id INTEGER PRIMARY KEY ON CONFLICT IGNORE)');
-  fStorage.sqlExec(q,0,0);
-  fTableCreated:=true;
+  fStorage.sqlExec(q, 0, 0);
+  fTableCreated := true;
 end;
 
 procedure TStoredIdList.delete(const id: int64);
 begin
-  if varIsEmpty(fQryDelete) then begin
+  if VarIsEmpty(fQryDelete) then begin
     createTable();
-    fQryDelete:=fStorage.sqlPrepare(
-      'DELETE FROM '+tableName+' WHERE id=:id');
+    fQryDelete := fStorage.sqlPrepare(
+      'DELETE FROM ' + tableName + ' WHERE id=:id');
   end;
-  fStorage.sqlExec(fQryDelete,varArrayOf([':id']),varArrayOf([Id]));
+  fStorage.sqlExec(fQryDelete, VarArrayOf([':id']), VarArrayOf([id]));
 end;
 
 procedure TStoredIdList.deleteTable;
 var
-  q:OleVariant;
+  q: OleVariant;
 begin
   if not fTableCreated then exit;
-  q:=fStorage.sqlPrepare('DROP TABLE '+tableName);
-  fStorage.sqlExec(q,0,0);
-  fTableCreated:=false;
+  q := fStorage.sqlPrepare('DROP TABLE ' + tableName);
+  fStorage.sqlExec(q, 0, 0);
+  fTableCreated := false;
 end;
 
 destructor TStoredIdList.destroy;
 begin
-  fQryAdd:=unassigned;
-  fQryIsIn:=unassigned;
+  fQryAdd := unassigned;
+  fQryIsIn := unassigned;
   deleteTable();
-  fQryDelete:=unassigned;
-  fStorage:=unassigned;
+  fQryDelete := unassigned;
+  fStorage := unassigned;
   inherited;
 end;
 
 function TStoredIdList.get_tableName: WideString;
 begin
-  if fTableName='' then
-    fTableName:='idlist'+IntToStr(getUID);
-  result:=fTableName;
+  if fTableName = '' then
+    fTableName := 'idlist' + IntToStr(getUID);
+  result := fTableName;
 end;
 
 function TStoredIdList.isIn(const id: int64): boolean;
 var
-  i:integer;
+  i: integer;
 begin
-  if varIsEmpty(fQryIsIn) then begin
+  if VarIsEmpty(fQryIsIn) then begin
     createTable();
-    fQryIsIn:=fStorage.sqlPrepare('SELECT COUNT(1) FROM '+tableName+
+    fQryIsIn := fStorage.sqlPrepare('SELECT COUNT(1) FROM ' + tableName +
       ' WHERE id=:id');
   end;
-  i:=fStorage.sqlExec(fQryIsIn,varArrayOf([':id']),varArrayOf([id])).read(1)[0];
-  result:=i>0;
+  i := fStorage.sqlExec(fQryIsIn, VarArrayOf([':id']), VarArrayOf([id])).read(1)[0];
+  result := i > 0;
 end;
 
 { TAbstractMap }
@@ -1796,7 +1801,7 @@ end;
 
 function TAbstractMap.get_storage: OleVariant;
 begin
-  result:=fStorage;
+  result := fStorage;
 end;
 
 procedure TAbstractMap.putObject(const aObj: OleVariant);
