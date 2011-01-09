@@ -130,13 +130,14 @@ begin
     else
       raiseError();
     end;
-  rdr := TOSMReader.create;
+  rdr := TOSMReader.create();
   try
     rdr.setInputStream(hr);
     rdr.setOutputMap(self as IDispatch);
     fFetchingResult := true;
     rdr.read(1);
   finally
+    FreeAndNil(rdr);
     fFetchingResult := false;
   end;
   result := fResultObj;

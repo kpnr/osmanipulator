@@ -233,33 +233,13 @@ type
     //property storage:OleVariant read get_storage write set_storage;
   end;
 
-  TStoredIdList = class
-  protected
-    fStorage: OleVariant;
-    fQryAdd: OleVariant;
-    fQryIsIn: OleVariant;
-    fQryDelete: OleVariant;
-    fTableName: WideString;
-    fTableCreated: boolean;
-    function get_tableName: WideString;
-    procedure createTable();
-    procedure deleteTable();
-  public
-    constructor create(const aStorage: OleVariant);
-    destructor destroy; override;
-    function isIn(const id: int64): boolean;
-    procedure add(const id: int64);
-    procedure delete(const id: int64);
-    property tableName: WideString read get_tableName;
-  end;
-
   TMapObjectStream = class(TOSManObject, IInputStream)
   protected
     fMap: TMap;
     fStorage, fQry: OleVariant;
     fBPolies: array of OleVariant;
     fCustomFilters: array of TPutFilterAdaptor;
-    fNodeList, fWayList, fRelList, fToDoRelList: TStoredIdList;
+    fNodeList, fWayList, fRelList, fToDoRelList: OleVariant;
     fNodeSelectCondition: WideString;
     fOutMode: TRefType;
     fEOS: boolean;
@@ -1230,14 +1210,16 @@ var
   i: integer;
   pv: PVarData;
   pi: PInt64;
+  v:OleVariant;
 begin
-  if (VarArrayDimCount(newNodes) <> 1) or ((VarType(newNodes) and varTypeMask) <> varVariant) then
+  v:=varFromJsObject(newNodes);
+  if (VarArrayDimCount(v) <> 1) or ((VarType(v) and varTypeMask) <> varVariant) then
     raise EConvertError.create(toString() + '.set_nodes: array of variants expected');
-  i := VarArrayHighBound(newNodes, 1) - VarArrayLowBound(newNodes, 1) + 1;
+  i := VarArrayHighBound(v, 1) - VarArrayLowBound(v, 1) + 1;
   setLength(fNodes, i);
   if i > 0 then begin
     pi := @fNodes[0];
-    pv := VarArrayLock(newNodes);
+    pv := VarArrayLock(v);
     try
       while i > 0 do begin
         pi^ := PVariant(pv)^;
@@ -1246,7 +1228,7 @@ begin
         dec(i);
       end;
     finally
-      VarArrayUnlock(newNodes);
+      VarArrayUnlock(v);
     end;
   end;
 end;
@@ -1293,6 +1275,8 @@ end;
 procedure TMapObjectStream.initialize(const aMap: TMap; const aStorage, aFilter: OleVariant);
 
 procedure parseBox(var pv: POleVariant; var idx: integer; cnt: integer);
+  const
+    bboxextra=2e-7;
   var
     n, e, s, w: double;
   begin
@@ -1300,16 +1284,16 @@ procedure parseBox(var pv: POleVariant; var idx: integer; cnt: integer);
     //set pv to north
     inc(pv);
     inc(idx);
-    n := pv^;
+    n := pv^+bboxextra;
     inc(pv);
     inc(idx);
-    e := pv^;
+    e := pv^+bboxextra;
     inc(pv);
     inc(idx);
-    s := pv^;
+    s := pv^-bboxextra;
     inc(pv);
     inc(idx);
-    w := pv^;
+    w := pv^-bboxextra;
     if fNodeSelectCondition <> '' then
       fNodeSelectCondition := fNodeSelectCondition + ' OR '
     else
@@ -1576,14 +1560,14 @@ var
 begin
   result := unassigned;
   resultValid := false;
-  if not assigned(fNodeList) then
-    fNodeList := TStoredIdList.create(fStorage);
-  if not assigned(fWayList) then
-    fWayList := TStoredIdList.create(fStorage);
-  if not assigned(fRelList) then
-    fRelList := TStoredIdList.create(fStorage);
-  if not assigned(fToDoRelList) then
-    fToDoRelList := TStoredIdList.create(fStorage);
+  if VarIsEmpty(fNodeList) then
+    fNodeList := fStorage.createIdList();
+  if VarIsEmpty(fWayList) then
+    fWayList := fStorage.createIdList();
+  if VarIsEmpty(fRelList) then
+    fRelList := fStorage.createIdList();
+  if VarIsEmpty(fToDoRelList) then
+    fToDoRelList := fStorage.createIdList();
   repeat
     case fOutMode of
       rtNode: begin
@@ -1683,10 +1667,10 @@ var
   i: integer;
 begin
   if aEOS and not fEOS then begin
-    FreeAndNil(fNodeList);
-    FreeAndNil(fWayList);
-    FreeAndNil(fRelList);
-    FreeAndNil(fToDoRelList);
+    fNodeList:=unassigned;
+    fWayList:=unassigned;
+    fRelList:=unassigned;
+    fToDoRelList:=unassigned;
     for i := 0 to high(fCustomFilters) do
       FreeAndNil(fCustomFilters[i]);
     setLength(fCustomFilters, 0);
@@ -1698,88 +1682,6 @@ begin
     fMap := nil;
   end;
   fEOS := fEOS or aEOS;
-end;
-
-{ TStoredIdList }
-
-procedure TStoredIdList.add(const id: int64);
-begin
-  if VarIsEmpty(fQryAdd) then begin
-    createTable();
-    fQryAdd := fStorage.sqlPrepare(
-      'INSERT INTO ' + tableName + '(id) VALUES (:id)');
-  end;
-  fStorage.sqlExec(fQryAdd, VarArrayOf([':id']), VarArrayOf([id]));
-end;
-
-constructor TStoredIdList.create(const aStorage: OleVariant);
-begin
-  inherited create();
-  fStorage := aStorage;
-  createTable();
-end;
-
-procedure TStoredIdList.createTable;
-var
-  q: OleVariant;
-begin
-  if fTableCreated then
-    exit;
-  q := fStorage.sqlPrepare(
-    'CREATE TEMPORARY TABLE ' + tableName +
-    '(id INTEGER PRIMARY KEY ON CONFLICT IGNORE)');
-  fStorage.sqlExec(q, 0, 0);
-  fTableCreated := true;
-end;
-
-procedure TStoredIdList.delete(const id: int64);
-begin
-  if VarIsEmpty(fQryDelete) then begin
-    createTable();
-    fQryDelete := fStorage.sqlPrepare(
-      'DELETE FROM ' + tableName + ' WHERE id=:id');
-  end;
-  fStorage.sqlExec(fQryDelete, VarArrayOf([':id']), VarArrayOf([id]));
-end;
-
-procedure TStoredIdList.deleteTable;
-var
-  q: OleVariant;
-begin
-  if not fTableCreated then exit;
-  q := fStorage.sqlPrepare('DROP TABLE ' + tableName);
-  fStorage.sqlExec(q, 0, 0);
-  fTableCreated := false;
-end;
-
-destructor TStoredIdList.destroy;
-begin
-  fQryAdd := unassigned;
-  fQryIsIn := unassigned;
-  deleteTable();
-  fQryDelete := unassigned;
-  fStorage := unassigned;
-  inherited;
-end;
-
-function TStoredIdList.get_tableName: WideString;
-begin
-  if fTableName = '' then
-    fTableName := 'idlist' + IntToStr(getUID);
-  result := fTableName;
-end;
-
-function TStoredIdList.isIn(const id: int64): boolean;
-var
-  i: integer;
-begin
-  if VarIsEmpty(fQryIsIn) then begin
-    createTable();
-    fQryIsIn := fStorage.sqlPrepare('SELECT COUNT(1) FROM ' + tableName +
-      ' WHERE id=:id');
-  end;
-  i := fStorage.sqlExec(fQryIsIn, VarArrayOf([':id']), VarArrayOf([id])).read(1)[0];
-  result := i > 0;
 end;
 
 { TAbstractMap }

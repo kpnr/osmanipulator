@@ -90,7 +90,7 @@ if(rel){
 		map.onPutFilter=0;
 	}else{
 		echo('Not resolved refs:');
-		var url=mpoly.getUnresolved().getAll().toArray();
+		var url=mpoly.getNotResolved().getAll().toArray();
 		for(var i=0;i<url.length;i+=3){
 			echo('	'+url[i]+'	'+url[i+1]+'	'+url[i+2]);
 		}

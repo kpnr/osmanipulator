@@ -15,7 +15,7 @@ type
   ILogger = interface(IOSManAll)
     procedure log(const logMessage:WideString);
   end;
-  
+
   //Read only byte stream interface
   IInputStream = interface(IOSManAll)
     //maxBufSize: read buffer size
@@ -205,7 +205,7 @@ type
     //  1 - connected
     //  2 - sending data to server
     //  3 - receiving data from server
-    //  4 - transfer complete. Success/fail determined by getStatus() call. 
+    //  4 - transfer complete. Success/fail determined by getStatus() call.
     function getState():integer;
     //get HTTP-status. It implemented as follows:
     // 1.If connection broken or not established in state < 3 then status '503 Service Unavailable' set;
@@ -213,7 +213,7 @@ type
     // 3.If state=3 (transfer operation pending) then status '206 Partial Content' set;
     // 4.If state=4 then status set to server-returned status
     function getStatus():integer;
-    //wait for tranfer completition. On fuction exit all pending
+    //wait for tranfer completition. On function exit all pending
     //  data send/receive completed and connection closed.
     procedure fetchAll();
   end;
@@ -227,7 +227,7 @@ type
     procedure set_timeout(const aTimeout:integer);
     function get_maxRetry():integer;
     procedure set_maxRetry(const aMaxRetry:integer);
-    
+
     //returns IHTTPResponce for request 'GET http://hostName/location'
     function get(const location:WideString):OleVariant;
     //hostname for OSM-API server. Official server is api.openstreetmap.org
@@ -252,6 +252,8 @@ type
     //In such case only last resultset returned
     function sqlExec(const sqlQuery: OleVariant; const paramNames,paramValues: OleVariant):
       OleVariant;
+    //creates IStoredIdList object
+    function createIdList():OleVariant;
     //database resource locator (file name, server name, etc).
     property dbName: WideString read get_dbName write set_dbName;
   end;
@@ -261,6 +263,19 @@ type
     procedure set_storage(const newStorage:OleVariant);
     //IStorage object
     property storage:OleVariant read get_storage write set_storage;
+  end;
+
+  IStoredIdList=interface(IStorageUser)
+    function get_tableName:wideString; 
+
+    //returns true if `id` is in list
+    function isIn(const id: int64): boolean;
+    //add `id` into list. If `id` already in list do nothing.
+    procedure add(const id: int64);
+    //deletes `id from list. If `id` not in list do nothing.
+    procedure delete(const id: int64);
+    //read-only temporary table name. Use it in SQL-queries.
+    property tableName: WideString read get_tableName;
   end;
 
   IMap = interface(IStorageUser)
@@ -315,7 +330,7 @@ type
     //     Filter interface can be partially implemented. For not implemented method
     //     assumed true result. If there are several :customFilters specified then
     //     filters are called in ascending order. If filter returns false then
-    //     subsequent filters not called and object not passed (short AND evaluation). 
+    //     subsequent filters not called and object not passed (short AND evaluation).
     //    Params:
     //     cFilter - IMapOnPutFilter object.
     function getObjects(const filterOptions:OleVariant):OleVariant;
@@ -343,12 +358,23 @@ type
 
   IMultiPoly=interface(IOSManAll)
     //add MapObject to polygon. Nodes not allowed,
-    //in Relation node-members ignored
+    //node-members in Relation are ignored
     procedure addObject(const aMapObject:OleVariant);
     //returns true if all relations/way/nodes resolved, false otherwise
     function resolve(const srcMap:OleVariant):boolean;
-    //IRefList of unresolved references
-    function getUnresolved():OleVariant;
+    //IRefList of not resolved references
+    function getNotResolved():OleVariant;
+    //IRefList of not closed nodes.
+    function getNotClosed():OleVariant;
+    //returns intersection of Poly boundary and Way.
+    //Result is array of Node`s. Tag 'osman:idx' filled with prev node idx.
+    //If Way and Poly has no intersection zero-length array returned.
+    //If any Way node not found in Map then exception raised.
+    //Example:
+    // way=n1(0,1) - n2(2,1) - n3(4,1)
+    // poly=(1,0) - (3,0) - (3,2) - (1,2) - (1,0)
+    // result=[nA(1,1, osman:idx=0), nB(3,1, osman:idx=1)]
+    function getIntersection(const aMap,aWay:OleVariant):OleVariant;
     //returns true if node is in poly (including border)
     function isIn(const aNode:OleVariant):boolean;
     //returns bounding box for poly. Returns SafeArray of four double variants

@@ -1,16 +1,16 @@
 //settings begin
-var destDBName='F:\\db\\osm\\testdata\\rf.db3';
+var destDBName='F:\\db\\osm\\sql\\rf.db3';
 var srcOSMName=[
-'F:\\db\\osm\\testdata\\20100608-20100609.osc.gz'
+'F:\\db\\osm\\100805rus.osm'
 ];
-var bpolyRelationId=60189;//set to false if no bpoly needed
+var bpolyRelationId=false;//60189;//set to false if no bpoly needed
 //settings end
 
 var man=WScript.createObject('OSMan.Application');
 var fso=WScript.createObject('Scripting.FileSystemObject');
 
 function importFile(fileName,destMap){
-	WScript.Echo(''+(new Date())+'importing'+fileName);
+	WScript.Echo(''+(new Date())+' importing '+fileName);
 	var ext=fso.getExtensionName(fileName);
 	var ds=0;
 	switch(ext){
