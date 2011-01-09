@@ -1,10 +1,11 @@
 //settings
 var testOSMOutFile='F:\\db\\osm\\testdata\\testOutFiltered.osm';
-var testMapFile='F:\\db\\osm\\testdata\\test.db3';
-var useBPolyFilter=true;
+var testMapFile='F:\\db\\osm\\sql\\rf.db3';
+var useBPolyFilter=false;
 var useBBoxFilter=true;
-var clipIncompleteWays=true;
-var useCustomFilter=true;
+var bBoxFilter=[':bbox',45,38,44,37];
+var clipIncompleteWays=false;
+var useCustomFilter=false;
 //see line 'var cf={' for filter conditions
 //settings end
 var re=/wscript/i;
@@ -35,8 +36,7 @@ function testFileWriter(){
 	map.storage=stg;
 	var flt=[];
 	if(useBBoxFilter){
-		flt=flt.concat(':bbox',70.4077993,31.141223,70.357201,31.0114736,
-		':bbox',70.3604353,31.0487785,70.3507815,31.0366968);
+		flt=flt.concat(bBoxFilter);
 	};
 	if(useBPolyFilter){
 		var gt=man.createObject('GeoTools');
@@ -48,8 +48,8 @@ function testFileWriter(){
 			echo('MPoly='+mpoly.toString());
 		}
 		else{
-			var ul=mpoly.getUnresolved().getAll().toArray();
-			echo('Unresolved list:');
+			var ul=mpoly.getNotResolved().getAll().toArray();
+			echo('NotResolved list:');
 			for(var j=0;j<ul.length;j+=3){
 				echo('	'+ul[j]+'	id='+ul[j+1]);
 			};

@@ -1,6 +1,6 @@
 //settings
-var srcOSMName='F:\\db\\osm\\testdata\\test.bz2';
-var destDBName='F:\\db\\osm\\testdata\\test.db3';
+var srcOSMName='F:\\db\\osm\\testdata\\testOut.osm';
+var destDBName='F:\\db\\osm\\sql\\rf.db3';
 //settings end
 var re=/wscript/i;
 if (WScript.FullName.search(re)>=0){

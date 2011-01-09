@@ -440,6 +440,7 @@ begin
                 2: TVarData(Temps[I]).VLongWord := TVarData(Temps[I]).VWord;
               end;
             ParamVarData := @Temps[I];
+            VarType := ParamVarData^.VType;//+hkm
           except
             ParameterMismatch(I);
           end;
@@ -453,8 +454,7 @@ begin
     end
     else if varByRef and VarType <> 0 then
 //-hkm      ParamData[K] := @ParamVarData^.VPointer 
-//+hkm
-      ParamData[K] := ParamVarData^.VPointer 
+      ParamData[K] := ParamVarData^.VPointer //+hkm
     else
       ParamData[K] := @ParamVarData^.VInteger;
 

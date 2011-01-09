@@ -5,6 +5,8 @@ uses Math, SysUtils, Variants, uInterfaces, uOSMCommon, uModule;
 
 type
   TGTShape = class(TObject)
+  protected
+    function clone: TGTShape; virtual; abstract;
   end;
 
   TGTShapeArray = array of TGTShape;
@@ -19,6 +21,11 @@ type
   public
     class function degToInt(const deg: double): integer;
     class function IntToDeg(const i: integer): double;
+    class function fastCosDeg(const degAngle:double):double;
+    function clone(): TGTShape; override;
+    function fastDistM(pt:TGTPoint):double;
+    function fastDistSqrM(pt:TGTPoint):double;
+    procedure assignNode(aNode: OleVariant);
     property x: integer read fx write fx;
     property y: integer read fy write fy;
     property lat: double read get_lat write set_lat;
@@ -42,7 +49,9 @@ type
     //0 - pt outside
     //1 - pt is on bound
     //2 - pt is inside
+    function clone: TGTShape; override;
     function isIn(const pt: TGTPoint): integer; virtual;
+    procedure updateBoundRect(const pt: TGTPoint);
     property left: integer read fLeft write fLeft;
     property right: integer read fRight write fRight;
     property top: integer read fTop write fTop;
@@ -71,13 +80,12 @@ type
   protected
     fPoints: array of TGTPoint;
     fCount: integer;
-    hasExtraNode: boolean;
     function get_capacity: integer;
     procedure set_capacity(const Value: integer);
     procedure addExtraNode();
-    procedure updateBoundRect(const pt: TGTPoint);
   public
     destructor destroy; override;
+    function clone(): TGTShape; override;
     function isIn(const pt: TGTPoint): integer; override;
     //if x outside poly nil returned, else returns right half of poly
     function splitX(x: integer): TGTPoly;
@@ -97,6 +105,7 @@ type
     function get_item(const idx: integer): TGTRefItem;
     function get_count: integer;
     function get_id: int64;
+    function clone(): TGTShape; override;
   public
     property item[const i: integer]: TGTRefItem read get_item; default;
     property count: integer read get_count;
@@ -121,32 +130,63 @@ type
     function createPoly(): OleVariant;
   end;
 
+  TMultiPolyListItem = record
+    obj: OleVariant;
+    parentIdx: integer;
+  end;
+
+  PMultiPolyListItem = ^TMultiPolyListItem;
+
+  TMultiPolyList = record
+    items: array of TMultiPolyListItem;
+    count: integer;
+  end;
+
   TMultiPoly = class(TOSManObject, IMultiPoly)
   protected
-    inList: TGTShapeArray;
-    hash: array of array of TGTShapeArray;
-    fUnResolved: TRefList;
-    allResolved: boolean;
+    srcList, //parentIdx ignored
+    relationList, //parentIdx=parent_relation_relationList_idx or (-1-parent_relation_srcList_idx)
+    wayList, //parentIdx=parent_relation_relationList_idx or (-1-parent_relation_srcList_idx)
+    nodeList //parentIdx=parent_way_wayList_idx
+    : TMultiPolyList;
+    simplePolyList, optimizedPolyList: array of TGTPoly;
+    optimizedPolyParent: array of integer;
+    optimizedPolyHash: array of array of array of integer;
+    fNotResolved, fNotClosed: TRefList;
+
+    function isAllResolved(): boolean;
+
+    procedure growList(var list: TMultiPolyList; delta: integer = 1);
+    procedure clearList(var list: TMultiPolyList);
+    procedure putList(var list: TMultiPolyList; const obj: OleVariant; parent: integer);
+
+    procedure createNotResolved();
+    procedure createNotClosed();
+
+    procedure clearInternalLists();
+
+    procedure buildOptimizedPolyList();
+    procedure buildOptimizedPolyHash();
     class function intToHash(i: integer): cardinal;
-    procedure putRelation(const OSMRelation: OleVariant);
-    procedure putWay(const osmWay: OleVariant);
-    procedure clearInList();
-    procedure createUnresolved();
-    procedure optimize();
-    procedure buildHash();
   public
     destructor destroy; override;
   published
     //add MapObject to polygon. Nodes not allowed,
-    //in Relation node-members ignored
+    //node-members in Relation are ignored
     procedure addObject(const aMapObject: OleVariant);
     //returns true if all relations/way/nodes resolved, false otherwise
     function resolve(const srcMap: OleVariant): boolean;
-    //IRefList of unresolved references
-    function getUnresolved(): OleVariant;
+    //IRefList of not resolved references
+    function getNotResolved(): OleVariant;
+    //IRefList of not closed nodes.
+    function getNotClosed(): OleVariant;
+    function getIntersection(const aMap, aWay: OleVariant): OleVariant;
     //returns true if node is in poly (including border)
     function isIn(const aNode: OleVariant): boolean;
-    function getBBox(): OleVariant;
+    //returns bounding box for poly. Returns SafeArray of four double variants
+    // for N,E,S and W bounds respectively. If poly is not resolved then
+    // exception raised.
+    function getBBox: OleVariant;
   end;
 
   { TGeoTools }
@@ -156,470 +196,12 @@ begin
   result := TMultiPoly.create() as IDispatch;
 end;
 
-{ TMultiPoly }
-
-procedure TMultiPoly.addObject(const aMapObject: OleVariant);
-var
-  s: WideString;
-begin
-  //add object to inList
-  if varIsType(aMapObject, varDispatch) then begin
-    s := aMapObject.getClassName;
-    if (s = 'Relation') then begin
-      putRelation(aMapObject);
-      exit;
-    end
-    else if s = 'Way' then begin
-      putWay(aMapObject);
-      exit;
-    end;
-  end;
-  raise EConvertError.create(toString() + 'addObject: invalid object');
-end;
-
-function TMultiPoly.getBBox: OleVariant;
-var
-  n, e, s, w, t: integer;
-  i: integer;
-  poly: TGTPoly;
-begin
-  if not allResolved then
-    raise EConvertError.create(toString() + '.bbox: polygon must be resolved');
-  if length(inList) > 0 then begin
-    n := low(integer);
-    s := high(integer);
-    e := low(integer);
-    w := high(integer);
-    for i := 0 to high(inList) do begin
-      poly := TGTPoly(inList[i]);
-      t := poly.left;
-      if t < w then w := t;
-      t := poly.right;
-      if e < t then e := t;
-      t := poly.top;
-      if n < t then n := t;
-      t := poly.bottom;
-      if t < s then s := t;
-    end;
-  end
-  else begin
-    n := 0;
-    e := 0;
-    s := 0;
-    w := 0;
-  end;
-  result := VarArrayOf([TGTPoint.IntToDeg(n), TGTPoint.IntToDeg(e), TGTPoint.IntToDeg(s),
-    TGTPoint.IntToDeg(w)]);
-end;
-
-procedure TMultiPoly.buildHash;
-
-procedure putPoly(const x, y: cardinal; const p: TGTPoly);
-  var
-    l: integer;
-  begin
-    if cardinal(length(hash[x])) <= y then
-      setlength(hash[x], y + 1);
-    l := length(hash[x][y]);
-    setlength(hash[x][y], l + 1);
-    hash[x][y][l] := p;
-  end;
-var
-  xidx, yidx, polyidx: integer;
-  poly: TGTPoly;
-  xminhash, xmaxhash, yminhash, ymaxhash: cardinal;
-begin
-  //hash clean up
-  setlength(hash, 0);
-  setlength(hash, hashSize);
-  for polyidx := 0 to high(inList) do begin
-    poly := TGTPoly(inList[polyidx]);
-    xminhash := intToHash(poly.left);
-    xmaxhash := intToHash(poly.right);
-    yminhash := intToHash(poly.bottom);
-    ymaxhash := intToHash(poly.top);
-    for xidx := xminhash to xmaxhash do begin
-      for yidx := yminhash to ymaxhash do begin
-        putPoly(xidx, yidx, poly);
-      end;
-    end;
-  end;
-end;
-
-procedure TMultiPoly.clearInList;
-var
-  i: integer;
-begin
-  for i := 0 to high(inList) do begin
-    freeAndNil(inList[i]);
-  end;
-  setlength(inList, 0);
-end;
-
-procedure TMultiPoly.createUnresolved;
-begin
-  if not assigned(fUnResolved) then begin
-    fUnResolved := TRefList.create();
-    (fUnResolved as IDispatch)._AddRef();
-  end;
-end;
-
-destructor TMultiPoly.destroy;
-begin
-  clearInList();
-  if assigned(fUnResolved) then begin
-    (fUnResolved as IDispatch)._Release();
-    fUnResolved := nil;
-  end;
-  inherited;
-end;
-
-function TMultiPoly.getUnresolved: OleVariant;
-begin
-  createUnresolved();
-  result := fUnResolved as IDispatch;
-end;
-
-class function TMultiPoly.intToHash(i: integer): cardinal;
-begin
-  i := i div (1 shl (32 - hashBits));
-  inc(i, hashSize div 2);
-  result := cardinal(i);
-end;
-
-function TMultiPoly.isIn(const aNode: OleVariant): boolean;
-var
-  i, xhash, yhash: integer;
-  pt: TGTPoint;
-  pl: TGTShapeArray;
-  p: TGTPoly;
-  {$WARNINGS OFF}
-begin
-  if not allResolved then
-    raise EConvertError.create(toString() + '.isIn : not all references resolved');
-  result := false;
-  pt := TGTPoint.create();
-  try
-    pt.lat := aNode.lat;
-    pt.lon := aNode.lon;
-    xhash := intToHash(pt.fx);
-    yhash := intToHash(pt.fy);
-    if length(hash[xhash]) <= yhash then
-      exit;
-    pl := hash[xhash][yhash];
-    for i := 0 to high(pl) do begin
-      //all refernces resolved, so all objects in list is TGTPoly
-      p := TGTPoly(pl[i]);
-      case p.isIn(pt) of
-        0: ;
-        1: begin
-            result := true;
-            break;
-          end;
-        2: result := not result;
-      end;
-    end;
-  finally
-    freeAndNil(pt);
-  end;
-end;
-{$WARNINGS ON}
-
-procedure TMultiPoly.optimize;
-var
-  nCnt, nOpt, pCnt, i: integer;
-  newInList: TGTShapeArray;
-
-  procedure split(const pl: TGTPoly);
-  begin
-    if pl.width > pl.height then
-      newInList[pCnt] := pl.splitX(pl.left + integer(pl.width shr 1))
-    else
-      newInList[pCnt] := pl.splitY(pl.bottom + integer(pl.height shr 1));
-    if assigned(newInList[pCnt]) then
-      inc(pCnt);
-  end;
-
-var
-  maxCnt, maxIdx: integer;
-begin
-  nCnt := 0;
-  for i := 0 to high(inList) do begin
-    inc(nCnt, TGTPoly(inList[i]).count);
-  end;
-  nOpt := round(sqrt(nCnt));
-  pCnt := length(inList);
-  if (nCnt < 100) or (pCnt >= nOpt) then
-    //no optimization needed
-    exit;
-  setlength(newInList, nOpt);
-  move(inList[0], newInList[0], pCnt * sizeof(newInList[0]));
-  while (pCnt < nOpt) do begin
-    maxCnt := 0;
-    maxIdx := 0;
-    for i := 0 to pCnt - 1 do begin
-      if maxCnt < TGTPoly(newInList[i]).count then begin
-        maxCnt := TGTPoly(newInList[i]).count;
-        maxIdx := i;
-      end;
-    end;
-    split(TGTPoly(newInList[maxIdx]));
-  end;
-  setlength(newInList, pCnt);
-  inList := newInList;
-end;
-
-procedure TMultiPoly.putRelation(const OSMRelation: OleVariant);
-var
-  gr: TGTRelation;
-begin
-  //obj checked in addObject. obj is Relation
-  gr := TGTRelation.create();
-  gr.AddRelation(OSMRelation);
-  setlength(inList, length(inList) + 1);
-  inList[length(inList) - 1] := gr;
-  allResolved := false;
-end;
-
-procedure TMultiPoly.putWay(const osmWay: OleVariant);
-var
-  gp: TGTWay;
-begin
-  //obj checked in addObject. obj is Way
-  gp := TGTWay.create();
-  gp.AddWay(osmWay);
-  setlength(inList, length(inList) + 1);
-  inList[length(inList) - 1] := gp;
-  allResolved := false;
-end;
-
-function TMultiPoly.resolve(const srcMap: OleVariant): boolean;
-var
-  nn: integer;
-  newInList: TGTShapeArray;
-
-  procedure grow(const delta: cardinal);
-  begin
-    while cardinal(nn) + delta >= cardinal(length(newInList)) do
-      setlength(newInList, length(newInList) * 2);
-  end;
-
-  procedure clearNotResolved();
-  var
-    v: OleVariant;
-  begin
-    //clear not resolved references list
-    createUnresolved();
-    v := VarArrayCreate([0, -1], varVariant);
-    fUnResolved.setAll(v, v, v);
-  end;
-
-  procedure addNotResolved(const m: TGTRefItem);
-  begin
-    //add not resolved reference to list
-    createUnresolved();
-    fUnResolved.insertBefore(maxInt, refTypeToStr(m.RefType), m.RefId, m.RefRole);
-  end;
-
-  procedure resolveToWays();
-  var
-    doRepeat: boolean;
-    m: TGTRefItem;
-    gr: TGTRelation;
-    gs: TGTShape;
-    gw: TGTWay;
-    v: OleVariant;
-    i, j: integer;
-  begin
-    doRepeat := false;
-    repeat
-      clearNotResolved();
-      for i := 0 to high(inList) do begin
-        gs := inList[i];
-        if gs is TGTRelation then begin
-          //resolve relation to members
-          gr := TGTRelation(gs);
-          grow(gr.count);
-          for j := 0 to gr.count - 1 do begin
-            m := gr[j];
-            case m.RefType of
-              rtNode: ;
-              rtWay: begin
-                  //resolve way ref into way
-                  v := srcMap.getWay(m.RefId);
-                  if varIsType(v, varDispatch) then begin
-                    gw := TGTWay.create();
-                    gw.AddWay(v);
-                    newInList[nn] := gw;
-                    inc(nn);
-                  end
-                  else begin
-                    addNotResolved(m);
-                    allResolved := false;
-                  end;
-                end;
-              rtRelation: begin
-                  //resolve relation ref into relation
-                  v := srcMap.getRelation(m.RefId);
-                  if varIsType(v, varDispatch) then begin
-                    if (v.tags.getByKey('type') <> 'collection') then begin
-                      grow(1);
-                      gr := TGTRelation.create();
-                      gr.AddRelation(v);
-                      newInList[nn] := gr;
-                      inc(nn);
-                      doRepeat := true;
-                    end;
-                  end
-                  else begin
-                    addNotResolved(m);
-                    allResolved := false;
-                  end;
-                end;
-            else
-              raise ERangeError.create(toString() + '.resolve: unknown ref type');
-            end;
-          end;
-        end
-        else begin
-          //just copy
-          grow(1);
-          newInList[nn] := inList[i];
-          inList[i] := nil;
-          inc(nn);
-        end;
-      end;
-    until not doRepeat;
-  end;
-
-  procedure mergeWays();
-  var
-    idx1, idx2: integer; //indexes of mergeing ways
-    gs1, gs2: TGTShape;
-    doRepeat: boolean;
-  begin
-    repeat
-      idx1 := 0;
-      doRepeat := false;
-      while idx1 < nn - 1 do begin
-        gs1 := newInList[idx1];
-        if not (gs1 is TGTWay) then begin
-          //it is not Way, try next
-          inc(idx1);
-          continue;
-        end;
-        idx2 := idx1 + 1;
-        while idx2 < nn do begin
-          gs2 := newInList[idx2];
-          if not (gs2 is TGTWay) then begin
-            inc(idx2);
-            continue;
-          end
-          else begin
-            //try to merge
-            if TGTWay(gs1).merge(TGTWay(gs2)) then begin
-              //gs1 now is old-gs1 + gs2, so delete gs2
-              freeAndNil(gs2);
-              newInList[idx2] := newInList[nn - 1];
-              dec(nn);
-              doRepeat := true;
-            end
-            else begin
-              //gs1 and gs2 not "mergeable", try next
-              inc(idx2);
-            end;
-          end;
-        end;
-        inc(idx1);
-      end;
-    until not doRepeat;
-  end;
-
-  procedure resolveToPoly();
-  var
-    i, j: integer;
-    gp: TGTPoly;
-    gw: TGTWay;
-    vn: OleVariant;
-    isResolved: boolean;
-    m: TGTRefItem;
-  begin
-    gp := nil;
-    try
-      for i := 0 to nn - 1 do begin
-        if not (newInList[i] is TGTWay) then
-          continue;
-        gw := TGTWay(newInList[i]);
-        if gw.firstId <> gw.lastId then begin
-          //not closed way - so not resolved
-          allResolved := false;
-          m.RefId := gw.id;
-          m.RefRole := 'not closed polygon';
-          m.RefType := rtWay;
-          addNotResolved(m);
-        end;
-        gp := TGTPoly.create();
-        gp.capacity := gw.count;
-        isResolved := true;
-        for j := 0 to gw.count - 1 do begin
-          vn := srcMap.getNode(gw[j].RefId);
-          if varIsType(vn, varDispatch) then begin
-            if isResolved then
-              gp.addNode(vn);
-          end
-          else begin
-            isResolved := false;
-            addNotResolved(gw[j]);
-          end;
-        end;
-        if isResolved then begin
-          freeAndNil(newInList[i]);
-          newInList[i] := gp;
-          gp := nil;
-        end
-        else begin
-          allResolved := allResolved and isResolved;
-          freeAndNil(gp);
-        end;
-      end;
-    finally
-      freeAndNil(gp);
-    end;
-  end;
-
-var
-  i: integer;
-begin
-  //resolve all dependencies
-  allResolved := true;
-  nn := 0;
-  setlength(newInList, 4);
-  try
-    //recursive replace relations with ways
-    resolveToWays();
-    //now concat all posible ways
-    mergeWays();
-    //resolve node ref into nodes
-    resolveToPoly();
-    clearInList();
-    setlength(newInList, nn);
-    inList := newInList;
-    setlength(newInList, 0);
-    nn := -1;
-  finally
-    for i := 0 to nn do
-      freeAndNil(newInList[i]);
-    for i := 0 to high(inList) do
-      allResolved := allResolved and (inList[i] is TGTPoly);
-    result := allResolved;
-  end;
-  if allResolved then begin
-    optimize();
-    buildHash();
-  end;
-end;
-
 { TGTRefs }
+
+function TGTRefs.clone: TGTShape;
+begin
+  raise EInvalidOp.create(className() + '.clone: not implemented');
+end;
 
 function TGTRefs.get_count: integer;
 begin
@@ -812,7 +394,109 @@ begin
   x := degToInt(aLon);
 end;
 
+function TGTPoint.clone: TGTShape;
+var
+  p: TGTPoint;
+begin
+  p := TGTPoint.create();
+  p.fx := fx;
+  p.fy := fy;
+  result := p;
+end;
+
+procedure TGTPoint.assignNode(aNode: OleVariant);
+begin
+  lat := aNode.lat;
+  lon := aNode.lon;
+end;
+
+class function TGTPoint.fastCosDeg(const degAngle: double): double;
+const
+//cos(x)=2.656575016·10^(-9)·x^4 + 1.267593379·10^(-7)·x^3 - 0.0001570353458·x^2 + 6.299155612·10^(-5)·x + 0.9998189607
+//
+  a4:single=2.656575016E-9;
+  a3:single=1.267593379E-7;
+  a2:single=-0.0001570353458;
+  a1:single=6.299155612E-5;
+  a0:single=0.9998189607;
+asm
+  fld degAngle     //x
+  fabs
+  fld a4           //x a4
+  fmul st(0),st(1) //x x*a4
+  fadd a3          //x x*a4+a3
+  fmul st(0),st(1) //x x^2*a4+x*a3
+  fadd a2
+  fmul st(0),st(1)
+  fadd a1
+  fmulp st(1),st(0)
+  fadd a0
+end;
+
+function TGTPoint.fastDistSqrM(pt: TGTPoint): double;
+const
+  degToM2:single=1852.0*60*1852.0*60;
+//var
+//  la1,la2,lo1,lo2:single;
+//  d:double;
+//begin
+//  la1:=lat;
+//  la2:=pt.lat;
+//  lo1:=lon;
+//  lo2:=pt.lon;
+//  result:=sqrt( sqr( (lo1-lo2)*fastCosDeg((la1+la2)/2) ) + sqr(la1-la2) )*degToM;
+asm
+  push esi
+  push edi
+  mov esi,eax
+  mov edi,edx
+
+  mov edx,TGTPoint(esi).fx
+  sub edx,TGTPoint(edi).fx
+  call TGTPoint.IntToDeg//lo1-lo2
+
+  mov esi,TGTPoint(esi).fy
+  mov edi,TGTPoint(edi).fy
+  mov edx,edi
+  add edx,esi
+  rcr edx,1
+  call TGTPoint.IntToDeg//lo1-lo2 la1+la2/2
+
+  sub esp,8
+  fstp qword ptr [esp]
+  call TGTPoint.fastCosDeg//lo1-lo2 cos(...)
+  fmulp st(1),st(0)     //(lo1-lo2)*cos(..)
+  mov edx,edi
+  fmul st(0),st(0)      //sqr(cos...)
+  sub edx,esi
+  call TGTPoint.IntToDeg//sqr(cos..) la1-la2
+  fmul st(0),st(0)      //sqr(cos) sqr(la)
+  pop edi
+  faddp st(1),st(0)     //sqr+sqr
+  pop esi
+  fmul degToM2
+end;
+
+function TGTPoint.fastDistM(pt: TGTPoint): double;
+asm
+  call TGTPoint.fastDistSqrM
+  fsqrt
+end;
+
 { TGTPoly }
+
+procedure TGTPoly.addExtraNode;
+begin
+  if (count > 0) and ((fPoints[0].x <> fPoints[count - 1].x) or (fPoints[0].y <> fPoints[count -
+    1].y)) then begin
+    //close poly
+    capacity := count + 1;
+    fPoints[count] := TGTPoint.create();
+    fPoints[count].x := fPoints[0].x;
+    fPoints[count].y := fPoints[0].y;
+    inc(fCount);
+  end;
+end;
 
 procedure TGTPoly.addNode(const aNode: OleVariant);
 
@@ -825,32 +509,29 @@ var
   pt: TGTPoint;
 begin
   grow();
-  if hasExtraNode then begin
-    //remove extra node
-    dec(fCount);
-    freeAndNil(fPoints[count]);
-    hasExtraNode := false;
-  end;
   pt := TGTPoint.create;
-  pt.lat := aNode.lat;
-  pt.lon := aNode.lon;
+  pt.assignNode(aNode);
   fPoints[fCount] := pt;
   inc(fCount);
   updateBoundRect(pt);
 end;
 
-procedure TGTPoly.addExtraNode;
+function TGTPoly.clone: TGTShape;
+var
+  i: integer;
+  p: TGTPoly;
 begin
-  hasExtraNode := true;
-  if (count > 0) and ((fPoints[0].x <> fPoints[count - 1].x) or (fPoints[0].y <> fPoints[count -
-    1].y)) then begin
-    //close poly
-    capacity := count + 1;
-    fPoints[count] := TGTPoint.create();
-    fPoints[count].x := fPoints[0].x;
-    fPoints[count].y := fPoints[0].y;
-    inc(fCount);
+  p := TGTPoly.create();
+  p.fCount := fCount;
+  setlength(p.fPoints, fCount);
+  for i := 0 to fCount - 1 do begin
+    p.fPoints[i] := TGTPoint(fPoints[i].clone());
   end;
+  p.fLeft := fLeft;
+  p.fRight := fRight;
+  p.fTop := fTop;
+  p.fBottom := fBottom;
+  result := p;
 end;
 
 destructor TGTPoly.destroy;
@@ -892,9 +573,6 @@ var
   xcase, ycase: byte;
   b1, b2: TGTPoint;
 begin
-  if not hasExtraNode then begin
-    addExtraNode();
-  end;
   result := inherited isIn(pt);
   if result = 0 then exit;
   result := 0;
@@ -1026,8 +704,6 @@ var
 begin
   result := nil;
   if (x <= left) or (x >= right) then exit;
-  if not hasExtraNode then
-    addExtraNode;
   result := TGTPoly.create();
   result.capacity := count * 2;
   rightPoly := result;
@@ -1073,8 +749,8 @@ begin
   move(newPoints[0], fPoints[0], sizeof(fPoints[0]) * li);
   result.fCount := ri;
   result.capacity := ri + 1;
-  result.hasExtraNode := false;
-  hasExtraNode := false;
+  result.addExtraNode();
+  addExtraNode();
 end;
 
 function TGTPoly.splitY(y: integer): TGTPoly;
@@ -1101,8 +777,6 @@ var
 begin
   result := nil;
   if (y <= bottom) or (y >= top) then exit;
-  if not hasExtraNode then
-    addExtraNode;
   result := TGTPoly.create();
   result.capacity := count * 2;
   topPoly := result;
@@ -1148,22 +822,8 @@ begin
   move(newPoints[0], fPoints[0], sizeof(fPoints[0]) * bi);
   result.fCount := ti;
   result.capacity := ti + 1;
-  result.hasExtraNode := false;
-  hasExtraNode := false;
-end;
-
-procedure TGTPoly.updateBoundRect(const pt: TGTPoint);
-begin
-  with pt do begin
-    if left > x then
-      left := x;
-    if x > right then
-      right := x;
-    if y < bottom then
-      bottom := y;
-    if top < y then
-      top := y;
-  end;
+  result.addExtraNode();
+  addExtraNode();
 end;
 
 { TGTRect }
@@ -1171,6 +831,18 @@ end;
 class function TGTRect.between(const v, min, max: integer): integer;
 begin
   result := 2 * ord((v > min) and (v < max)) + ord((v = min) or (v = max));
+end;
+
+function TGTRect.clone: TGTShape;
+var
+  r:TGTRect;
+begin
+  r:=TGTRect.create();
+  r.left:=left;
+  r.right:=right;
+  r.top:=top;
+  r.bottom:=bottom;
+  result:=r;
 end;
 
 constructor TGTRect.create;
@@ -1202,6 +874,849 @@ begin
   right := low(right);
   top := low(top);
   bottom := high(bottom);
+end;
+
+procedure TGTRect.updateBoundRect(const pt: TGTPoint);
+begin
+  with pt do begin
+    if left > x then
+      left := x;
+    if x > right then
+      right := x;
+    if y < bottom then
+      bottom := y;
+    if top < y then
+      top := y;
+  end;
+end;
+
+{ TMultiPoly }
+
+procedure TMultiPoly.addObject(const aMapObject: OleVariant);
+var
+  s: WideString;
+begin
+  //add object to inList
+  if varIsType(aMapObject, varDispatch) then begin
+    s := aMapObject.getClassName();
+    if (s = 'Relation') or (s = 'Way') then begin
+      putList(srcList, VarAsType(aMapObject, varDispatch), -1);
+      clearInternalLists();
+    end
+    else begin
+      raise EConvertError.create(toString() + 'addObject: invalid object');
+    end;
+  end;
+end;
+
+procedure TMultiPoly.clearList(var list: TMultiPolyList);
+begin
+  setlength(list.items, 0);
+  list.count := 0;
+end;
+
+procedure TMultiPoly.clearInternalLists();
+var
+  i: integer;
+begin
+  clearList(relationList);
+  clearList(wayList);
+  clearList(nodeList);
+  if assigned(fNotResolved) then begin
+    (fNotResolved as IDispatch)._Release();
+    fNotResolved := nil;
+  end;
+  if assigned(fNotClosed) then begin
+    (fNotClosed as IDispatch)._Release();
+    fNotClosed := nil;
+  end;
+  for i := 0 to high(simplePolyList) do begin
+    if assigned(simplePolyList[i]) then
+      freeAndNil(simplePolyList[i]);
+  end;
+  setlength(simplePolyList, 0);
+  for i := 0 to high(optimizedPolyList) do begin
+    if assigned(optimizedPolyList[i]) then
+      freeAndNil(optimizedPolyList[i]);
+  end;
+  setlength(optimizedPolyList, 0);
+  setlength(optimizedPolyParent, 0);
+  setlength(optimizedPolyHash, 0);
+end;
+
+procedure TMultiPoly.createNotClosed;
+begin
+  if not assigned(fNotClosed) then begin
+    fNotClosed := TRefList.create();
+    (fNotClosed as IDispatch)._AddRef();
+  end;
+end;
+
+procedure TMultiPoly.createNotResolved;
+begin
+  if not assigned(fNotResolved) then begin
+    fNotResolved := TRefList.create();
+    (fNotResolved as IDispatch)._AddRef();
+  end;
+end;
+
+destructor TMultiPoly.destroy;
+begin
+  clearInternalLists();
+  inherited;
+end;
+
+function TMultiPoly.getBBox: OleVariant;
+var
+  n, e, s, w, t: integer;
+  i: integer;
+  poly: TGTPoly;
+begin
+  if not isAllResolved() then
+    raise EConvertError.create(toString() + '.bbox: polygon must be resolved');
+  if nodeList.count > 0 then begin
+    n := low(integer);
+    s := high(integer);
+    e := low(integer);
+    w := high(integer);
+    for i := 0 to high(simplePolyList) do begin
+      poly := simplePolyList[i];
+      if not assigned(poly) then
+        continue;
+      t := poly.left;
+      if t < w then w := t;
+      t := poly.right;
+      if e < t then e := t;
+      t := poly.top;
+      if n < t then n := t;
+      t := poly.bottom;
+      if t < s then s := t;
+    end;
+  end
+  else begin
+    n := 0;
+    e := 0;
+    s := 0;
+    w := 0;
+  end;
+  result := VarArrayOf([TGTPoint.IntToDeg(n), TGTPoint.IntToDeg(e), TGTPoint.IntToDeg(s),
+    TGTPoint.IntToDeg(w)]);
+end;
+
+function TMultiPoly.getNotClosed: OleVariant;
+begin
+  createNotClosed();
+  result := fNotClosed as IDispatch;
+end;
+
+function TMultiPoly.getNotResolved: OleVariant;
+begin
+  createNotResolved();
+  result := fNotResolved as IDispatch;
+end;
+
+procedure TMultiPoly.growList(var list: TMultiPolyList; delta: integer);
+var
+  l, nl: integer;
+begin
+  l := length(list.items);
+  nl := list.count + delta;
+  if (nl > l) then begin
+    nl := (nl or 15) + 1;
+    setlength(list.items, nl);
+  end;
+end;
+
+function TMultiPoly.isIn(const aNode: OleVariant): boolean;
+var
+  xhash, yhash: cardinal;
+  i: integer;
+  pt: TGTPoint;
+  p: TGTPoly;
+  oplen: integer;
+  popi: pinteger;
+begin
+  if not isAllResolved() then
+    raise EConvertError.create(toString() +
+      '.isIn : not all references resolved or polygons closed.');
+  result := false;
+  pt := TGTPoint.create();
+  try
+    pt.assignNode(aNode);
+    xhash := intToHash(pt.fx);
+    yhash := intToHash(pt.fy);
+    if cardinal(length(optimizedPolyHash[xhash])) <= yhash then
+      exit;
+    oplen := length(optimizedPolyHash[xhash][yhash]);
+    popi := @optimizedPolyHash[xhash][yhash][0];
+    for i := 0 to oplen - 1 do begin
+      p := optimizedPolyList[popi^];
+      case p.isIn(pt) of
+        0: ;
+        1: begin
+            //on optimized boundary. We need test 'original' poly.
+            p := simplePolyList[optimizedPolyParent[popi^]];
+            case p.isIn(pt) of
+              0: ;
+              1: begin
+                  result := true;
+                  break;
+                end;
+              2: begin
+                  result := not result;
+                end;
+            end;
+          end;
+        2: result := not result;
+      end;
+      inc(popi);
+    end;
+  finally
+    freeAndNil(pt);
+  end;
+end;
+
+procedure TMultiPoly.putList(var list: TMultiPolyList;
+  const obj: OleVariant; parent: integer);
+var
+  pi: PMultiPolyListItem;
+begin
+  growList(list);
+  pi := @list.items[list.count];
+  pi.obj := obj;
+  pi.parentIdx := parent;
+  inc(list.count);
+end;
+
+function TMultiPoly.resolve(const srcMap: OleVariant): boolean;
+
+  procedure addNotResolved(const RefType: WideString; const RefId: int64);
+  begin
+    //add not resolved reference to list
+    fNotResolved.insertBefore(maxInt, RefType, RefId, '');
+  end;
+
+  procedure sortSrcObjByType();
+  var
+    i: integer;
+    s: WideString;
+    v: OleVariant;
+  begin
+    //put relations into relationList, put ways into wayList
+    for i := 0 to srcList.count - 1 do begin
+      v := srcList.items[i].obj;
+      s := v.getClassName();
+      if s = 'Relation' then
+        putList(relationList, v, -1 - i)
+      else
+        putList(wayList, v, -1 - i);
+    end;
+  end;
+
+  function resolveRelations(): boolean; //true if all relations and members resolved
+  var
+    i, mlen: integer;
+    v, ml, newObj: OleVariant;
+    pv: POleVariant;
+    s: WideString;
+    id: int64;
+  begin
+    //resolve relations into child-relations and ways
+    result := true;
+    i := 0;
+    while (i < relationList.count) do begin
+      v := relationList.items[i].obj;
+      if (v.tags.getByKey('type') <> 'collection') then begin
+        //process non-collection relation
+        ml := v.members.getAll();
+        mlen := varArrayLength(ml);
+        pv := VarArrayLock(ml);
+        try
+          while mlen > 0 do begin
+            s := pv^;
+            inc(pv);
+            id := pv^;
+            inc(pv, 2);
+            dec(mlen, 3);
+            if (s = 'relation') then begin
+              newObj := srcMap.getRelation(id);
+              if varIsType(newObj, varDispatch) then
+                putList(relationList, VarAsType(newObj, varDispatch), i)
+              else begin
+                addNotResolved('relation', id);
+                result := false;
+              end;
+            end
+            else if (s = 'way') then begin
+              newObj := srcMap.getWay(id);
+              if varIsType(newObj, varDispatch) then
+                putList(wayList, VarAsType(newObj, varDispatch), i)
+              else begin
+                addNotResolved('way', id);
+                result := false;
+              end;
+            end
+          end;
+        finally
+          VarArrayUnlock(ml);
+        end;
+      end;
+      inc(i);
+    end;
+  end;
+
+type
+  TWayDescItem = record
+    way: TMultiPolyList;
+    id0, id1: int64;
+  end;
+
+  PWayDescItem = ^TWayDescItem;
+
+  TWayDescList = record
+    items: array of TWayDescItem;
+    count: integer;
+  end;
+
+var
+  wayMergeList: TWayDescList;
+
+  function resolveWays(): boolean; //returns true if all node refs resolved
+  var
+    i, mlen: integer;
+    v, ml, newObj: OleVariant;
+    pv: POleVariant;
+    id: int64;
+    pwd: PWayDescItem;
+  begin
+    result := true;
+    setlength(wayMergeList.items, wayList.count);
+    wayMergeList.count := 0;
+    pwd := @wayMergeList.items[0];
+    //resolve ways into nodes.
+    for i := 0 to wayList.count - 1 do begin
+      v := wayList.items[i].obj;
+      ml := v.nodes;
+      mlen := varArrayLength(ml);
+      if mlen < 2 then continue; //skip zero- or one-node ways
+      pwd.way.count := 0;
+      pv := VarArrayLock(ml);
+      try
+        pwd.id0 := pv^;
+        inc(wayMergeList.count);
+        while (mlen > 0) do begin
+          id := pv^;
+          inc(pv);
+          dec(mlen);
+          newObj := srcMap.getNode(id);
+          if varIsType(newObj, varDispatch) then
+            putList(pwd^.way, VarAsType(newObj, varDispatch), i)
+          else begin
+            addNotResolved('node', id);
+            result := false;
+          end;
+          if (mlen = 0) then begin //last node of way
+            pwd.id1 := id;
+            inc(pwd);
+          end;
+        end;
+      finally
+        VarArrayUnlock(ml);
+      end;
+    end;
+  end;
+
+  function mergeWays(): boolean;
+
+    function merge(pwd1, pwd2: PWayDescItem): boolean; //returns true if ways merged
+      //merge & reorder nodeList.
+      //Duplicates are preserved (0,1,2)+(2,3,0)=>(0,1,2,2,3,0)
+
+      procedure reverse(pwd: PWayDescItem);
+      var
+        id: int64;
+        i0, i1: integer;
+        pNode0, pNode1: PMultiPolyListItem;
+        nodeTemp: array[0..sizeof(pNode0^) - 1] of byte;
+      begin
+        //swap id0 & id1
+        id := pwd.id0;
+        pwd.id0 := pwd.id1;
+        pwd.id1 := id;
+        //swap nodes
+        i0 := 0;
+        i1 := pwd.way.count - 1;
+        pNode0 := @pwd.way.items[i0];
+        pNode1 := @pwd.way.items[i1];
+        while i0 < i1 do begin
+          move(pNode0^, nodeTemp, sizeof(pNode0^));
+          move(pNode1^, pNode0^, sizeof(pNode0^));
+          move(nodeTemp, pNode1^, sizeof(pNode0^));
+          inc(i0);
+          inc(pNode0);
+          dec(i1);
+          dec(pNode1);
+        end;
+      end;
+
+      procedure add(pwd1, pwd2: PWayDescItem);
+      var
+        startIdx, len, sz: integer;
+      begin
+        startIdx := pwd1.way.count - 1;
+        pwd1.way.items[startIdx].obj := Unassigned;
+        len := pwd2.way.count;
+        pwd1.way.count := startIdx + len;
+        setlength(pwd1.way.items, pwd1.way.count);
+        pwd1.id1 := pwd2.id1;
+        sz := len * sizeof(pwd2.way.items[0]);
+        move(pwd2.way.items[0], pwd1.way.items[startIdx], sz);
+        //prevent variant auto-finalization
+        fillchar(pwd2.way.items[0], sz, 0);
+        clearList(pwd2.way);
+      end;
+
+    var
+      tempWayDesc: array[0..sizeof(pwd1^) - 1] of byte;
+    begin
+      result := true;
+      if pwd1.id0 = pwd2.id0 then begin
+        //new=reverse(old)+segment
+        reverse(pwd1);
+        add(pwd1, pwd2);
+      end
+      else if pwd1.id1 = pwd2.id0 then begin
+        //new=old+segment
+        add(pwd1, pwd2);
+      end
+      else if pwd1.id0 = pwd2.id1 then begin
+        //new=segment+old
+        add(pwd2, pwd1);
+        //exchange description 1 & 2
+        move(pwd1^, tempWayDesc, sizeof(pwd1^));
+        move(pwd2^, pwd1^, sizeof(pwd1^));
+        move(tempWayDesc, pwd2^, sizeof(pwd1^));
+      end
+      else if pwd1.id1 = pwd2.id1 then begin
+        //new=old+reverse(segment)
+        reverse(pwd2);
+        add(pwd1, pwd2);
+      end
+      else
+        result := false;
+    end;
+
+    procedure addNotClosed(aWay: TMultiPolyList);
+
+      procedure addNode(n: TMultiPolyListItem);
+
+        function getnoderole(n: TMultiPolyListItem): WideString;
+
+          function getwayrole(n: TMultiPolyListItem): WideString;
+          var
+            id: int64;
+          begin
+            n := relationList.items[n.parentIdx];
+            id := n.obj.id;
+            result := 'relation:' + inttostr(id);
+            if (n.parentIdx >= 0) then result := result + ';' + getwayrole(n);
+          end;
+        var
+          id: int64;
+        begin
+          n := wayList.items[n.parentIdx];
+          id := n.obj.id;
+          result := 'way:' + inttostr(id);
+          if (n.parentIdx >= 0) then result := result + ';' + getwayrole(n);
+        end;
+      begin
+        fNotClosed.insertBefore(maxInt, 'node', n.obj.id, getnoderole(n));
+      end;
+    var
+      n: TMultiPolyListItem;
+    begin
+      n := aWay.items[0];
+      addNode(n);
+      n := aWay.items[aWay.count - 1];
+      addNode(n);
+    end;
+  var
+    idx1, idx2: integer; //indexes of mergeing ways in wayMergeList
+    pwd1, pwd2: PWayDescItem;
+    doRepeat: boolean;
+  begin
+    repeat
+      idx1 := 0;
+      doRepeat := false;
+      while idx1 < wayMergeList.count - 1 do begin
+        pwd1 := @wayMergeList.items[idx1];
+        if (pwd1.id0 <> pwd1.id1) then begin
+          //pwd1 is not closed way (polygon)
+          idx2 := idx1 + 1;
+          while idx2 < wayMergeList.count do begin
+            pwd2 := @wayMergeList.items[idx2];
+            //try to merge
+            if (pwd2.id0 <> pwd2.id1) and merge(pwd1, pwd2) then begin
+              //new_pwd1 = pwd1 + pwd2
+              pwd2^ := wayMergeList.items[wayMergeList.count - 1];
+              dec(wayMergeList.count);
+              doRepeat := true;
+            end
+            else begin
+              //pwd1 and pwd2 not "mergeable", try next
+              inc(idx2);
+            end;
+          end;
+        end;
+        inc(idx1);
+      end;
+    until not doRepeat;
+    result := true;
+    pwd1 := @wayMergeList.items[0];
+    for idx1 := 0 to wayMergeList.count - 1 do begin
+      if pwd1.id0 <> pwd1.id1 then begin
+        result := false;
+        addNotClosed(pwd1.way);
+      end;
+      inc(pwd1);
+    end;
+  end;
+
+  procedure makeNodeList();
+  var
+    sz, i, j: integer;
+    pli: PMultiPolyListItem;
+    pWDI: PWayDescItem;
+    sPoly: TGTPoly;
+  begin
+    sz := 0;
+    setlength(simplePolyList, wayMergeList.count);
+    for i := 0 to wayMergeList.count - 1 do begin
+      pWDI := @wayMergeList.items[i];
+      inc(sz, pWDI.way.count);
+      sPoly := TGTPoly.create();
+      simplePolyList[i] := sPoly;
+      sPoly.capacity := pWDI.way.count;
+      for j := 0 to pWDI.way.count - 1 do begin
+        sPoly.addNode(pWDI.way.items[j].obj);
+      end;
+    end;
+    setlength(nodeList.items, sz);
+    nodeList.count := 0;
+    for i := 0 to wayMergeList.count - 1 do begin
+      pli := @wayMergeList.items[i].way.items[0];
+      for j := 0 to wayMergeList.items[i].way.count - 1 do begin
+        putList(nodeList, pli^.obj, pli^.parentIdx);
+        inc(pli);
+      end;
+      clearList(wayMergeList.items[i].way);
+    end;
+  end;
+
+  procedure InitErrorLists();
+  var
+    v: OleVariant;
+  begin
+    createNotResolved();
+    v := VarArrayCreate([0, -1], varVariant);
+    fNotResolved.setAll(v, v, v);
+    createNotClosed();
+    fNotClosed.setAll(v, v, v);
+  end;
+
+begin
+  clearInternalLists();
+  InitErrorLists();
+  sortSrcObjByType();
+  result := resolveRelations();
+  if not result then
+    exit;
+  result := resolveWays();
+  if not result then
+    exit;
+  result := mergeWays(); //do not merge ways if some nodes not resolved!
+  if not result then
+    exit;
+  makeNodeList();
+  buildOptimizedPolyList();
+  buildOptimizedPolyHash();
+end;
+
+function TMultiPoly.isAllResolved: boolean;
+begin
+  result := nodeList.count > 0;
+end;
+
+procedure TMultiPoly.buildOptimizedPolyList();
+var
+  pCnt: integer;
+
+  procedure split(pgIdx: integer);
+  var
+    pl: TGTPoly;
+  begin
+    pl := optimizedPolyList[pgIdx];
+    if pl.width > pl.height then
+      optimizedPolyList[pCnt] := pl.splitX(pl.left + integer(pl.width shr 1))
+    else
+      optimizedPolyList[pCnt] := pl.splitY(pl.bottom + integer(pl.height shr 1));
+    if assigned(optimizedPolyList[pCnt]) then begin
+      optimizedPolyParent[pCnt] := optimizedPolyParent[pgIdx];
+      inc(pCnt);
+    end;
+  end;
+
+var
+  nCnt, nOpt, maxCnt, maxIdx, i: integer;
+begin
+  nCnt := 0;
+  for i := 0 to high(simplePolyList) do begin
+    inc(nCnt, simplePolyList[i].count);
+  end;
+  nOpt := round(sqrt(nCnt));
+  pCnt := length(simplePolyList);
+  if (nOpt < pCnt)or(nCnt<100) then
+    nOpt := pCnt;
+  setlength(optimizedPolyList, nOpt);
+  setlength(optimizedPolyParent, nOpt);
+  for i := 0 to pCnt - 1 do begin
+    optimizedPolyList[i] := simplePolyList[i].clone() as TGTPoly;
+    optimizedPolyParent[i] := i;
+  end;
+  if (nOpt=pCnt) then
+    //no optimization needed
+    exit;
+  while (pCnt < nOpt) do begin
+    maxCnt := 0;
+    maxIdx := 0;
+    for i := 0 to pCnt - 1 do begin
+      if maxCnt < optimizedPolyList[i].count then begin
+        maxCnt := optimizedPolyList[i].count;
+        maxIdx := i;
+      end;
+    end;
+    split(maxIdx);
+  end;
+end;
+
+procedure TMultiPoly.buildOptimizedPolyHash;
+
+  procedure putPoly(const x, y, p: cardinal);
+  var
+    l: integer;
+  begin
+    if cardinal(length(optimizedPolyHash[x])) <= y then
+      setlength(optimizedPolyHash[x], y + 1);
+    l := length(optimizedPolyHash[x][y]);
+    setlength(optimizedPolyHash[x][y], l + 1);
+    optimizedPolyHash[x][y][l] := p;
+  end;
+var
+  xidx, yidx, polyidx: integer;
+  poly: TGTPoly;
+  xminhash, xmaxhash, yminhash, ymaxhash: cardinal;
+begin
+  //hash clean up
+  setlength(optimizedPolyHash, 0);
+  setlength(optimizedPolyHash, hashSize);
+  for polyidx := 0 to high(optimizedPolyList) do begin
+    poly := optimizedPolyList[polyidx];
+    xminhash := intToHash(poly.left);
+    xmaxhash := intToHash(poly.right);
+    yminhash := intToHash(poly.bottom);
+    ymaxhash := intToHash(poly.top);
+    for xidx := xminhash to xmaxhash do begin
+      for yidx := yminhash to ymaxhash do begin
+        putPoly(xidx, yidx, polyidx);
+      end;
+    end;
+  end;
+end;
+
+class function TMultiPoly.intToHash(i: integer): cardinal;
+begin
+  i := i div (1 shl (32 - hashBits));
+  inc(i, hashSize div 2);
+  result := cardinal(i);
+end;
+
+function TMultiPoly.getIntersection(const aMap,
+  aWay: OleVariant): OleVariant;
+var
+  wayPoints: array of TGTPoint;
+  wayIndexes: array of integer;
+  kArray:array of double;
+  nk:integer;
+
+  procedure findIntersection(const node1, node2: OleVariant; idx1: integer);
+  var
+    i,isIn1,isIn2: integer;
+    dx21,dxba,dy21,dyba,dx1a,dy1a,sa2b1,k,t:double;
+    gtp: TGTPoly;
+    pt1, pt2,ptA,ptB,ptX: TGTPoint;
+    bRect1,bRectA:TGTRect;
+  begin
+    gtp := nil;
+    bRect1:=nil;
+    bRectA:=nil;
+    ptX:= nil;
+    isIn1:=0;
+    isIn2:=0;
+    pt1 := TGTPoint.create();
+    pt2 := TGTPoint.create();
+    try
+      pt1.assignNode(node1);
+      pt2.assignNode(node2);
+      for i := 0 to high(simplePolyList) do begin
+        gtp := simplePolyList[i];
+        isIn1:=gtp.isIn(pt1);
+        isIn2:=gtp.isIn(pt2);
+        if (isIn1 = 0) xor (isIn2 = 0) then
+          break;
+        gtp := nil;
+      end;
+      if not assigned(gtp) or (gtp.count<2) then exit;
+      bRect1:=TGTRect.create();
+      bRect1.updateBoundRect(pt1);
+      bRect1.updateBoundRect(pt2);
+      dx21:=pt2.x-pt1.x;
+      dy21:=pt2.y-pt1.y;
+      bRectA:=TGTRect.create();
+      ptB:=gtp.fPoints[gtp.count-1];
+      setlength(kArray,4);
+      nk:=0;
+      if(isIn1=1)and(isIn2=0)then begin
+        kArray[nk]:=0;inc(nk);
+      end else if(isIn1=0)and(IsIn2=1) then begin
+        kArray[nk]:=1;inc(nk);
+      end;
+      for i:=gtp.count-2 downto 0 do begin
+        ptA:=gtp.fPoints[i];
+        bRectA.resetBounds();
+        bRectA.updateBoundRect(ptA);
+        bRectA.updateBoundRect(ptB);
+        if (bRect1.left<=brecta.right) and (brecta.left<=brect1.right) and
+         (bRect1.bottom<=brecta.top) and (brecta.bottom<=brect1.top) then begin
+          //find point
+          dxba:=ptB.x-ptA.x;
+          dyba:=ptB.y-ptA.y;
+          sa2b1:=dyba*dx21-dxba*dy21;
+          if round(sa2b1)<>0 then begin
+            dx1a:=pt1.x-ptA.x;
+            dy1a:=pt1.y-ptA.y;
+            sa2b1:=1/sa2b1;
+            k:=(dxba*dy1a-dyba*dx1a)*sa2b1;
+            t:=(dx21*dy1a-dy21*dx1a)*sa2b1;
+            if (k>=0)and(k<=1)and(t>=0)and(t<=1) then begin
+              if length(kArray)<=nk then setlength(kArray,nk*2);
+              kArray[nk]:=k;
+              inc(nk);
+            end;
+          end;
+        end;
+        ptB:=ptA;
+      end;
+      while nk>0 do begin
+        k:=kArray[0];
+        for i:=1 to nk-1 do begin
+          if k>=kArray[i] then begin
+            k:=kArray[i];
+          end
+          else begin
+            kArray[i-1]:=kArray[i];
+            kArray[i]:=k;
+          end;
+        end;
+        dec(nk);
+        ptX:=TGTPoint.Create();
+        ptX.x:=pt1.x+round(k*dx21);
+        ptX.y:=pt1.y+round(k*dy21);
+        setlength(wayPoints,length(wayPoints)+1);
+        setlength(wayIndexes,length(wayPoints));
+        wayPoints[high(wayPoints)]:=ptX;
+        wayIndexes[high(wayPoints)]:=idx1;
+        ptX:=nil;
+      end;
+    finally
+      freeAndNil(pt1);
+      freeAndNil(pt2);
+      freeAndNil(ptX);
+      freeAndNil(bRect1);
+      freeAndNil(bRectA);
+    end;
+  end;
+
+const
+  minPtDist=0.1;
+  minPtDistSqr=minPtDist*minPtDist;
+var
+  wayNodes, curNode, prevNode: OleVariant;
+  pv: PVariant;
+  prevIsIn, curIsIn: boolean;
+  i,j, nWayNodes: integer;
+  p1,p2:TGTPoint;
+begin
+  wayNodes := aWay.nodes;
+  if (not varIsType(wayNodes, varVariant or varArray)) or (VarArrayDimCount(wayNodes) <> 1) then
+    raise EConvertError.create(toString() + '.getIntersection: invalid way');
+  nWayNodes := varArrayLength(wayNodes);
+  result := VarArrayCreate([0, -1], varVariant);
+  if (nWayNodes < 2) then begin
+    exit;
+  end;
+  nk:=0;
+  setlength(kArray,8);
+  try
+    pv := VarArrayLock(wayNodes);
+    prevIsIn := false;
+    for i := 0 to nWayNodes - 1 do begin
+      curNode := aMap.getNode(pv^);
+      if not varIsType(curNode, varDispatch) then
+        raise EInOutError.create(toString() + '.getIntersection: node ' + inttostr(pv^) +
+          ' not found');
+      inc(pv);
+      if i = 0 then begin
+        prevIsIn := isIn(curNode);
+        prevNode := curNode;
+        continue;
+      end;
+      curIsIn := isIn(curNode);
+      if curIsIn xor prevIsIn then
+        findIntersection(prevNode, curNode, i - 1);
+      prevIsIn := curIsIn;
+      prevNode := curNode;
+    end;
+    j:=high(wayPoints);
+    for i:=1 to high(wayPoints) do begin
+      p1:=wayPoints[i-1];
+      p2:=wayPoints[i];
+      if not (assigned(p1) and assigned(p2)) then continue;
+      if p1.fastDistSqrM(p2)<minPtDistSqr then begin
+        freeandnil(wayPoints[i-1]);
+        freeandnil(wayPoints[i]);
+        dec(j,2);
+      end;
+    end;
+    result:=VarArrayCreate([0,j],varVariant);
+    j:=0;
+    for i:=0 to high(wayPoints) do begin
+      p1:=wayPoints[i];
+      if not assigned(p1) then continue;
+      curNode:=aMap.createNode();
+      curNode.lat:=p1.lat;
+      curNode.lon:=p1.lon;
+      curNode.tags.setByKey('osman:idx',wayIndexes[i]);
+      result[j]:=curNode;
+      inc(j);
+    end;
+  finally
+    VarArrayUnlock(wayNodes);
+    for i := 0 to high(wayPoints) do
+      if assigned(wayPoints[i]) then
+        freeAndNil(wayPoints[i])
+      else
+        break;
+  end;
 end;
 
 initialization

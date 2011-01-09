@@ -41,7 +41,7 @@ function createPoly(boundObject,aMap){
 		return mp;
 	}else {
 		echo('Not resolved refs:');
-		var url=mp.getUnresolved().getAll().toArray();
+		var url=mp.getNotResolved().getAll().toArray();
 		for(var i=0;i<url.length;i+=3){
 			echo('	'+url[i]+'	'+url[i+1]+'	'+url[i+2]);
 		};

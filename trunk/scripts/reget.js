@@ -1,28 +1,61 @@
-function echo(s){
-	WScript.Echo(''+s);
-};
-var reget=WScript.createObject('ReGetDx.ReGet2App');
-var dls=reget.Downloads;
-echo(typeof(dls));
-var dls=dls.array.toArray();
-echo(dls.toString());
-var api=WScript.createObject('ReGetDx.ReGet2Api');
-echo(typeof(api));
-for(var i=0;i<dls.length;i++){
-	var dl=api.downloadById(dls[i]);
-	echo('download id='+dls[i]);
-	echo('	Fn='+dl.fileName);
-	echo('	state='+dl.State);
-	echo('	size='+dl.size);
-	echo('	loaded='+dl.downloaded);
-	echo('	info='+dl.additionalInfo);
-	echo('	shed='+dl.sheduled);
-	echo('	support='+dl.reGetSupport);
-	var prop=dl.properties.toArray();
-	echo('props='+prop.toString());
-	prop=dl.description.toArray();
-	echo('url='+dl.value(1));
+//reget download states:
+//0 - waiting
+//3 - paused
+//4 - complete
+//5 - downloading
 
-}
-echo('press Enter');
-WScript.stdIn.read(1);
+//reget download property IDs:
+//1 - url
+function Reget(){
+	var t=this;
+	t.api=false;
+	t.app=false;
+};
+
+Reget.prototype.getApp=function(){
+	var t=this;
+	if(!t.app)t.app=WScript.createObject('ReGetDx.ReGet2App');
+	return t.app;
+};
+
+Reget.prototype.getApi=function(){
+	var t=this;
+	if(!t.api)t.api=WScript.createObject('ReGetDx.ReGet2Api');
+	return t.api;
+};
+
+Reget.prototype.addDlFile=function(url){
+	return (this.getApp().createDownload(url,true));
+};
+
+Reget.prototype.getDlList=function(){//returns array of IReget2Download
+	var api=this.getApi(),dls=this.getApp().downloads.array.toArray(),r=[];
+	for(var i=0;i<dls.length;i++){
+		r[i]=api.downloadById(dls[i]);
+	};
+	return r;
+};
+
+Reget.prototype.deleteDlById=function(dlId){
+	this.getApp().deleteDownload(dlId);
+};
+
+Reget.prototype.deleteDl=function(iDownload){
+	this.deleteDlById(iDownload.id);
+};
+
+Reget.prototype.clearDlList=function(){
+	var dls=this.getDlList();
+	for(var i=0;i<dls.length;i++){
+		if(dls[i].State==4)this.deleteDl(dls[i]);
+	};
+};
+
+Reget.prototype.close=function(){
+	try{
+		this.getApi().close();
+	}catch(e){
+	};
+};
+
+Reget;
