@@ -354,6 +354,8 @@ type
   IGeoTools=interface(IOSManAll)
     //returns multipolygon Object
     function createPoly():OleVariant;
+    //returns distance in meters
+    function distance(const node1,node2:OleVariant):double;
   end;
 
   IMultiPoly=interface(IOSManAll)
