@@ -126,8 +126,13 @@ type
   end;
 
   TGeoTools = class(TOSManObject, IGeoTools)
+  protected
+    pt1,pt2:TGTPoint;
+  public
+    destructor destroy;override;
   published
     function createPoly(): OleVariant;
+    function distance(const node1,node2:OleVariant):double;
   end;
 
   TMultiPolyListItem = record
@@ -194,6 +199,22 @@ type
 function TGeoTools.createPoly: OleVariant;
 begin
   result := TMultiPoly.create() as IDispatch;
+end;
+
+destructor TGeoTools.destroy;
+begin
+  freeAndNil(pt1);
+  freeAndNil(pt2);
+  inherited;
+end;
+
+function TGeoTools.distance(const node1, node2: OleVariant): double;
+begin
+  if not assigned(pt1) then pt1:=TGTPoint.Create();
+  if not assigned(pt2) then pt2:=TGTPoint.Create();
+  pt1.assignNode(node1);
+  pt2.assignNode(node2);
+  result:=pt1.fastDistM(pt2);
 end;
 
 { TGTRefs }
