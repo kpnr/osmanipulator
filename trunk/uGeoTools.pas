@@ -1622,7 +1622,7 @@ var
           dxba:=ptB.x-ptA.x;
           dyba:=ptB.y-ptA.y;
           sa2b1:=dyba*dx21-dxba*dy21;
-          if round(sa2b1)<>0 then begin
+          if sa2b1<>0 then begin
             dx1a:=pt1.x-ptA.x;
             dy1a:=pt1.y-ptA.y;
             sa2b1:=1/sa2b1;
