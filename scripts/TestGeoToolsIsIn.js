@@ -1,8 +1,10 @@
-var testFileDir='F:\\db\\osm\\testdata';
-var testFileName='rf_clipped.db3';
+//settings start
+var testFileDir='F:\\db\\osm\\sql';
+var testFileName='rf.db3';
 //Relation[60189] - RF boundary
 //Relation[140337] - Архангельская область
 var testRelationId=60189;
+//settings end
 var re=/wscript/i;
 if (WScript.FullName.search(re)>=0){
 	var sh=WScript.CreateObject('WScript.Shell');
@@ -16,7 +18,7 @@ function echo(s){
 };
 
 function testIsIn(map,stg,mpoly){
-	var q=stg.sqlPrepare('select lat,lon from nodes limit 1000');
+	var q=stg.sqlPrepare('select lat,lon from nodes limit 10000');
 	var r=stg.sqlExec(q,'','');
 	var inc=0,exc=0;
 	var d=new Date();
@@ -33,6 +35,7 @@ function testIsIn(map,stg,mpoly){
 	d=(new Date())-d;
 	echo('included:'+inc+'	excluded:'+exc+'	total:'+(inc+exc)+'	time(ms):'+d);
 }
+
 function testGeoTools(){
 	var d=new Date();
 	var map=man.createObject('Map');
@@ -50,11 +53,16 @@ function testGeoTools(){
 		echo('Multipolygon='+mpoly.toString());
 		mpoly.addObject(rel);
 		if(mpoly.resolve(map)){
-			echo('All refs are resolved');
+			echo('All refs are resolved, all polygons are closed');
 			testIsIn(map,stg,mpoly);
 		}else{
 			echo('Not resolved refs:');
-			var url=mpoly.getUnresolved().getAll().toArray();
+			var url=mpoly.getNotResolved().getAll().toArray();
+			for(var i=0;i<url.length;i+=3){
+				echo('	'+url[i]+'	'+url[i+1]+'	'+url[i+2]);
+			}
+			echo('Not closed nodes:');
+			var url=mpoly.getNotClosed().getAll().toArray();
 			for(var i=0;i<url.length;i+=3){
 				echo('	'+url[i]+'	'+url[i+1]+'	'+url[i+2]);
 			}
@@ -87,4 +95,4 @@ try{
 }
 
 echo('\r\npress `Enter`');
-//WScript.StdIn.Read(1);
+WScript.StdIn.ReadLine();

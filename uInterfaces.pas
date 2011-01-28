@@ -295,11 +295,11 @@ type
     //store MapObject (Node,Way or Relation) into Store
     procedure putObject(const aObj: OleVariant);
 
-    //delete Node and its tags from Storage
+    //delete Node and its tags from Storage. Ways and Relations is not updated.
     procedure deleteNode(const nodeId:int64);
-    //delete Way, its tags and node-list from Storage
+    //delete Way, its tags and node-list from Storage. Relations is not updated.
     procedure deleteWay(const wayId:int64);
-    //delete Relation, its tags and ref-list from Storage
+    //delete Relation, its tags and ref-list from Storage. Parent and child Relations is not updated.
     procedure deleteRelation(const relationId:int64);
 
     //get node by ID. If no node found returns false
@@ -368,15 +368,17 @@ type
     function getNotResolved():OleVariant;
     //IRefList of not closed nodes.
     function getNotClosed():OleVariant;
-    //returns intersection of Poly boundary and Way.
-    //Result is array of Node`s. Tag 'osman:idx' filled with prev node idx.
-    //If Way and Poly has no intersection zero-length array returned.
-    //If any Way node not found in Map then exception raised.
+    //returns intersection of Poly boundary and NodeArray.
+    //Result is array of arrrays of Node`s. Tag 'osman:note' filled with
+    //'boundary' value for nodes layed on-bound.
+    //If NodeArray and Poly has no intersection zero-length
+    // array [] returned.
+    //New Nodes in result has id=0
     //Example:
-    // way=n1(0,1) - n2(2,1) - n3(4,1)
+    // NodeArray=[n1(0,1) , n2(2,1) , n3(4,1)]
     // poly=(1,0) - (3,0) - (3,2) - (1,2) - (1,0)
-    // result=[nA(1,1, osman:idx=0), nB(3,1, osman:idx=1)]
-    function getIntersection(const aMap,aWay:OleVariant):OleVariant;
+    // result=[nA(1,1, id=0, osman:note=boundary), n2(2,1), nB(3,1, id=0, osman:note=boundary)]
+    function getIntersection(const aMap,aNodeArray:OleVariant):OleVariant;
     //returns true if node is in poly (including border)
     function isIn(const aNode:OleVariant):boolean;
     //returns bounding box for poly. Returns SafeArray of four double variants

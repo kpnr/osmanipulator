@@ -21,10 +21,10 @@ type
   public
     class function degToInt(const deg: double): integer;
     class function IntToDeg(const i: integer): double;
-    class function fastCosDeg(const degAngle:double):double;
+    class function fastCosDeg(const degAngle: double): double;
     function clone(): TGTShape; override;
-    function fastDistM(pt:TGTPoint):double;
-    function fastDistSqrM(pt:TGTPoint):double;
+    function fastDistM(pt: TGTPoint): double;
+    function fastDistSqrM(pt: TGTPoint): double;
     procedure assignNode(aNode: OleVariant);
     property x: integer read fx write fx;
     property y: integer read fy write fy;
@@ -45,11 +45,12 @@ type
     procedure resetBounds();
   public
     constructor create();
-    //returns:
+    function clone: TGTShape; override;
+    function canInterserts(const r: TGTRect): boolean;
+    //isIn returns:
     //0 - pt outside
     //1 - pt is on bound
     //2 - pt is inside
-    function clone: TGTShape; override;
     function isIn(const pt: TGTPoint): integer; virtual;
     procedure updateBoundRect(const pt: TGTPoint);
     property left: integer read fLeft write fLeft;
@@ -76,9 +77,11 @@ type
     RefType: TRefType;
   end;
 
+  TGTPointArray = array of TGTPoint;
+
   TGTPoly = class(TGTRect)
   protected
-    fPoints: array of TGTPoint;
+    fPoints: TGTPointArray;
     fCount: integer;
     function get_capacity: integer;
     procedure set_capacity(const Value: integer);
@@ -127,12 +130,12 @@ type
 
   TGeoTools = class(TOSManObject, IGeoTools)
   protected
-    pt1,pt2:TGTPoint;
+    pt1, pt2: TGTPoint;
   public
-    destructor destroy;override;
+    destructor destroy; override;
   published
     function createPoly(): OleVariant;
-    function distance(const node1,node2:OleVariant):double;
+    function distance(const node1, node2: OleVariant): double;
   end;
 
   TMultiPolyListItem = record
@@ -175,6 +178,7 @@ type
     class function intToHash(i: integer): cardinal;
   public
     destructor destroy; override;
+    function isInInt(const pt: TGTPoint): Shortint; //0-out, 2-in, 1-onbound
   published
     //add MapObject to polygon. Nodes not allowed,
     //node-members in Relation are ignored
@@ -185,7 +189,7 @@ type
     function getNotResolved(): OleVariant;
     //IRefList of not closed nodes.
     function getNotClosed(): OleVariant;
-    function getIntersection(const aMap, aWay: OleVariant): OleVariant;
+    function getIntersection(const aMap, aNodeArray: OleVariant): OleVariant;
     //returns true if node is in poly (including border)
     function isIn(const aNode: OleVariant): boolean;
     //returns bounding box for poly. Returns SafeArray of four double variants
@@ -210,11 +214,11 @@ end;
 
 function TGeoTools.distance(const node1, node2: OleVariant): double;
 begin
-  if not assigned(pt1) then pt1:=TGTPoint.Create();
-  if not assigned(pt2) then pt2:=TGTPoint.Create();
+  if not assigned(pt1) then pt1 := TGTPoint.create();
+  if not assigned(pt2) then pt2 := TGTPoint.create();
   pt1.assignNode(node1);
   pt2.assignNode(node2);
-  result:=pt1.fastDistM(pt2);
+  result := pt1.fastDistM(pt2);
 end;
 
 { TGTRefs }
@@ -433,13 +437,13 @@ end;
 
 class function TGTPoint.fastCosDeg(const degAngle: double): double;
 const
-//cos(x)=2.656575016·10^(-9)·x^4 + 1.267593379·10^(-7)·x^3 - 0.0001570353458·x^2 + 6.299155612·10^(-5)·x + 0.9998189607
-//
-  a4:single=2.656575016E-9;
-  a3:single=1.267593379E-7;
-  a2:single=-0.0001570353458;
-  a1:single=6.299155612E-5;
-  a0:single=0.9998189607;
+  //cos(x)=2.656575016·10^(-9)·x^4 + 1.267593379·10^(-7)·x^3 - 0.0001570353458·x^2 + 6.299155612·10^(-5)·x + 0.9998189607
+  //
+  a4: single = 2.656575016E-9;
+  a3: single = 1.267593379E-7;
+  a2: single = -0.0001570353458;
+  a1: single = 6.299155612E-5;
+  a0: single = 0.9998189607;
 asm
   fld degAngle     //x
   fabs
@@ -456,16 +460,16 @@ end;
 
 function TGTPoint.fastDistSqrM(pt: TGTPoint): double;
 const
-  degToM2:single=1852.0*60*1852.0*60;
-//var
-//  la1,la2,lo1,lo2:single;
-//  d:double;
-//begin
-//  la1:=lat;
-//  la2:=pt.lat;
-//  lo1:=lon;
-//  lo2:=pt.lon;
-//  result:=sqrt( sqr( (lo1-lo2)*fastCosDeg((la1+la2)/2) ) + sqr(la1-la2) )*degToM;
+  degToM2: single = 1852.0 * 60 * 1852.0 * 60;
+  //var
+  //  la1,la2,lo1,lo2:single;
+  //  d:double;
+  //begin
+  //  la1:=lat;
+  //  la2:=pt.lat;
+  //  lo1:=lon;
+  //  lo2:=pt.lon;
+  //  result:=sqrt( sqr( (lo1-lo2)*fastCosDeg((la1+la2)/2) ) + sqr(la1-la2) )*degToM;
 asm
   push esi
   push edi
@@ -854,16 +858,22 @@ begin
   result := 2 * ord((v > min) and (v < max)) + ord((v = min) or (v = max));
 end;
 
+function TGTRect.canInterserts(const r: TGTRect): boolean;
+begin
+  result := (left <= r.right) and (right >= r.left) and
+    (bottom <= r.top) and (top >= r.bottom);
+end;
+
 function TGTRect.clone: TGTShape;
 var
-  r:TGTRect;
+  r: TGTRect;
 begin
-  r:=TGTRect.create();
-  r.left:=left;
-  r.right:=right;
-  r.top:=top;
-  r.bottom:=bottom;
-  result:=r;
+  r := TGTRect.create();
+  r.left := left;
+  r.right := right;
+  r.top := top;
+  r.bottom := bottom;
+  result := r;
 end;
 
 constructor TGTRect.create;
@@ -1050,48 +1060,15 @@ end;
 
 function TMultiPoly.isIn(const aNode: OleVariant): boolean;
 var
-  xhash, yhash: cardinal;
-  i: integer;
   pt: TGTPoint;
-  p: TGTPoly;
-  oplen: integer;
-  popi: pinteger;
 begin
   if not isAllResolved() then
     raise EConvertError.create(toString() +
       '.isIn : not all references resolved or polygons closed.');
-  result := false;
   pt := TGTPoint.create();
   try
     pt.assignNode(aNode);
-    xhash := intToHash(pt.fx);
-    yhash := intToHash(pt.fy);
-    if cardinal(length(optimizedPolyHash[xhash])) <= yhash then
-      exit;
-    oplen := length(optimizedPolyHash[xhash][yhash]);
-    popi := @optimizedPolyHash[xhash][yhash][0];
-    for i := 0 to oplen - 1 do begin
-      p := optimizedPolyList[popi^];
-      case p.isIn(pt) of
-        0: ;
-        1: begin
-            //on optimized boundary. We need test 'original' poly.
-            p := simplePolyList[optimizedPolyParent[popi^]];
-            case p.isIn(pt) of
-              0: ;
-              1: begin
-                  result := true;
-                  break;
-                end;
-              2: begin
-                  result := not result;
-                end;
-            end;
-          end;
-        2: result := not result;
-      end;
-      inc(popi);
-    end;
+    result := isInInt(pt) > 0;
   finally
     freeAndNil(pt);
   end;
@@ -1496,7 +1473,7 @@ begin
   end;
   nOpt := round(sqrt(nCnt));
   pCnt := length(simplePolyList);
-  if (nOpt < pCnt)or(nCnt<100) then
+  if (nOpt < pCnt) or (nCnt < 100) then
     nOpt := pCnt;
   setlength(optimizedPolyList, nOpt);
   setlength(optimizedPolyParent, nOpt);
@@ -1504,7 +1481,7 @@ begin
     optimizedPolyList[i] := simplePolyList[i].clone() as TGTPoly;
     optimizedPolyParent[i] := i;
   end;
-  if (nOpt=pCnt) then
+  if (nOpt = pCnt) then
     //no optimization needed
     exit;
   while (pCnt < nOpt) do begin
@@ -1562,181 +1539,353 @@ begin
 end;
 
 function TMultiPoly.getIntersection(const aMap,
-  aWay: OleVariant): OleVariant;
-var
-  wayPoints: array of TGTPoint;
-  wayIndexes: array of integer;
-  kArray:array of double;
-  nk:integer;
+  aNodeArray: OleVariant): OleVariant;
 
-  procedure findIntersection(const node1, node2: OleVariant; idx1: integer);
+  function getSegmentIntersection(const pt1, pt2, ptA, ptB: TGTPoint): TGTPoint;
   var
-    i,isIn1,isIn2: integer;
-    dx21,dxba,dy21,dyba,dx1a,dy1a,sa2b1,k,t:double;
-    gtp: TGTPoly;
-    pt1, pt2,ptA,ptB,ptX: TGTPoint;
-    bRect1,bRectA:TGTRect;
+    dx21, dxba, dy21, dyba, dx1a, dy1a, sa2b1, k, t: double;
   begin
-    gtp := nil;
-    bRect1:=nil;
-    bRectA:=nil;
-    ptX:= nil;
-    isIn1:=0;
-    isIn2:=0;
-    pt1 := TGTPoint.create();
-    pt2 := TGTPoint.create();
-    try
-      pt1.assignNode(node1);
-      pt2.assignNode(node2);
-      for i := 0 to high(simplePolyList) do begin
-        gtp := simplePolyList[i];
-        isIn1:=gtp.isIn(pt1);
-        isIn2:=gtp.isIn(pt2);
-        if (isIn1 = 0) xor (isIn2 = 0) then
-          break;
-        gtp := nil;
+    result := nil;
+    dx21 := pt2.x - pt1.x;
+    dy21 := pt2.y - pt1.y;
+    dxba := ptB.x - ptA.x;
+    dyba := ptB.y - ptA.y;
+    sa2b1 := dyba * dx21 - dxba * dy21;
+    if sa2b1 <> 0 then begin
+      dx1a := pt1.x - ptA.x;
+      dy1a := pt1.y - ptA.y;
+      sa2b1 := 1 / sa2b1;
+      k := (dxba * dy1a - dyba * dx1a) * sa2b1;
+      t := (dx21 * dy1a - dy21 * dx1a) * sa2b1;
+      if (k >= 0) and (k <= 1) and (t >= 0) and (t <= 1) then begin
+        result := TGTPoint.create();
+        result.x := pt1.x + round(k * dx21);
+        result.y := pt1.y + round(k * dy21);
       end;
-      if not assigned(gtp) or (gtp.count<2) then exit;
-      bRect1:=TGTRect.create();
-      bRect1.updateBoundRect(pt1);
-      bRect1.updateBoundRect(pt2);
-      dx21:=pt2.x-pt1.x;
-      dy21:=pt2.y-pt1.y;
-      bRectA:=TGTRect.create();
-      ptB:=gtp.fPoints[gtp.count-1];
-      setlength(kArray,4);
-      nk:=0;
-      if(isIn1=1)and(isIn2=0)then begin
-        kArray[nk]:=0;inc(nk);
-      end else if(isIn1=0)and(IsIn2=1) then begin
-        kArray[nk]:=1;inc(nk);
+    end;
+  end;
+
+type
+  PWayNodeDesc = ^TWayNodeDesc;
+
+  TWayNodeDesc = record
+    node: OleVariant;
+    point: TGTPoint;
+    bRect: TGTRect;
+    pNextNode: PWayNodeDesc;
+    isIn: Shortint;
+  end;
+
+  TWayNodeDescArray = array of TWayNodeDesc;
+
+var
+  waySegList: array of PWayNodeDesc;
+  waySegLength: array of integer;
+  iWaySeg: integer;
+
+  procedure includeSegment(pWND1: PWayNodeDesc);
+  var
+    pWND: PWayNodeDesc;
+  begin
+    pWND := waySegList[iWaySeg];
+    if not assigned(pWND) then begin
+      //new empty segment
+      //add first node
+      new(pWND);
+      pWND^ := pWND1^;
+      waySegList[iWaySeg] := pWND;
+      pWND.pNextNode := pWND;
+      //add second node
+      new(pWND);
+      pWND^ := pWND1.pNextNode^;
+      pWND.pNextNode := waySegList[iWaySeg].pNextNode;
+      waySegList[iWaySeg].pNextNode := pWND;
+      waySegList[iWaySeg] := pWND;
+      waySegLength[iWaySeg] := 2;
+    end
+    else if (pWND.point = pWND1.point) then begin
+      //append next point - (n1,n2)+(n2,n3)=>(n1,n2,n3)
+      pWND1 := pWND1.pNextNode;
+      new(pWND);
+      pWND^ := pWND1^;
+      pWND.pNextNode := waySegList[iWaySeg].pNextNode;
+      waySegList[iWaySeg].pNextNode := pWND;
+      waySegList[iWaySeg] := pWND;
+      inc(waySegLength[iWaySeg]);
+    end
+    else begin
+      //start new segment
+      inc(iWaySeg);
+      if (iWaySeg > high(waySegList)) then begin
+        setlength(waySegList, iWaySeg + 4);
+        setlength(waySegLength, iWaySeg + 4);
       end;
-      for i:=gtp.count-2 downto 0 do begin
-        ptA:=gtp.fPoints[i];
-        bRectA.resetBounds();
-        bRectA.updateBoundRect(ptA);
-        bRectA.updateBoundRect(ptB);
-        if (bRect1.left<=brecta.right) and (brecta.left<=brect1.right) and
-         (bRect1.bottom<=brecta.top) and (brecta.bottom<=brect1.top) then begin
-          //find point
-          dxba:=ptB.x-ptA.x;
-          dyba:=ptB.y-ptA.y;
-          sa2b1:=dyba*dx21-dxba*dy21;
-          if sa2b1<>0 then begin
-            dx1a:=pt1.x-ptA.x;
-            dy1a:=pt1.y-ptA.y;
-            sa2b1:=1/sa2b1;
-            k:=(dxba*dy1a-dyba*dx1a)*sa2b1;
-            t:=(dx21*dy1a-dy21*dx1a)*sa2b1;
-            if (k>=0)and(k<=1)and(t>=0)and(t<=1) then begin
-              if length(kArray)<=nk then setlength(kArray,nk*2);
-              kArray[nk]:=k;
-              inc(nk);
-            end;
-          end;
-        end;
-        ptB:=ptA;
+      includeSegment(pWND1);
+    end;
+  end;
+
+  procedure freeWaySeg();
+  var
+    i: integer;
+    pWND, pWND1, pWND2: PWayNodeDesc;
+  begin
+    for i := 0 to iWaySeg do begin
+      pWND2 := waySegList[i];
+      if not assigned(pWND2) then continue;
+      pWND := pWND2.pNextNode;
+      while (pWND <> pWND2) do begin
+        pWND1 := pWND.pNextNode;
+        dispose(pWND);
+        pWND := pWND1;
       end;
-      while nk>0 do begin
-        k:=kArray[0];
-        for i:=1 to nk-1 do begin
-          if k>=kArray[i] then begin
-            k:=kArray[i];
+      dispose(pWND);
+      iWaySeg := 0;
+    end;
+  end;
+
+  function makeResult(): OleVariant;
+  var
+    i, j: integer;
+    ws: OleVariant;
+    pv: POleVariant;
+    pWND, pWND1: PWayNodeDesc;
+  begin
+    if(iWaySeg=0)and(not assigned(waySegList[0])) then
+      dec(iWaySeg);
+    result := VarArrayCreate([0, iWaySeg], varVariant);
+    for i := 0 to iWaySeg do begin
+      j := waySegLength[i];
+      ws := VarArrayCreate([0, j - 1], varVariant);
+      pWND := waySegList[i];
+      pWND1 := pWND.pNextNode;
+      pv := VarArrayLock(ws);
+      try
+        while j > 0 do begin
+          if VarIsEmpty(pWND1.node) then begin
+            pv^ := aMap.createNode();
+            pv^.lat := pWND1.point.lat;
+            pv^.lon := pWND1.point.lon;
+            pv^.id := 0;
           end
           else begin
-            kArray[i-1]:=kArray[i];
-            kArray[i]:=k;
+            pv^ := pWND1.node;
           end;
+          if (pWND1.isIn = 1) and ((pWND1 = pWND) or (pWND1 = pWND.pNextNode)) then begin
+            pv^.tags.setByKey('osman:note', 'boundary');
+          end;
+          pWND1 := pWND1.pNextNode;
+          inc(pv);
+          dec(j);
         end;
-        dec(nk);
-        ptX:=TGTPoint.Create();
-        ptX.x:=pt1.x+round(k*dx21);
-        ptX.y:=pt1.y+round(k*dy21);
-        setlength(wayPoints,length(wayPoints)+1);
-        setlength(wayIndexes,length(wayPoints));
-        wayPoints[high(wayPoints)]:=ptX;
-        wayIndexes[high(wayPoints)]:=idx1;
-        ptX:=nil;
+      finally
+        VarArrayUnlock(ws);
       end;
-    finally
-      freeAndNil(pt1);
-      freeAndNil(pt2);
-      freeAndNil(ptX);
-      freeAndNil(bRect1);
-      freeAndNil(bRectA);
+      result[i] := ws;
     end;
   end;
 
 const
-  minPtDist=0.1;
-  minPtDistSqr=minPtDist*minPtDist;
+  minPtDist = 0.1;
+  minPtDistSqr = minPtDist * minPtDist;
 var
-  wayNodes, curNode, prevNode: OleVariant;
-  pv: PVariant;
-  prevIsIn, curIsIn: boolean;
-  i,j, nWayNodes: integer;
-  p1,p2:TGTPoint;
+  nodeArray: OleVariant;
+  prevIsIn: Shortint;
+  simplePolyIdx, polySegmentIdx, i, nWayNodes: integer;
+  p1, p2, i0: TGTPoint;
+  polyPoints: TGTPointArray;
+  wayPoints, pWND, pWND2: PWayNodeDesc;
+  wayBRect, polySegmentBRect: TGTRect;
 begin
-  wayNodes := aWay.nodes;
-  if (not varIsType(wayNodes, varVariant or varArray)) or (VarArrayDimCount(wayNodes) <> 1) then
-    raise EConvertError.create(toString() + '.getIntersection: invalid way');
-  nWayNodes := varArrayLength(wayNodes);
+  nodeArray := varFromJsObject(aNodeArray);
+  if (not varIsType(nodeArray, varVariant or varArray)) or (VarArrayDimCount(nodeArray) <> 1) then
+    raise EConvertError.create(toString() + '.getIntersection: invalid nodeArray');
+  polyPoints := nil;
+  nWayNodes := varArrayLength(nodeArray);
   result := VarArrayCreate([0, -1], varVariant);
   if (nWayNodes < 2) then begin
     exit;
   end;
-  nk:=0;
-  setlength(kArray,8);
+  //init subroutine data
+  setlength(waySegList, 4);
+  setlength(waySegLength, 4);
+  iWaySeg := 0;
+  //end init
+  polySegmentBRect := nil;
+  wayBRect := TGTRect.create();
+  wayPoints := nil;
+  i0 := nil;
   try
-    pv := VarArrayLock(wayNodes);
-    prevIsIn := false;
-    for i := 0 to nWayNodes - 1 do begin
-      curNode := aMap.getNode(pv^);
-      if not varIsType(curNode, varDispatch) then
-        raise EInOutError.create(toString() + '.getIntersection: node ' + inttostr(pv^) +
-          ' not found');
-      inc(pv);
-      if i = 0 then begin
-        prevIsIn := isIn(curNode);
-        prevNode := curNode;
+    polySegmentBRect := TGTRect.create();
+    for i := nWayNodes - 1 downto 0 do begin
+      new(pWND);
+      fillchar(pWND^, sizeof(pWND^), 0);
+      pWND.pNextNode := wayPoints;
+      wayPoints := pWND;
+      p1 := TGTPoint.create();
+      wayPoints.point := p1;
+      p1.assignNode(nodeArray[i]);
+      wayPoints.node := nodeArray[i];
+      wayPoints.isIn := -1;
+      wayBRect.updateBoundRect(p1);
+      //first segment index is 1!
+      if (assigned(wayPoints.pNextNode)) then with wayPoints.pNextNode^ do begin
+          bRect := TGTRect.create();
+          bRect.updateBoundRect(wayPoints.point);
+          bRect.updateBoundRect(point);
+        end;
+    end;
+    for simplePolyIdx := 0 to high(simplePolyList) do begin
+      if not wayBRect.canInterserts(simplePolyList[simplePolyIdx]) or
+        (simplePolyList[simplePolyIdx].count < 3) then
         continue;
+      polyPoints := simplePolyList[simplePolyIdx].fPoints;
+      p2 := polyPoints[0];
+      for polySegmentIdx := 1 to simplePolyList[simplePolyIdx].count - 1 do begin
+        p1 := p2;
+        p2 := polyPoints[polySegmentIdx];
+        polySegmentBRect.resetBounds();
+        polySegmentBRect.updateBoundRect(p1);
+        polySegmentBRect.updateBoundRect(p2);
+        if not wayBRect.canInterserts(polySegmentBRect) then
+          continue;
+        pWND := wayPoints;
+        while assigned(pWND) do begin
+          pWND2 := pWND;
+          pWND := pWND.pNextNode;
+          if not (assigned(pWND) and polySegmentBRect.canInterserts(pWND.bRect)) then
+            continue;
+          //find and store intersection point
+          i0 := getSegmentIntersection(p1, p2, pWND2.point, pWND.point);
+          if assigned(i0) then begin
+            //test for distance and store point between pWND2 and pWND
+            if (i0.fastDistSqrM(pWND2.point) < minPtDistSqr) then begin
+              pWND2.isIn := 1;
+              freeAndNil(i0);
+            end
+            else if (i0.fastDistSqrM(pWND.point) < minPtDistSqr) then begin
+              pWND.isIn := 1;
+              freeAndNil(i0);
+            end
+            else begin
+              new(pWND2.pNextNode);
+              fillchar(pWND2.pNextNode^, sizeof(pWND^), 0);
+              with pWND2.pNextNode^ do begin
+                pNextNode := pWND;
+                node := Unassigned;
+                point := i0;
+                i0 := nil;
+                bRect := TGTRect.create();
+                isIn := 1;
+                bRect.updateBoundRect(pWND2.point);
+                bRect.updateBoundRect(point);
+                pWND.bRect.resetBounds();
+                pWND.bRect.updateBoundRect(point);
+                pWND.bRect.updateBoundRect(pWND.point);
+              end;
+              pWND := pWND2.pNextNode;
+            end;
+          end;
+        end;
       end;
-      curIsIn := isIn(curNode);
-      if curIsIn xor prevIsIn then
-        findIntersection(prevNode, curNode, i - 1);
-      prevIsIn := curIsIn;
-      prevNode := curNode;
     end;
-    j:=high(wayPoints);
-    for i:=1 to high(wayPoints) do begin
-      p1:=wayPoints[i-1];
-      p2:=wayPoints[i];
-      if not (assigned(p1) and assigned(p2)) then continue;
-      if p1.fastDistSqrM(p2)<minPtDistSqr then begin
-        freeandnil(wayPoints[i-1]);
-        freeandnil(wayPoints[i]);
-        dec(j,2);
+    //now wayPoints contains new way segments
+    //test segments if they is in or is out of boundary
+    pWND := wayPoints;
+    prevIsIn := -1;
+    while assigned(pWND) do begin
+      if (pWND.isIn = -1) then begin
+        case prevIsIn of
+          -1, 1:
+            //all boundary points marked with IsIn=1, so pWND can not be on-bound and pWND.node!=Unassigned
+            if isInInt(pWND.point) > 0 then
+              pWND.isIn := 2
+            else
+              pWND.isIn := 0;
+          //all boundary points marked with IsIn=1, so pWND can not be on-bound
+          0, 2: pWND.isIn := prevIsIn;
+        else
+          raise EIntOverflow.create(toString() + '.getIntersection: invalid isin=' +
+            inttostr(prevIsIn));
+        end;
       end;
+      prevIsIn := pWND.isIn;
+      pWND := pWND.pNextNode;
     end;
-    result:=VarArrayCreate([0,j],varVariant);
-    j:=0;
-    for i:=0 to high(wayPoints) do begin
-      p1:=wayPoints[i];
-      if not assigned(p1) then continue;
-      curNode:=aMap.createNode();
-      curNode.lat:=p1.lat;
-      curNode.lon:=p1.lon;
-      curNode.tags.setByKey('osman:idx',wayIndexes[i]);
-      result[j]:=curNode;
-      inc(j);
-    end;
-  finally
-    VarArrayUnlock(wayNodes);
-    for i := 0 to high(wayPoints) do
-      if assigned(wayPoints[i]) then
-        freeAndNil(wayPoints[i])
+    pWND := wayPoints;
+    pWND2 := pWND.pNextNode;
+    while assigned(pWND2) do begin
+      i := pWND.isIn * 4 + pWND2.isIn;
+      case i of
+        0, 1, 4: {do not include this segment};
+        2, 8: raise EIntOverflow.create(toString() + '.getIntersection: rare case=' + inttostr(i));
+        5: begin
+            if not assigned(i0) then
+              i0 := TGTPoint.create();
+            i0.x := (pWND.point.x div 2) + (pWND2.point.x div 2);
+            i0.y := (pWND.point.y div 2) + (pWND2.point.y div 2);
+            if isInInt(i0) > 0 then
+              includeSegment(pWND);
+          end;
+        6, 9, 10: includeSegment(pWND);
       else
-        break;
+        raise EIntOverflow.create(toString() + '.getIntersection: invalid case=' + inttostr(i));
+      end;
+      pWND := pWND2;
+      pWND2 := pWND2.pNextNode;
+    end;
+    result := makeResult();
+  finally
+    freeAndNil(wayBRect);
+    freeAndNil(polySegmentBRect);
+    freeAndNil(i0);
+    pWND := wayPoints;
+    while assigned(pWND) do begin
+      wayPoints := pWND;
+      pWND := pWND.pNextNode;
+      freeAndNil(wayPoints.point);
+      freeAndNil(wayPoints.bRect);
+      dispose(wayPoints);
+    end;
+    freeWaySeg();
+  end;
+end;
+
+function TMultiPoly.isInInt(const pt: TGTPoint): Shortint;
+var
+  xhash, yhash: cardinal;
+  i: integer;
+  p: TGTPoly;
+  oplen: integer;
+  popi: pinteger;
+begin
+  result := 0;
+  xhash := intToHash(pt.fx);
+  yhash := intToHash(pt.fy);
+  if cardinal(length(optimizedPolyHash[xhash])) <= yhash then
+    exit;
+  oplen := length(optimizedPolyHash[xhash][yhash]);
+  popi := @optimizedPolyHash[xhash][yhash][0];
+  for i := 0 to oplen - 1 do begin
+    p := optimizedPolyList[popi^];
+    case p.isIn(pt) of
+      0: ;
+      1: begin
+          //on optimized boundary. We need test 'original' poly.
+          p := simplePolyList[optimizedPolyParent[popi^]];
+          case p.isIn(pt) of
+            0: ;
+            1: begin
+                result := 1;
+                break;
+              end;
+            2: begin
+                result := 2 - result;
+              end;
+          end;
+        end;
+      2: result := 2 - result;
+    end;
+    inc(popi);
   end;
 end;
 
