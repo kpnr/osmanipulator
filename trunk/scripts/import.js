@@ -44,7 +44,7 @@ function openMap(storageName){
 	stg.dbName=storageName;
 	map.storage=stg;
 	if (initStg){
-		map.initStorage();
+		stg.initSchema();
 	};
 	var q=stg.sqlPrepare('PRAGMA cache_size=90000');
 	stg.sqlExec(q,'','');

@@ -79,8 +79,9 @@ type
     //get all keys in list. Result is SafeArray of string variants.
     //Keys and Values interlived - [0]=key[0],[1]=value[0]...[10]=key[5],[11]=value[5],...
     function getAll: OleVariant;
-    //add items to list. On key conflict replaces old value with new one.
-    procedure setAll(const keys, values: OleVariant);
+    //replaces old list with new one. All old items deleted, new items added
+    //kvArray interlived as in getAll() method
+    procedure setAll(const kvArray: OleVariant);
     //returns true if key exists in list.
     function hasKey(const key: WideString): WordBool;
     //returns value assiciated with key. If no such key empty string('') returned
@@ -116,7 +117,9 @@ type
     //returns interlived SafeArray of variants
     //[0]-refType[0](string), [1]-refId[0](int64), [2]-refRole[0](string), [3]-refType[1]....
     function getAll:OleVariant;
-    procedure setAll(refTypes: OleVariant; refIds: OleVariant; refRoles: OleVariant);
+    //replace old list with new one. Deletes all old items then adds new 
+    //See getAll() result description for refTypesIdsRoles layout
+    procedure setAll(refTypesIdsRoles: OleVariant);
     //idx - if idx => count then item appended to end of list, if idx<0 exception raised
     procedure insertBefore(idx: integer; const refType: WideString; refId: int64; const refRole:
       WideString);
@@ -242,6 +245,8 @@ type
   IStorage = interface(IOSManAll)
     function get_dbName(): WideString;
     procedure set_dbName(const newName: WideString);
+    function get_readOnly():boolean;
+    procedure set_readOnly(roFlag:boolean);
 
     //returns opaque Query object
     function sqlPrepare(const sqlProc: WideString): OleVariant;
@@ -254,6 +259,10 @@ type
       OleVariant;
     //creates IStoredIdList object
     function createIdList():OleVariant;
+    //initialize new storage - create database schema (tables, indexes, triggers...)
+    procedure initSchema();
+    //set this property before open to use db in readonly mode
+    property readOnly:boolean read get_readOnly write set_readOnly;
     //database resource locator (file name, server name, etc).
     property dbName: WideString read get_dbName write set_dbName;
   end;
@@ -328,15 +337,12 @@ type
     //     Params: none.
     //  :customFilter - user-defined filter. See IMapOnPutFilter interface.
     //     Filter interface can be partially implemented. For not implemented method
-    //     assumed true result. If there are several :customFilters specified then
-    //     filters are called in ascending order. If filter returns false then
+    //     <true> result assumed. If there are several :customFilters specified then
+    //     filters are called in ascending order. If filter returns <false> then
     //     subsequent filters not called and object not passed (short AND evaluation).
     //    Params:
     //     cFilter - IMapOnPutFilter object.
     function getObjects(const filterOptions:OleVariant):OleVariant;
-    //initialize new storage - drop and create tables
-    procedure initStorage();
-
     function get_onPutFilter:OleVariant;
     procedure set_onPutFilter(const aFilter:OleVariant);
     //IMapOnPutFilter
@@ -356,6 +362,15 @@ type
     function createPoly():OleVariant;
     //returns distance in meters
     function distance(const node1,node2:OleVariant):double;
+    //returns node rounded to certain bit level.
+    //aBitLevel should be between 2 and 31.
+    //Suitable for mp-format convertion
+    procedure bitRound(aNode:OleVariant;aBitLevel:integer);
+    //returns array of Nodes of way.
+    //if some objects not found in aMap then exception raised
+    //aMap - source of Nodes and Way
+    //aWayOrWayId - Way object or id of way.
+    function wayToNodeArray(aMap,aWayOrWayId:OleVariant):OleVariant;
   end;
 
   IMultiPoly=interface(IOSManAll)
@@ -373,16 +388,20 @@ type
     //'boundary' value for nodes layed on-bound.
     //If NodeArray and Poly has no intersection zero-length
     // array [] returned.
-    //New Nodes in result has id=0
+    //New Nodes in result has id=newNodeId,newNodeId-1,...,newNodeId-k
     //Example:
     // NodeArray=[n1(0,1) , n2(2,1) , n3(4,1)]
     // poly=(1,0) - (3,0) - (3,2) - (1,2) - (1,0)
-    // result=[nA(1,1, id=0, osman:note=boundary), n2(2,1), nB(3,1, id=0, osman:note=boundary)]
-    function getIntersection(const aMap,aNodeArray:OleVariant):OleVariant;
+    // newNodeId=-11
+    // result=[nA(1,1, id=-11, osman:note=boundary), n2(2,1), nB(3,1, id=-12, osman:note=boundary)]
+    function getIntersection(const aMap,aNodeArray:OleVariant; newNodeId:int64):OleVariant;
     //returns true if node is in poly (including border)
     function isIn(const aNode:OleVariant):boolean;
+    //returns multipoly area in square meters
+    //if poly not resolved then exception raised
+    function getArea():double;
     //returns bounding box for poly. Returns SafeArray of four double variants
-    // for N,E,S and W bounds respectively. If poly is not resolved then
+    // for N,E,S and W bounds respectively. If poly not resolved then
     // exception raised.
     function getBBox:OleVariant;
   end;

@@ -51,7 +51,7 @@ function openMap(storageName){
 	stg.dbName=storageName;
 	map.storage=stg;
 	if (initStg){
-		map.initStorage();
+		stg.initSchema();
 	};
 	return map;
 };

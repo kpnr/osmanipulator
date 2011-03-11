@@ -2,7 +2,7 @@
 var testFileDir='F:\\db\\osm\\testdata';
 var testFileIn='polyclip.osm';
 var testFileOut='polyclipped.osm';
-var testRelationId=-604;
+//boundary objects has 'name=osmanbound'
 //settings end
 var re=/wscript/i;
 if (WScript.FullName.search(re)>=0){
@@ -10,164 +10,210 @@ if (WScript.FullName.search(re)>=0){
 	WScript.Quit(sh.Run('CScript '+WScript.ScriptFullName,1,true));
 };
 
-var man=0,fso=0;
+function include(n){var w=WScript,h=w.createObject('WScript.Shell'),o=h.currentDirectory,s=w.createObject('Scripting.FileSystemObject'),f,t;h.currentDirectory=s.getParentFolderName(w.ScriptFullName);try{f=s.openTextFile(n,1,!1);try{t=f.ReadAll()}finally{f.close()}return eval(t)}catch(e){if(e instanceof Error)e.description+=' '+n;throw e}finally{h.currentDirectory=o}}
 
-function echo(s){
-	WScript.Echo(s);
+
+var h=new (include('helpers.js'))();
+
+echo=h.echo;
+
+function testGetIntersectionComplexPoly(map,mpoly){
+	function intersectRelation(r){
+		function buildWayList(){
+			var rs=[];
+			var rm=r.members.getAll().toArray();
+			for(var i=0;i<rm.lenth;i+=3){
+				//skip nodes - they not processed at all
+				//skip relations - they processed by other iteration
+				if(rm[i]!='way')continue;
+				rs.push(map.getWay(rm[i+1]));
+			};
+			return rs;
+		};
+		function buildNodeListArray(wl){
+			var rs=[];
+			for(var i=0;i<wl.length;i++){
+				var na=h.gt.wayToNodeArray(map,wl[i]).toArray();
+				rs.push(na);
+				for(var ni=0;ni<na.length;ni++){
+					na[ni].tags.setByKey('osman:parent',wl[i].id);
+				};
+			};
+			return rs;
+		};
+		function merge2(l1,l2){
+			//l1=l1 merged with l2
+			//return false if l1 and l2 not merged
+			var l10=l1[0].id,l20=l2[0].id,l11=l1[l1.length-1].id,l21=l2[l2.length-1];
+			var s;
+			if(l10==l20){
+				//new=reverse(old)+segment
+				s=l1[0].getByKey('osman:parent');
+				s+=';'+l2[0].getByKey('osman:parent');
+				l1[0].tags.setByKey('osman:parent',s);
+				l2.shift();
+				l1.reverse();
+				l1=l1.concat(l2);
+				return true;
+			}else if(l11==l20){
+				//new=old+segment
+				s=l1[l1.length-1].getByKey('osman:parent');
+				s+=';'+l2[0].getByKey('osman:parent');
+				l1[l1.length-1].tags.setByKey('osman:parent',s);
+				l2.shift();
+				l1=l1.concat(l2);
+				return true;
+			}else if(l10==l21){
+				//new=segment+old
+				s=l1[0].getByKey('osman:parent');
+				s+=';'+l2[l2.length-1].getByKey('osman:parent');
+				l1[0].tags.setByKey('osman:parent',s);
+				l2.pop();
+				l1=l2.concat(l1);
+				return true;
+			}else if(l11==l21){
+				//new=segment+reverse(old)
+				s=l1[l1.length-1].getByKey('osman:parent');
+				s+=';'+l2[l2.length-1].getByKey('osman:parent');
+				l1[length-1].tags.setByKey('osman:parent',s);
+				l2.pop();
+				l1.reverse();
+				l1=l2.concat(l1);
+				return true;
+			}else{
+				return false;
+			};
+		};
+		function mergeNodeLists(nl){
+			var doRepeat=false;
+			do{
+				for(var i=0;i<nl.length;i++){
+					if(nl[i][0]==nl[i][nl[i].length-1])continue;//nl[i] is polygon already 
+					for(var j=i+1;j<nl.length;j++){
+						if(merge2(nl[i],nl[j])){
+							doRepeat=true;
+							nl.splice(j,1);
+							j--;
+						}
+					}
+				};
+			}while(doRepeat)
+		};
+		var wayList=buildWayList();//osman objects
+		var nodeListArray=buildNodeListArray(wayList);//convert Way array to array of NodeArray
+		if(!mergeNodeLists(nodeListArray)){//convert Way array to simple polygon array
+			echo('Relation has not closed polygons. Delete it');
+			map.deleteRelation(r.id);
+			updateRelDeps(r.id,[]);
+		};
+		for(var i=0;i<nodeListArray.length;i++){
+			var intersection=mpoly.getIntersection
+		};
+	};
+	
+	var qMPRel=map.storage.sqlPrepare('select id from relations where id in ( select (objid>>2) as relid from objtags where tagid in (select id as tagid from tags where tagname="type" and tagvalue in ("multipolygon","boundary")) and objid&3=2)');
+	qMPRel=map.storage.sqlExec(qMPRel,0,0);
+	while(!qMPRel.eos){
+		var relation=qMPRel.read(1).toArray()[0];//id
+		relation=map.getRelation(relation);//osman object
+		intersectRelation(relation);
+	};
 };
 
-function getNextNodeId(aMap){
-	var stg=aMap.storage;
-	var qry=stg.sqlPrepare('select min(id) from nodes;');
-	var rslt=stg.sqlExec(qry,'','');
-	if(rslt.eos)return 1;
-	return Math.min(0,rslt.read(1).toArray()[0])-1;
-};
-
-function getNextWayId(aMap){
-	var stg=aMap.storage;
-	var qry=stg.sqlPrepare('select min(id) from ways;');
-	var rslt=stg.sqlExec(qry,'','');
-	if(rslt.eos)return 1;
-	return Math.min(0,rslt.read(1).toArray()[0])-1;
-};
-
-function testGetIntersectionWay(map,mpoly){
-	var qway=map.storage.sqlPrepare('select id from ways;');//where id=-598
-	var qway=map.storage.sqlExec(qway,'','');
+function testGetIntersectionWay(hMap,mpoly){
+	var map=hMap.map;
+	var qway=map.storage.sqlPrepare('select id from ways');// where id=-118');
+	qway=map.storage.sqlExec(qway,'','');
 	while(!qway.eos){
 		var wayId=qway.read(1).toArray()[0];
 		var way=map.getWay(wayId);
 		if(!way)continue;
 		var wns=way.nodes.toArray();
-		if(wns[0]==wns[wns.length-1])continue;//skip polygons
-		for(var i=0;i<wns.length;i++)wns[i]=map.getNode(wns[i]);
-		var ipt=mpoly.getIntersection(map,wns).toArray();
-		var nextNodeId=getNextNodeId(map);
-		var nextWayId=getNextWayId(map);
+		if((wns.length<2)||(wns[0]!=wns[wns.length-1]))continue;//skip non-polygons
+		echo('processing '+way.toString()+' id='+way.id);//+' name='+way.tags.getByName('name'));
+		wns=hMap.wayToNodeArray(way);
+		var nextNodeId=hMap.getNextNodeId();
+		var ipt=mpoly.getIntersection(map,wns,nextNodeId).toArray();
+		var nextWayId=hMap.getNextWayId();
 		var wayTags=way.tags;
 		for(var i=0;i<ipt.length;i++){
 			var seg=ipt[i].toArray();
+			wns=[];
 			for(var j=0;j<seg.length;j++){
-				if(seg[j].id==0){
-					seg[j].id=nextNodeId;
-					nextNodeId--;
+				if((seg[j].id<=nextNodeId)||(seg[j].tags.getByKey('osman:note')=='boundary')){
+					map.putNode(seg[j]);
 				};
-				map.putNode(seg[j]);
-				seg[j]=seg[j].id;
+				wns.push(seg[j].id);
 			};
-			way.nodes=seg;
+			way.nodes=wns;
 			map.putWay(way);
 			way=map.createWay();
 			way.id=nextWayId;
 			way.tags=wayTags;
 			nextWayId--;
 		};
+		if(ipt.length==0)map.deleteWay(wayId);
 	}
 }
 
-function importFile(fileName,destMap){
-	WScript.Echo(''+(new Date())+' importing '+fileName);
-	var ext=fso.getExtensionName(fileName);
-	var ds=0;
-	switch(ext){
-		case 'bz2':
-			ds=man.createObject('UnBZ2');
-			break;
-		case 'gz':
-			ds=man.createObject('UnGZ');
-			break;
-	};
-	var fs=man.createObject('FileReader');
-	fs.open(fileName);
-	if (ds) {
-		ds.setInputStream(fs);
-	}else{
-		ds=fs;
-	};
-	var osmr=man.createObject('OSMReader');
-	osmr.setInputStream(ds);
-	osmr.setOutputMap(destMap);
-	osmr.read(0);
-	fs.open('');
-	fs=ds=osmr=0;
-	WScript.Echo(''+(new Date())+'import done');
-};
-
-function exportFile(srcMap,dstFileName){
-	echo('Exporting '+dstFileName+' ...');
-	var d=new Date();
-	var fw=man.createObject('FileWriter');
-	fw.open(dstFileName);
-	var ow=man.createObject('OSMWriter');
-	ow.setOutputStream(fw);
-	ow.setInputMap(srcMap);
-	ow.write('');
-	d=(new Date())-d;
-	echo('	done in '+d+'ms');
-};
-
 function testGeoTools(){
 	var d=new Date();
-	var map=man.createObject('Map');
-	echo('Map='+map.toString());
-	var stg=man.createObject('Storage');
-	echo('Storage='+stg.toString());
-	var dbName=fso.buildPath(testFileDir,testFileIn+'.db3');
-	if(fso.fileExists(dbName)){
-		fso.deleteFile(dbName);
-	};
-	stg.dbName=dbName;
-	map.storage=stg;
-	map.initStorage();
-	importFile(fso.buildPath(testFileDir,testFileIn),map);
-	var gtls=man.createObject('GeoTools');
-	echo('GeoTools='+gtls.toString());
-	var rel=map.getRelation(testRelationId);
-	if(rel){
-		echo('Relation='+rel.toString());
-		var mpoly=gtls.createPoly();
-		echo('Multipolygon='+mpoly.toString());
-		mpoly.addObject(rel);
-		if(mpoly.resolve(map)){
-			echo('All refs are resolved, all polygons are closed');
-			testGetIntersectionWay(map,mpoly);
-		}else{
-			echo('Not resolved refs:');
-			var url=mpoly.getNotResolved().getAll().toArray();
-			for(var i=0;i<url.length;i+=3){
-				echo('	'+url[i]+'	'+url[i+1]+'	'+url[i+2]);
+	var hMap=h.mapHelper();
+	hMap.open(h.fso.buildPath(testFileDir,testFileIn+'.db3'),true);
+	var map=hMap.map;
+	var stg=map.storage;
+	echo('Importing...');
+	hMap.importXML(h.fso.buildPath(testFileDir,testFileIn));
+	echo('GeoTools='+h.gt.toString());
+	var cutByBound=function(mobj){
+			echo('Testing '+mobj.getClassName()+'='+mobj.toString());
+			var mpoly=h.gt.createPoly();
+			echo('Multipolygon='+mpoly.toString());
+			mpoly.addObject(mobj);
+			if(mpoly.resolve(hMap.map)){
+				echo('All refs are resolved, all polygons are closed');
+				testGetIntersectionWay(hMap,mpoly);
+			}else{
+				echo('Not resolved refs:');
+				var url=mpoly.getNotResolved().getAll().toArray();
+				for(var i=0;i<url.length;i+=3){
+					echo('	'+url[i]+'	'+url[i+1]+'	'+url[i+2]);
+				}
+				echo('Not closed nodes:');
+				var url=mpoly.getNotClosed().getAll().toArray();
+				for(var i=0;i<url.length;i+=3){
+					echo('	'+url[i]+'	'+url[i+1]+'	'+url[i+2]);
+				}
 			}
-			echo('Not closed nodes:');
-			var url=mpoly.getNotClosed().getAll().toArray();
-			for(var i=0;i<url.length;i+=3){
-				echo('	'+url[i]+'	'+url[i+1]+'	'+url[i+2]);
-			}
-		}
-		mpoly=0;
-	}else{
-		echo('Relation '+testRelationId+' not found');
+			mpoly=0;
+		};
+	var q=stg.sqlPrepare("select (objid>>2) from strobjtags where tagname='name' and tagvalue='osmanbound' and (objid&3)=2");
+	var q=stg.sqlExec(q,'','');
+	var mobj=false;
+	while(!q.eos){
+		mobj=map.getRelation(q.read(1).toArray()[0]);
+		cutByBound(mobj);
 	};
-	rel=0;
-	gtls=0;
-	exportFile(map,fso.buildPath(testFileDir,testFileOut));
-	map.storage=0;
-	stg.dbName='';
+	q=stg.sqlPrepare("select (objid>>2) from strobjtags where tagname='name' and tagvalue='osmanbound' and (objid&3)=1");
+	var q=stg.sqlExec(q,'','');
+	while(!q.eos){
+		mobj=map.getWay(q.read(1).toArray()[0]);
+		cutByBound(mobj);
+	};
+	echo('Exporting...');
+	hMap.exportXML(h.fso.buildPath(testFileDir,testFileOut));
+	hMap.close();
 	d=(new Date())-d;
 	echo('Test time: '+d+'ms');
 }
 
 //---===   main   ===---//
 
-fso=WScript.CreateObject('Scripting.FileSystemObject');
 try{
-	man=WScript.CreateObject("OSMan.Application");
-	echo("App="+man.toString());
-	man.logger=
+	echo("App="+h.man.toString());
+	h.man.logger=
 		{
-			log:function(msg){
-				WScript.Echo(msg);
-			}
+			log:echo
 		};
 	testGeoTools();echo('');
 	}catch(e){

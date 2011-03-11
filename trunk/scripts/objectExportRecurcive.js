@@ -18,7 +18,7 @@ function openMap(storageName){
 	stg.dbName=storageName;
 	map.storage=stg;
 	if (initStg){
-		map.initStorage();
+		stg.initSchema();
 	};
 	echo(map.toString());
 	return map;

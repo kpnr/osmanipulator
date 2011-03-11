@@ -3,6 +3,7 @@
 //3 - paused
 //4 - complete
 //5 - downloading
+//6 - error
 
 //reget download property IDs:
 //1 - url
