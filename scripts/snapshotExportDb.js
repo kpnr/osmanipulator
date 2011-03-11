@@ -2,7 +2,6 @@
 var regionBoundaryCollectionRelationId=184217;
 var srcMapName='F:\\db\\osm\\sql\\rf.db3';
 var dstDir='F:\\db\\osm\\rf_regions';
-var minNodeDist=0.1;//0.1 meter
 //end settings
 
 //boundary Russia relation = 60189
@@ -15,28 +14,11 @@ if (WScript.FullName.search(re)>=0){
 	WScript.Quit(sh.Run('CScript '+WScript.ScriptFullName,1,true));
 };
 
-var man=WScript.createObject('OSMan.Application');
-var gt=man.createObject('GeoTools');
-var fso=WScript.createObject('Scripting.FileSystemObject');
-
-function echo(s){
-	WScript.StdOut.write(s+'\n');
-};
-
-function openMap(storageName){
-	var stg=man.createObject('Storage');
-	var map=man.createObject('Map');
-	var initStg=!fso.fileExists(storageName);
-	stg.dbName=storageName;
-	map.storage=stg;
-	if (initStg){
-		map.initStorage();
-	};
-	return map;
-};
+var h=new (include('helpers.js'))();
+var echo=h.echo;
 
 function createPoly(boundObject,aMap){
-	var mp=gt.createPoly();
+	var mp=h.gt.createPoly();
 	mp.addObject(boundObject);
 	if(mp.resolve(aMap)){
 		return mp;
@@ -50,216 +32,121 @@ function createPoly(boundObject,aMap){
 	}
 }
 
-function exportDB(srcMap,exportFilter,dstMap){
-	echo('Exporting '+dstMap.storage.dbName+' ...');
-	var d=new Date();
-	var ss=srcMap.getObjects(exportFilter);
-	while(!ss.eos){
-		var obj=ss.read(1000).toArray();
-		for(var i=0;i<obj.length;i++){
-			dstMap.putObject(obj[i]);
-		};
-	};
-	d=(new Date())-d;
-	echo('	done in '+d+'ms');
-}
-
-function exportOSM(srcMap,exportFilter,dstFileName){
-	echo('Exporting '+dstFileName+' ...');
-	var d=new Date();
-	var fw=man.createObject('FileWriter');
-	fw.open(dstFileName);
-	var ow=man.createObject('OSMWriter');
-	ow.setOutputStream(fw);
-	ow.setInputMap(srcMap);
-	ow.write(exportFilter);
-	d=(new Date())-d;
-	echo('	done in '+d+'ms');
-}
-
-function completeWayNodes(srcMap,dstMap){
-	echo('Competing ways...');
-	var d=new Date();
-	//medium select distinct nodeid from waynodes where not exists( select id from nodes where waynodes.nodeid=nodes.id)
-	// 800ms	15200ms
-	//fast select distinct nodeid from waynodes where nodeid not in (select id from nodes)
-	// 600ms	12900ms
-	var nidl=dstMap.storage.sqlPrepare('select distinct nodeid from waynodes where nodeid not in (select id from nodes)');
-	nidl=dstMap.storage.sqlExec(nidl,0,0);
-	while(!nidl.eos){
-		var nid=nidl.read(1).toArray()[0];
-		var n=srcMap.getNode(nid);
-		if(!n)echo('Node '+nid+' not found');else dstMap.putObject(n);
-	};
-	d=(new Date())-d;
-	echo('	done in '+d+'ms');
-};
-
-function completeRelationNodes(srcMap,dstMap){
-	echo('Competing relation nodes...');
-	var d=new Date();
-	var nidl=dstMap.storage.sqlPrepare("select memberid from strrelationmembers where membertype='node'  and (memberid not in (select id from nodes))");
-	nidl=dstMap.storage.sqlExec(nidl,0,0);
-	while(!nidl.eos){
-		var nid=nidl.read(1).toArray()[0];
-		var n=srcMap.getNode(nid);
-		if(!n)echo('Node '+nid+' not found');else dstMap.putObject(n);
-	};
-	d=(new Date())-d;
-	echo('	done in '+d+'ms');
-};
-
-function completeRelationWays(srcMap,dstMap){
-	echo('Competing relation ways...');
-	var d=new Date();
-	var nidl=dstMap.storage.sqlPrepare("select memberid from strrelationmembers where membertype='way'  and (memberid not in (select id from ways))");
-	nidl=dstMap.storage.sqlExec(nidl,0,0);
-	while(!nidl.eos){
-		var nid=nidl.read(1).toArray()[0];
-		var n=srcMap.getWay(nid);
-		if(!n)echo('Way '+nid+' not found');else dstMap.putObject(n);
-	};
-	d=(new Date())-d;
-	echo('	done in '+d+'ms');
-};
-
-function getNextNodeId(aMap){
-	var stg=aMap.storage;
-	var qry=stg.sqlPrepare('select min(id) from nodes;');
-	var rslt=stg.sqlExec(qry,'','');
-	if(rslt.eos)return 1;
-	return Math.min(0,rslt.read(1).toArray()[0])-1;
-};
-
-function getNextWayId(aMap){
-	var stg=aMap.storage;
-	var qry=stg.sqlPrepare('select min(id) from ways;');
-	var rslt=stg.sqlExec(qry,'','');
-	if(rslt.eos)return 1;
-	return Math.min(0,rslt.read(1).toArray()[0])-1;
-};
-
-function cutWays(bigMap,bpoly,dstMap){
+function cutWays(bigMap,bpoly,dstMap){$$$ replace with map helper
 	echo('Cutting ways...');
 	var d=new Date();
 	var qway=dstMap.storage.sqlPrepare('select distinct (wayid) from waynodes where nodeid not in (select id from nodes)');
 	var qway=dstMap.storage.sqlExec(qway,0,0);
-	var oldWay,wayId;
+	var way,wayId;
 	
-	function putNewWays(metaWay,metaIsIn){
-		var metaId=[metaWay[0].id];
-		for(var i=1;i<metaWay.length;i++){
-		//merge too close new nodes
-			var curNode=metaWay[i];
-			metaId[i]=curNode.id;
-			if(((metaId[i]<0)||(metaId[i-1]<0))&&(gt.distance(metaWay[i-1],curNode)<minNodeDist)){
-				var delNodeIdx=i-1;copyNodeIdx=i;
-				if(metaId[i]<0){
-					delNodeIdx=i;copyNodeIdx=i-1;
-				};
-				metaWay.splice(delNodeIdx,1);
-				metaIsIn[copyNodeIdx]=metaIsIn[delNodeIdx]||metaIsIn[copyNodeIdx];
-				metaIsIn.splice(delNodeIdx,1);
-				metaId.splice(delNodeIdx,1);
-				i--;
-			}
+	function updateRelDeps(relId,newRelIds){
+		if((newRelIds.length==1)&&(relId==newRelIds[0])){//we need no modification
+			return;
 		};
-		//add extra `fake` node to store way `tail` as regular case
-		metaIsIn.push(false);
-		metaWay.push(false);
-		metaId.push(0);
-		var newIds=[];
-		var nextWayId=getNextWayId(dstMap);
-		var wayStart=-1;
-		for(var i=0;i<metaWay.length;i++){
-			if(metaId[i]<0)dstMap.putObject(metaWay[i]);
-			if(metaIsIn[i] && (wayStart<0))wayStart=i;
-			if((!metaIsIn[i]) && (wayStart>=0)){
-				var newWayObj,newWayNodes=metaId.slice(wayStart,i);
-				if(newWayNodes.length>1){
-					//store only 2- and more- node ways
-					if(!newIds.length){
-						newWayObj=oldWay;
-					}else{
-						newWayObj=dstMap.createWay();
-						newWayObj.id=nextWayId;nextWayId--;
-						newWayObj.tags=oldWay.tags;
-					};
-					newIds.push(newWayObj.id);
-					newWayObj.nodes=newWayNodes;
-					dstMap.putWay(newWayObj);
-				}else{
-					dstMap.deleteWay(wayId);
-				}
-				wayStart=-1;
-			}
-		};
-		//update relations with this way
-		var qrels=dstMap.storage.sqlPrepare('select distinct relationid from relationmembers where memberid=:wayid');
-		qrels=dstMap.storage.sqlExec(qrels,':wayid',wayId);
+		//update relations with this relation-member
+		var qrels=dstMap.storage.sqlPrepare('select distinct relationid from relationmembers where memberid=:relid');
+		qrels=dstMap.storage.sqlExec(qrels,':relid',relId);
 		while(!qrels.eos){
-			var rel=dstMap.getRelation(qrels.read(1).toArray()[0]);
+			var relId=qrels.read(1).toArray()[0];
+			var rel=dstMap.getRelation(relId);
 			var members=rel.members.getAll().toArray();
 			var relModified=false;
 			for(var i=0;i<members.length;i+=3){
-				if((members[i]=='way')&&(members[i+1]==wayId)){
+				if((members[i]=='relation')&&(members[i+1]==relId)){
 					var role=members[i+2];
-					for(var j=1;j<newIds.length;j++){
+					members.splice(i,3);//delete old relation-member
+					for(var j=0;j<newRelIds.length;j++){
+						//add new way-members
+						members.splice(i,0,'relation',newRelIds[j],role);
 						i+=3;
-						members.splice(i,0,'way',newIds[j],role);
-						relModified=true;
-					};
-					if(newIds.length==0){
-						members.splice(i,3);
-						i-=3;
 						relModified=true;
 					};
 				};
 			};
 			if(relModified){
-				rel.members.setAll(members);
-				dstMap.putRelation(rel);
+				if(members.length>0){
+					rel.members.setAll(members);
+					dstMap.putRelation(rel);
+				}else{
+					dstMap.deleteRelation(relId);
+					updateRelDeps(relId,[]);
+				}
 			};
 		};
 	};
 	
+	function updateWayDeps(wayId,newWaysIds){
+		if((newWaysIds.length==1)&&(wayId==newWaysIds[0])){//we need no modification
+			return;
+		};
+		//update relations with this way
+		var qrels=dstMap.storage.sqlPrepare('select distinct relationid from relationmembers where memberid=:wayid');
+		qrels=dstMap.storage.sqlExec(qrels,':wayid',wayId);
+		while(!qrels.eos){
+			var relId=qrels.read(1).toArray()[0];
+			var rel=dstMap.getRelation(relId);
+			var members=rel.members.getAll().toArray();
+			var relModified=false;
+
+			for(var i=0;i<members.length;i+=3){
+				if((members[i]=='way')&&(members[i+1]==wayId)){
+					var role=members[i+2];
+					members.splice(i,3);//delete old way-member
+					for(var j=0;j<newWaysIds.length;j++){
+						//add new way-members
+						members.splice(i,0,'way',newWaysIds[j],role);
+						i+=3;
+						relModified=true;
+					};
+				};
+			};
+			if(relModified){
+				if(members.length>0){
+					rel.members.setAll(members);
+					dstMap.putRelation(rel);
+				}else{
+					dstMap.deleteRelation(relId);
+					updateRelDeps(relId,[]);
+				}
+			};
+		};
+	};
+
 	while(!qway.eos){
 		wayId=qway.read(1).toArray()[0];
-		oldWay=dstMap.getWay(wayId);
-		if(!oldWay)continue;
-		var wns=oldWay.nodes.toArray();
-		if(wns[0]==wns[wns.length-1])continue;//skip polygons
+		way=dstMap.getWay(wayId);
+		if(!way)continue;
 		var ipt=[];
+		var wns=h.gt.wayToNodeArray(bigMap,way);//we can optimize speed by skipping 'out-of-bound' nodes
+		var nextNodeId=dstMap.getNextNodeId();
 		try{
-			ipt=bpoly.getIntersection(bigMap,oldWay).toArray();
+			ipt=bpoly.getIntersection(bigMap,wns,nextNodeId).toArray();
 		}catch(e){
 			echo(''+e.message);
 		}
-		if(ipt.length>0){
-			var isInTrigger=bpoly.isIn(bigMap.getNode(wns[0]));
-			var metaWay=[];
-			var metaWayIsIn=[];
-			var wnsIdx=0;
-			var nextNodeId=getNextNodeId(dstMap);
-			for(var i=0;i<ipt.length;i++){
-				var nd=ipt[i];
-				nd.id=nextNodeId;nextNodeId--;
-				var oi=parseInt(nd.tags.getByKey('osman:idx'));
-				nd.tags.deleteByKey('osman:idx');
-				for(;wnsIdx<=oi;wnsIdx++){
-					metaWay.push(bigMap.getNode(wns[wnsIdx]));
-					metaWayIsIn.push(isInTrigger);
+		var nextWayId=dstMap.getNextWayId();
+		var wayTags=way.tags;
+		var wayIds=[];
+		for(var i=0;i<ipt.length;i++){
+			var seg=ipt[i].toArray();
+			for(var j=0;j<seg.length;j++){
+				if((seg[j].id<=nextNodeId)||(seg[j].tags.getByKey('osman:note')=='boundary')){
+					dstMap.putNode(seg[j]);
 				};
-				metaWay.push(nd);
-				metaWayIsIn.push(true);//intersection nodes are always threated as 'in-bound'
-				isInTrigger=!isInTrigger;
+				seg[j]=seg[j].id;
 			};
-			for(;wnsIdx<wns.length;wnsIdx++){
-				metaWay.push(bigMap.getNode(wns[wnsIdx]));
-				metaWayIsIn.push(isInTrigger);
-			};
-			putNewWays(metaWay,metaWayIsIn);
+			way.nodes=seg;
+			dstMap.putWay(way);
+			wayIds.push(way.id);
+			way=dstMap.createWay();
+			way.id=nextWayId;
+			way.tags=wayTags;
+			nextWayId--;
 		};
+		if(ipt.length==0){
+			dstMap.deleteWay(wayId);
+		};
+		updateWayDeps(wayId,wayIds);
 	};
 	d=(new Date())-d;
 	echo('	done in '+d+'ms');
@@ -282,17 +169,18 @@ find multipolygon relations
 	from tags where tagname='type' and (tagvalue='multipolygon' or tagvalue='boundary'))
 	 and (objid & 3=2)
 */
-var srcMap=openMap(srcMapName);
-srcMap.storage.sqlExec(srcMap.storage.sqlPrepare('PRAGMA cache_size=150000'),0,0);
-var bound=srcMap.getRelation(145194);
+var srcMap=h.mapHelper();
+srcMap.open(srcMapName);
+srcMap.map.storage.sqlExec(srcMap.map.storage.sqlPrepare('PRAGMA cache_size=150000'),0,0);
+var bound=srcMap.map.getRelation(145194);
 if(!bound){
 	echo('	not found');
 };
 echo('	name='+bound.tags.getByKey('name'));
-var bp=gt.createPoly();
+var bp=h.gt.createPoly();
 bp.addObject(bound);
 var retryResolve=true;
-while(retryResolve && !bp.resolve(srcMap)){
+while(retryResolve && !bp.resolve(srcMap.map)){
 	var ul=bp.getNotResolved().getAll().toArray();
 	echo('	Resolving objects:');
 	echo('l='+bp.getNotResolved().count);
@@ -307,7 +195,7 @@ while(retryResolve && !bp.resolve(srcMap)){
 				case 'relation':obj=netmap.getRelation(ul[j+1]);break;
 			};
 			if(obj){
-				srcMap.putObject(obj);
+				srcMap.map.putObject(obj);
 				retryResolve=true;
 				WScript.stdOut.write(' resolved	\r');
 			}else{
@@ -325,14 +213,14 @@ if((bp.getNotResolved().count>0)){
 }else if (bp.getNotClosed().count>0){
 	echo('	Poly not closed. Skipped.');
 }else{
+	echo('	Area='+Math.round(bp.getArea()/1000000)+' km2');
 	var flt=[':bpoly',bp,':bbox'].concat(bp.getBBox().toArray());
-	var dstFileName=fso.buildPath(dstDir, bound.tags.getByKey('name')+'.db3');
-	if(fso.fileExists(dstFileName))fso.deleteFile(dstFileName);
-	var dstMap=openMap(dstFileName);
-	exportDB(srcMap,flt,dstMap);
-	//completeWayNodes(srcMap,dstMap);
-	//completeRelationNodes(srcMap,dstMap);
-	//completeRelationWays(srcMap,dstMap);
-	cutWays(srcMap,bp,dstMap);
-	exportOSM(dstMap,'',fso.buildPath(dstDir, bound.tags.getByKey('name')+'_clipped.osm'));
+	var dstMap=h.mapHelper();
+	dstMap.open(h.fso.buildPath(dstDir, bound.tags.getByKey('name')+'.db3'),true);
+	srcMap.exportDB(dstMap.map,flt);
+	//dstMap.completeWayNodes(srcMap.map);
+	//dstMap.completeRelationNodes(srcMap.map);
+	//dstMap.completeRelationWays(srcMap.map);
+	cutWays(srcMap.map,bp,dstMap.map);
+	dstMap.exportXML(h.fso.buildPath(dstDir, bound.tags.getByKey('name')+'_clipped.osm'));
 };

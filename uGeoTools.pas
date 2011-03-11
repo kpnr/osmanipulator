@@ -1,7 +1,7 @@
 unit uGeoTools;
 
 interface
-uses Math, SysUtils, Variants, uInterfaces, uOSMCommon, uModule;
+uses Math, SysUtils, Variants, uInterfaces, uOSMCommon, uModule, uDataStructures;
 
 type
   TGTShape = class(TObject)
@@ -18,13 +18,34 @@ type
     function get_lon: double;
     procedure set_lat(const aLat: double);
     procedure set_lon(const aLon: double);
+    //special call conversion!!! argument is in st(0)!
+    // angle should be in [-pi/2...pi/2]
+    // accuracy about 0.00015 in worst case
+    class function _fastCosRad(): double;
+    //special call conversion!!! argument is in st(0),
+    //result cos in st(0), sin in st(1) as after fsincos instruction!
+    // angle should be in [-pi/2...pi/2]
+    // accuracy about 0.00015 in worst case
+    class function _fastSinCosRad(): double;
+    //special call conversion!!! argument is in st(0)!
+    // angle should be in [-90E7...+90E7]
+    // accuracy about 0.00015 in worst case
+    class function _fastCosDegScaled(): double;
+    //special call conversion!!! argument is in st(0)!
+    // angle should be in [-90E7...+90E7]
+    // accuracy about 0.00015 in worst case
+    class function _fastSinDegScaled(): double;
+    //special call conversion!!! argument is in st(0),
+    //result cos in st(0), sin in st(1) as after fsincos instruction!
+    // angle should be in [-90E7...+90E7]
+    // accuracy about 0.00015 in worst case
+    class function _fastSinCosDegScaled(): double;
   public
-    class function degToInt(const deg: double): integer;
-    class function IntToDeg(const i: integer): double;
-    class function fastCosDeg(const degAngle: double): double;
     function clone(): TGTShape; override;
-    function fastDistM(pt: TGTPoint): double;
-    function fastDistSqrM(pt: TGTPoint): double;
+    //return true if pt is about DistM meters from this point
+    function distTest(pt: TGTPoint; const DistM: single): boolean;
+    function fastDistM(pt: TGTPoint): double; //returns sqrt(fastDistSqrM)
+    function fastDistSqrM(pt: TGTPoint): double; //returns dist^2.
     procedure assignNode(aNode: OleVariant);
     property x: integer read fx write fx;
     property y: integer read fy write fy;
@@ -63,11 +84,15 @@ type
 
 implementation
 
+uses Classes;
+
 const
   geoToolsClassGUID: TGUID = '{DF3ADB6E-3168-4C6B-9775-BA46C638E1A2}';
   //constants for TMultiPoly bbox hashing
-  hashBits = 8;
+  hashBits = 9;
   hashSize = 1 shl hashBits;
+  //threshold for 'same node' detection in getIntersection routines.
+  minPtDist = 0.1; //0.1 meter=10 cm
 
 type
 
@@ -90,6 +115,8 @@ type
     destructor destroy; override;
     function clone(): TGTShape; override;
     function isIn(const pt: TGTPoint): integer; override;
+    //returns unsigned area of polygon in square meters
+    function getArea(): double;
     //if x outside poly nil returned, else returns right half of poly
     function splitX(x: integer): TGTPoly;
     //if y outside poly nil returned, else returns top half of poly
@@ -136,6 +163,8 @@ type
   published
     function createPoly(): OleVariant;
     function distance(const node1, node2: OleVariant): double;
+    procedure bitRound(aNode:OleVariant;aBitLevel:integer);
+    function wayToNodeArray(aMap,aWayOrWayId:OleVariant):OleVariant;
   end;
 
   TMultiPolyListItem = record
@@ -161,8 +190,14 @@ type
     optimizedPolyParent: array of integer;
     optimizedPolyHash: array of array of array of integer;
     fNotResolved, fNotClosed: TRefList;
+    fArea: double;
+
+    class function getSegmentIntersection(const pt1, pt2, ptA, ptB: TGTPoint): TGTPoint;
 
     function isAllResolved(): boolean;
+
+    function getLineIntersection(const aMap, aNodeArray: OleVariant; newNodeId: int64): OleVariant;
+    function getPolyIntersection(const aMap, aNodeArray: OleVariant; newNodeId: int64): OleVariant;
 
     procedure growList(var list: TMultiPolyList; delta: integer = 1);
     procedure clearList(var list: TMultiPolyList);
@@ -178,7 +213,7 @@ type
     class function intToHash(i: integer): cardinal;
   public
     destructor destroy; override;
-    function isInInt(const pt: TGTPoint): Shortint; //0-out, 2-in, 1-onbound
+    function isInInt(const pt: TGTPoint): integer; //0-out, 2-in, 1-onbound
   published
     //add MapObject to polygon. Nodes not allowed,
     //node-members in Relation are ignored
@@ -189,9 +224,12 @@ type
     function getNotResolved(): OleVariant;
     //IRefList of not closed nodes.
     function getNotClosed(): OleVariant;
-    function getIntersection(const aMap, aNodeArray: OleVariant): OleVariant;
+    function getIntersection(const aMap, anObj: OleVariant; newNodeId: int64): OleVariant;
     //returns true if node is in poly (including border)
     function isIn(const aNode: OleVariant): boolean;
+    //returns multipoly area in square meters
+    //if poly not resolved then exception raised
+    function getArea(): double;
     //returns bounding box for poly. Returns SafeArray of four double variants
     // for N,E,S and W bounds respectively. If poly is not resolved then
     // exception raised.
@@ -199,6 +237,22 @@ type
   end;
 
   { TGeoTools }
+
+procedure TGeoTools.bitRound(aNode: OleVariant; aBitLevel: integer);
+var
+  l,k:double;
+begin
+  if aBitLevel>31 then
+  //no conversion needed
+    exit;
+  if aBitLevel<2 then
+    aBitLevel:=2;
+  l:=aNode.lat;
+  k:=360/(cardinal(1) shl aBitLevel); //k*(2^bitLevel)==360
+  aNode.lat:=round(l/k)*k;
+  l:=aNode.lon;
+  aNode.lon:=round(l/k)*k;
+end;
 
 function TGeoTools.createPoly: OleVariant;
 begin
@@ -219,6 +273,40 @@ begin
   pt1.assignNode(node1);
   pt2.assignNode(node2);
   result := pt1.fastDistM(pt2);
+end;
+
+function TGeoTools.wayToNodeArray(aMap,
+  aWayOrWayId: OleVariant): OleVariant;
+var
+  h,i:integer;
+  pId,pNd:POleVariant;
+  i64:int64;
+begin
+  aWayOrWayId:=varFromJsObject(aWayOrWayId);
+  if not VarIsType(aWayOrWayId,varDispatch) then begin
+    //not object, so treat it as Id
+    i64:=aWayOrWayId;
+    aWayOrWayId:=aMap.getWay(i64);
+  end;
+  if not VarIsType(aWayOrWayId,varDispatch) then
+    raise EReadError.Create(toString()+'.wayToNodeArray: way '+inttostr(i64)+' not found');
+  aWayOrWayId:=aWayOrWayId.nodes;
+  h:=varArrayLength(aWayOrWayId)-1;
+  result:=VarArrayCreate([0,h],varVariant);
+  pNd:=VarArrayLock(result);
+  pId:=VarArrayLock(aWayOrWayId);
+  try
+    for i:=0 to h do begin
+      pNd^:=aMap.getNode(pId^);
+      if not varIsType(pNd^,varDispatch) then
+        raise EReadError.Create(toString()+'.wayToNodeArray: node '+inttostr(pId^)+' not found');
+      inc(pNd);
+      inc(pId);
+    end;
+  finally
+    varArrayUnlock(result);
+    varArrayUnlock(aWayOrWayId);
+  end;
 end;
 
 { TGTRefs }
@@ -375,29 +463,6 @@ begin
 end;
 
 { TGTPoint }
-const
-  degint = -256; //we need to add/subtract latitudes, so degint must be less then -180
-
-class function TGTPoint.degToInt(const deg: double): integer;
-const
-  mply: double = low(integer) / degint;
-asm
-  fld deg
-  push eax
-  fmul mply
-  fistp dword[esp]
-  pop eax
-end;
-
-class function TGTPoint.IntToDeg(const i: integer): double;
-const
-  mply: double = degint / low(integer);
-asm
-  push i
-  fild dword[esp]
-  fmul mply
-  pop eax
-end;
 
 function TGTPoint.get_lat: double;
 begin
@@ -435,77 +500,192 @@ begin
   lon := aNode.lon;
 end;
 
-class function TGTPoint.fastCosDeg(const degAngle: double): double;
-const
-  //cos(x)=2.656575016·10^(-9)·x^4 + 1.267593379·10^(-7)·x^3 - 0.0001570353458·x^2 + 6.299155612·10^(-5)·x + 0.9998189607
-  //
-  a4: single = 2.656575016E-9;
-  a3: single = 1.267593379E-7;
-  a2: single = -0.0001570353458;
-  a1: single = 6.299155612E-5;
-  a0: single = 0.9998189607;
-asm
-  fld degAngle     //x
-  fabs
-  fld a4           //x a4
-  fmul st(0),st(1) //x x*a4
-  fadd a3          //x x*a4+a3
-  fmul st(0),st(1) //x x^2*a4+x*a3
-  fadd a2
-  fmul st(0),st(1)
-  fadd a1
-  fmulp st(1),st(0)
-  fadd a0
-end;
-
 function TGTPoint.fastDistSqrM(pt: TGTPoint): double;
 const
-  degToM2: single = 1852.0 * 60 * 1852.0 * 60;
+  half: single = 1 / 2;
+  intToM_sqr: single = cIntToM * cIntToM;
   //var
   //  la1,la2,lo1,lo2:single;
   //  d:double;
   //begin
-  //  la1:=lat;
-  //  la2:=pt.lat;
-  //  lo1:=lon;
-  //  lo2:=pt.lon;
+  //  la1:=degToRad(lat);
+  //  la2:=degToRad(pt.lat);
+  //  lo1:=degToRad(lon);
+  //  lo2:=degToRad(pt.lon);
   //  result:=sqrt( sqr( (lo1-lo2)*fastCosDeg((la1+la2)/2) ) + sqr(la1-la2) )*degToM;
-asm
-  push esi
-  push edi
-  mov esi,eax
-  mov edi,edx
-
-  mov edx,TGTPoint(esi).fx
-  sub edx,TGTPoint(edi).fx
-  call TGTPoint.IntToDeg//lo1-lo2
-
-  mov esi,TGTPoint(esi).fy
-  mov edi,TGTPoint(edi).fy
-  mov edx,edi
-  add edx,esi
-  rcr edx,1
-  call TGTPoint.IntToDeg//lo1-lo2 la1+la2/2
-
-  sub esp,8
-  fstp qword ptr [esp]
-  call TGTPoint.fastCosDeg//lo1-lo2 cos(...)
-  fmulp st(1),st(0)     //(lo1-lo2)*cos(..)
-  mov edx,edi
-  fmul st(0),st(0)      //sqr(cos...)
-  sub edx,esi
-  call TGTPoint.IntToDeg//sqr(cos..) la1-la2
-  fmul st(0),st(0)      //sqr(cos) sqr(la)
-  pop edi
-  faddp st(1),st(0)     //sqr+sqr
-  pop esi
-  fmul degToM2
+asm //about 30 cycles in Intel core
+  fild TGTPoint(eax).fy //[y1]
+  fild TGTPoint(edx).fy //[y1] [y2]
+  fld st(1)             //[y1] [y2] [y1]
+  fadd st(0),st(1)      //[y1] [y2] [y1+y2]
+  fmul half             //[y1] [y2] [(y1+y2)/2]
+  call _fastCosDegScaled//[y1] [y2] [cos((y1+y2)/2)]
+  fxch st(2)            //[cos((y1+y2)/2)] [y2] [y1]
+  fsubrp st(1),st(0)    //[cos((y1+y2)/2)] [y1-y2]
+  fmul st(0),st(0)      //[cos((y1+y2)/2)] [(y1-y2)^2]
+  fxch st(1)            //[(y1-y2)^2] [cos((y1+y2)/2)]
+  fild TGTPoint(eax).fx //[(y1-y2)^2] [cos((y1+y2)/2)] [x1]
+  fisub TGTPoint(edx).fx //[(y1-y2)^2] [cos((y1+y2)/2)] [x1-x2]
+  fmulp st(1),st(0)     //[(y1-y2)^2] [cos((y1+y2)/2)*x1-x2]
+  fmul st(0),st(0)      //[(y1-y2)^2] [cos(...)*...^2]
+  faddp st(1),st(0)
+  fmul IntToM_sqr
 end;
 
 function TGTPoint.fastDistM(pt: TGTPoint): double;
-asm
+asm //about 25+fastDistSqrM cycles
   call TGTPoint.fastDistSqrM
   fsqrt
+end;
+
+function TGTPoint.distTest(pt: TGTPoint; const DistM: single): boolean;
+begin //about 24 cycles on Intel core
+  //0.75~~cos(40deg)
+  result := DistM > (cIntToM * (abs(pt.y - y) + abs(pt.x - x) * 0.75));
+end;
+
+const //constants for _fastCos and _fastSinCos
+  //cos(x+pi/4)=0.02858459580·x^4 + 0.1135350382·x^3 - 0.3533604496·x^2 - 0.7064928688·x + 0.7071007326
+  a4 = 0.02851732610; //0.02858459580;// 1/(24*sqrt2);
+  a3 = 0.1132388311; //0.1135350382;// 1/(6*sqrt2);
+  a2 = -0.3533288887; //0.3533604496;// -1/(2*sqrt2);
+  a1 = -0.7064030649; //0.7064928688;// -1/sqrt2;
+  a0 = 0.7070991491; //0.7071007326;// 1/sqrt2;
+  deltaRad = -PI / 4;
+  //constants for radian arguments
+  a4_sgl: single = a4;
+  a3_sgl: single = a3;
+  a2_sgl: single = a2;
+  a1_sgl: single = a1;
+  a0_sgl: single = a0;
+  deltaRad_sgl: single = deltaRad;
+
+  //constants for scaled degrees arguments
+  ds4_sgl: single = a4 * cIntToRad * cIntToRad * cIntToRad * cIntToRad;
+  ds3_sgl: single = a3 * cIntToRad * cIntToRad * cIntToRad;
+  ds2_sgl: single = a2 * cIntToRad * cIntToRad;
+  ds1_sgl: single = a1 * cIntToRad;
+  ds0_sgl: single = a0;
+  deltaDegScaled_sgl: single = deltaRad / cIntToRad;
+
+class function TGTPoint._fastCosRad: double;
+asm
+//fastCos is about 31 cycles on Intel Core
+//fcos is about 100 cycles on Intel Core
+  fabs             //[|x|]
+  fadd deltaRad_sgl//[y=|x|-pi/4]
+  fld st(0)        //[y] [y]
+  fmul st(0),st(0) //[y] [y2]
+  fld a4_sgl       //[y] [y2] [a4]
+  fmul st(0),st(1) //[y] [y2] [a4 y2]
+  fadd a2_sgl      //[y] [y2] [a4 y2 + a2]
+  fmul st(0),st(1) //[y] [y2] [a4 y4 + a2 y2]
+  fxch st(1)       //[y] [a4 y4 + a2 y2] [y2]
+  fmul a3_sgl      //[y] [a4 y4 + a2 y2] [a3 y2]
+  fadd a1_sgl      //[y] [a4 y4 + a2 y2] [a3 y2 + a1]
+  fmulp st(2),st(0)//[a3 y3 + a1 y] [a4 y4 + a2 y2]
+  fadd a0_sgl      //[a3 y3 + a1 y] [a4 y4 + a2 y2 + a0]
+  faddp st(1),st(0)//cos
+end;
+
+class function TGTPoint._fastSinCosRad: double;
+asm
+//fastSinCos is about 34 cycles on Intel Core
+//fsincos is about 105 cycles in Intel Core
+  fldz
+  fcomip st(0),st(1)//set cf if st(1)>0, clear otherwise
+  fabs               //[|x|]
+  fadd deltaRad_sgl  //[x-pi/4=y]
+  //
+  fld st(0)          //[y] [y]
+  fmul st(0),st(0)   //[y] [y2]
+  fld a4_sgl         //[y] [y2] [a4]
+  fmul st(0),st(1)   //[y] [y2] [a4 y2]
+  fadd a2_sgl        //[y] [y2] [a4 y2 + a2]
+  fmul st(0),st(1)   //[y] [y2] [a4 y4 + a2 y2]
+  fadd a0_sgl        //[y] [y2] [a4 y4 + a2 y2 + a0]
+  fxch st(1)         //[y] [a4 y4 + a2 y2 + a0] [y2]
+  fmul a3_sgl        //[y] [a4 y4 + a2 y2 + a0] [a3 y2]
+  fadd a1_sgl        //[y] [a4 y4 + a2 y2 + a0] [a3 y2 + a1]
+  fmulp st(2),st(0)  //[a3 y3 + a1 y] [a4 y4 + a2 y2 + a0]
+  fld st(0)          //[a3 y3 + a1 y] [a4 y4 + a2 y2 + a0] [a4 y4 + a2 y2 + a0]
+  fsub st(0),st(2)   //[a3 y3 + a1 y] [a4 y4 + a2 y2 + a0] [sin]
+  jc @@pos_sin
+  fchs
+@@pos_sin:
+  fxch st(2)         //[sin] [a4y^4+a2y^2+a0] [a3y3+a1y]
+  faddp st(1),st(0)  //[sin] [cos]
+end;
+
+class function TGTPoint._fastCosDegScaled: double;
+asm
+//fastCos is about 31 cycles on Intel Core
+//fcos is about 100 cycles on Intel Core
+  fabs             //[|x|]
+  fadd deltaDegScaled_sgl//[y=|x|-pi/4]
+  fld st(0)        //[y] [y]
+  fmul st(0),st(0) //[y] [y2]
+  fld ds4_sgl       //[y] [y2] [a4]
+  fmul st(0),st(1) //[y] [y2] [a4 y2]
+  fadd ds2_sgl      //[y] [y2] [a4 y2 + a2]
+  fmul st(0),st(1) //[y] [y2] [a4 y4 + a2 y2]
+  fxch st(1)       //[y] [a4 y4 + a2 y2] [y2]
+  fmul ds3_sgl      //[y] [a4 y4 + a2 y2] [a3 y2]
+  fadd ds1_sgl      //[y] [a4 y4 + a2 y2] [a3 y2 + a1]
+  fmulp st(2),st(0)//[a3 y3 + a1 y] [a4 y4 + a2 y2]
+  fadd ds0_sgl      //[a3 y3 + a1 y] [a4 y4 + a2 y2 + a0]
+  faddp st(1),st(0)//cos
+end;
+
+class function TGTPoint._fastSinCosDegScaled: double;
+asm
+//fastSinCos is about 34 cycles on Intel Core
+//fsincos is about 105 cycles in Intel Core
+  fldz
+  fcomip st(0),st(1)//set cf if st(1)>0, clear otherwise
+  fabs               //[|x|]
+  fadd deltaDegScaled_sgl  //[x-pi/4=y]
+  fld st(0)          //[y] [y]
+  fmul st(0),st(0)   //[y] [y2]
+  fld ds4_sgl         //[y] [y2] [a4]
+  fmul st(0),st(1)   //[y] [y2] [a4 y2]
+  fadd ds2_sgl        //[y] [y2] [a4 y2 + a2]
+  fmul st(0),st(1)   //[y] [y2] [a4 y4 + a2 y2]
+  fadd ds0_sgl        //[y] [y2] [a4 y4 + a2 y2 + a0]
+  fxch st(1)         //[y] [a4 y4 + a2 y2 + a0] [y2]
+  fmul ds3_sgl        //[y] [a4 y4 + a2 y2 + a0] [a3 y2]
+  fadd ds1_sgl        //[y] [a4 y4 + a2 y2 + a0] [a3 y2 + a1]
+  fmulp st(2),st(0)  //[a3 y3 + a1 y] [a4 y4 + a2 y2 + a0]
+  fld st(0)          //[a3 y3 + a1 y] [a4 y4 + a2 y2 + a0] [a4 y4 + a2 y2 + a0]
+  fsub st(0),st(2)   //[a3 y3 + a1 y] [a4 y4 + a2 y2 + a0] [sin]
+  jc @@pos_sin
+  fchs
+@@pos_sin:
+  fxch st(2)         //[sin] [a4y^4+a2y^2+a0] [a3y3+a1y]
+  faddp st(1),st(0)  //[sin] [cos]
+end;
+
+class function TGTPoint._fastSinDegScaled: double;
+asm
+  fldz
+  fcomip st(0),st(1)//set cf if st(1)>0, clear otherwise
+  fabs             //[|x|]
+  fadd deltaDegScaled_sgl//[y=|x|-pi/4]
+  fld st(0)        //[y] [y]
+  fmul st(0),st(0) //[y] [y2]
+  fld ds4_sgl       //[y] [y2] [a4]
+  fmul st(0),st(1) //[y] [y2] [a4 y2]
+  fadd ds2_sgl      //[y] [y2] [a4 y2 + a2]
+  fmul st(0),st(1) //[y] [y2] [a4 y4 + a2 y2]
+  fxch st(1)       //[y] [a4 y4 + a2 y2] [y2]
+  fmul ds3_sgl      //[y] [a4 y4 + a2 y2] [a3 y2]
+  fadd ds1_sgl      //[y] [a4 y4 + a2 y2] [a3 y2 + a1]
+  fmulp st(2),st(0)//[a3 y3 + a1 y] [a4 y4 + a2 y2]
+  fadd ds0_sgl      //[a3 y3 + a1 y] [a4 y4 + a2 y2 + a0]
+  fsubrp st(1),st(0)//sin
+  jc @@pos_sin
+  fchs
+@@pos_sin:
 end;
 
 { TGTPoly }
@@ -539,6 +719,49 @@ begin
   fPoints[fCount] := pt;
   inc(fCount);
   updateBoundRect(pt);
+end;
+
+function TGTPoly.getArea: double;
+const
+  half: single = 1 / 2;
+  cInt2ToM2_sgl: single = cIntToRad * cRadToM * cRadToM;
+asm
+//eax -> self
+  push ebx
+  push esi
+  mov esi,TGTPoly(eax).fCount
+  cmp esi,3
+  fldz                 //0
+  jc @@done
+  dec esi
+  mov ebx,TGTPoly(eax).fPoints//ebx=>fPoints[0]
+  mov edx,[ebx]//edx=>TGTpoint0
+  fild TGTPoint(edx).fx//0 x0
+  fild TGTPoint(edx).fy//0 x0 y0
+  add ebx,4
+  fmul half            //0 x0 y0/2
+@@loop:
+    mov edx,[ebx]
+    fild TGTPoint(edx).fy//A0 x0 y0/2 y1
+    add ebx,4
+    fmul half            //A0 x0 y0/2 y1/2
+    fxch st(1)           //A0 x0 y1/2 y0/2
+    fadd st(0),st(1)     //A0 x0 y1/2 (y0+y1)/2
+    call TGTPoint._fastSinDegScaled//A0 x0 y1/2 sin((y0+y1)/2)
+    fild TGTPoint(edx).fx//A0 x0 y1/2 sin(...) x1
+    dec esi
+    fxch st(3)           //A0 x1 y1/2 sin(...) x0
+    fsubr st(0),st(3)    //A0 x1 y1/2 sin(...) x1-x0
+    fmulp st(1),st(0)    //A0 x1 y1/2 sin(...)*x1-x0
+    faddp st(3),st(0)    //A1 x1 y1/2
+  jnz @@loop
+  fstp st(0)           //A1 xn
+  fstp st(0)           //A1
+@@done:
+  fmul cInt2ToM2_sgl   //S1
+  pop esi
+  pop ebx
+  fabs                 //|S1|
 end;
 
 function TGTPoly.clone: TGTShape;
@@ -973,6 +1196,7 @@ begin
   setlength(optimizedPolyList, 0);
   setlength(optimizedPolyParent, 0);
   setlength(optimizedPolyHash, 0);
+  fArea := -1;
 end;
 
 procedure TMultiPoly.createNotClosed;
@@ -1012,8 +1236,6 @@ begin
     w := high(integer);
     for i := 0 to high(simplePolyList) do begin
       poly := simplePolyList[i];
-      if not assigned(poly) then
-        continue;
       t := poly.left;
       if t < w then w := t;
       t := poly.right;
@@ -1030,8 +1252,7 @@ begin
     s := 0;
     w := 0;
   end;
-  result := VarArrayOf([TGTPoint.IntToDeg(n), TGTPoint.IntToDeg(e), TGTPoint.IntToDeg(s),
-    TGTPoint.IntToDeg(w)]);
+  result := VarArrayOf([IntToDeg(n), IntToDeg(e), IntToDeg(s), IntToDeg(w)]);
 end;
 
 function TMultiPoly.getNotClosed: OleVariant;
@@ -1077,12 +1298,12 @@ end;
 procedure TMultiPoly.putList(var list: TMultiPolyList;
   const obj: OleVariant; parent: integer);
 var
-  pi: PMultiPolyListItem;
+  PI: PMultiPolyListItem;
 begin
   growList(list);
-  pi := @list.items[list.count];
-  pi.obj := obj;
-  pi.parentIdx := parent;
+  PI := @list.items[list.count];
+  PI.obj := obj;
+  PI.parentIdx := parent;
   inc(list.count);
 end;
 
@@ -1198,6 +1419,7 @@ var
       mlen := varArrayLength(ml);
       if mlen < 2 then continue; //skip zero- or one-node ways
       pwd.way.count := 0;
+      setlength(pwd.way.items, mlen);
       pv := VarArrayLock(ml);
       try
         pwd.id0 := pv^;
@@ -1227,8 +1449,8 @@ var
   function mergeWays(): boolean;
 
     function merge(pwd1, pwd2: PWayDescItem): boolean; //returns true if ways merged
-      //merge & reorder nodeList.
-      //Duplicates are preserved (0,1,2)+(2,3,0)=>(0,1,2,2,3,0)
+      //merge & reorder ways.
+      //Duplicates are not preserved (0,1,2)+(2,3,0)=>(0,1,2,3,0)
 
       procedure reverse(pwd: PWayDescItem);
       var
@@ -1417,26 +1639,45 @@ var
   begin
     createNotResolved();
     v := VarArrayCreate([0, -1], varVariant);
-    fNotResolved.setAll(v, v, v);
+    fNotResolved.setAll(v);
     createNotClosed();
-    fNotClosed.setAll(v, v, v);
+    fNotClosed.setAll(v);
   end;
 
 begin
   clearInternalLists();
   InitErrorLists();
+  //sort objects from srcList: put relations into relationList,
+  // put ways into wayList
   sortSrcObjByType();
+  //resolve relationList members into child relations (fully recurcive) and
+  // ways. Child relations are stored in relationList, ways are stored in
+  // wayList.
+  //WARNING: relations with 'type=collection' are skipped.
+  //result = all relations and ways found in Map.
+  // if result==false see getNotResolved() for not-found object list
   result := resolveRelations();
   if not result then
     exit;
+  //resolve ways(node-ids) from wayList into nodes(Node objects) and store
+  // nodes in wayMergeList 2-D array
+  //result==all nodes found in Map
+  // if result==false see getNotResolved() for not-found object list
   result := resolveWays();
   if not result then
     exit;
+  //merge ways & nodes in wayMergeList into polygons.
+  //result==all non-closed ways are merged into one or more polygons.
+  // if result==false see getNotClosed() for not-closed nodes & ways
   result := mergeWays(); //do not merge ways if some nodes not resolved!
   if not result then
     exit;
+  //initialize simplePolyList and fill NodeList.
   makeNodeList();
+  //split large polygons into small if needed and fill optimizedPolyList with
+  // small ones. optimizedPolyList used for faster IsIn tests
   buildOptimizedPolyList();
+  //build hash-grid for fast point-to-polygon_list translation
   buildOptimizedPolyHash();
 end;
 
@@ -1465,7 +1706,7 @@ var
   end;
 
 var
-  nCnt, nOpt, maxCnt, maxIdx, i: integer;
+  nCnt, nOpt, maxCnt, maxIdx, i, maxSplitCnt: integer;
 begin
   nCnt := 0;
   for i := 0 to high(simplePolyList) do begin
@@ -1484,7 +1725,8 @@ begin
   if (nOpt = pCnt) then
     //no optimization needed
     exit;
-  while (pCnt < nOpt) do begin
+  maxSplitCnt:=nOpt*2;//prevent infinite loop on "non-splittable" poly
+  while (pCnt < nOpt) and (maxSplitCnt>0) do begin
     maxCnt := 0;
     maxIdx := 0;
     for i := 0 to pCnt - 1 do begin
@@ -1494,6 +1736,7 @@ begin
       end;
     end;
     split(maxIdx);
+    dec(maxSplitCnt);
   end;
 end;
 
@@ -1538,32 +1781,8 @@ begin
   result := cardinal(i);
 end;
 
-function TMultiPoly.getIntersection(const aMap,
-  aNodeArray: OleVariant): OleVariant;
-
-  function getSegmentIntersection(const pt1, pt2, ptA, ptB: TGTPoint): TGTPoint;
-  var
-    dx21, dxba, dy21, dyba, dx1a, dy1a, sa2b1, k, t: double;
-  begin
-    result := nil;
-    dx21 := pt2.x - pt1.x;
-    dy21 := pt2.y - pt1.y;
-    dxba := ptB.x - ptA.x;
-    dyba := ptB.y - ptA.y;
-    sa2b1 := dyba * dx21 - dxba * dy21;
-    if sa2b1 <> 0 then begin
-      dx1a := pt1.x - ptA.x;
-      dy1a := pt1.y - ptA.y;
-      sa2b1 := 1 / sa2b1;
-      k := (dxba * dy1a - dyba * dx1a) * sa2b1;
-      t := (dx21 * dy1a - dy21 * dx1a) * sa2b1;
-      if (k >= 0) and (k <= 1) and (t >= 0) and (t <= 1) then begin
-        result := TGTPoint.create();
-        result.x := pt1.x + round(k * dx21);
-        result.y := pt1.y + round(k * dy21);
-      end;
-    end;
-  end;
+function TMultiPoly.getLineIntersection(const aMap,
+  aNodeArray: OleVariant; newNodeId: int64): OleVariant;
 
 type
   PWayNodeDesc = ^TWayNodeDesc;
@@ -1584,6 +1803,7 @@ var
   iWaySeg: integer;
 
   procedure includeSegment(pWND1: PWayNodeDesc);
+    //segment = (pWND1.point, pWND1.pNextNode.point)
   var
     pWND: PWayNodeDesc;
   begin
@@ -1650,7 +1870,7 @@ var
     pv: POleVariant;
     pWND, pWND1: PWayNodeDesc;
   begin
-    if(iWaySeg=0)and(not assigned(waySegList[0])) then
+    if (iWaySeg = 0) and (not assigned(waySegList[0])) then
       dec(iWaySeg);
     result := VarArrayCreate([0, iWaySeg], varVariant);
     for i := 0 to iWaySeg do begin
@@ -1665,12 +1885,16 @@ var
             pv^ := aMap.createNode();
             pv^.lat := pWND1.point.lat;
             pv^.lon := pWND1.point.lon;
-            pv^.id := 0;
+            pv^.id := newNodeId;
+            dec(newNodeId);
           end
           else begin
             pv^ := pWND1.node;
           end;
-          if (pWND1.isIn = 1) and ((pWND1 = pWND) or (pWND1 = pWND.pNextNode)) then begin
+          if (pWND1.isIn = 1) and (
+            (pWND1 = pWND) {last segment node} or
+            (pWND1 = pWND.pNextNode) {first segment node}
+            ) then begin
             pv^.tags.setByKey('osman:note', 'boundary');
           end;
           pWND1 := pWND1.pNextNode;
@@ -1684,23 +1908,22 @@ var
     end;
   end;
 
-const
-  minPtDist = 0.1;
-  minPtDistSqr = minPtDist * minPtDist;
+  procedure markNode(const pN: PWayNodeDesc; const isInState: Shortint);
+  begin
+    if pN.isIn < isInState then pN.isIn := isInState;
+  end;
+
 var
-  nodeArray: OleVariant;
   prevIsIn: Shortint;
   simplePolyIdx, polySegmentIdx, i, nWayNodes: integer;
   p1, p2, i0: TGTPoint;
   polyPoints: TGTPointArray;
   wayPoints, pWND, pWND2: PWayNodeDesc;
   wayBRect, polySegmentBRect: TGTRect;
+  v: OleVariant;
 begin
-  nodeArray := varFromJsObject(aNodeArray);
-  if (not varIsType(nodeArray, varVariant or varArray)) or (VarArrayDimCount(nodeArray) <> 1) then
-    raise EConvertError.create(toString() + '.getIntersection: invalid nodeArray');
   polyPoints := nil;
-  nWayNodes := varArrayLength(nodeArray);
+  nWayNodes := varArrayLength(aNodeArray);
   result := VarArrayCreate([0, -1], varVariant);
   if (nWayNodes < 2) then begin
     exit;
@@ -1723,8 +1946,9 @@ begin
       wayPoints := pWND;
       p1 := TGTPoint.create();
       wayPoints.point := p1;
-      p1.assignNode(nodeArray[i]);
-      wayPoints.node := nodeArray[i];
+      v := aNodeArray[i];
+      p1.assignNode(v);
+      wayPoints.node := v;
       wayPoints.isIn := -1;
       wayBRect.updateBoundRect(p1);
       //first segment index is 1!
@@ -1758,12 +1982,12 @@ begin
           i0 := getSegmentIntersection(p1, p2, pWND2.point, pWND.point);
           if assigned(i0) then begin
             //test for distance and store point between pWND2 and pWND
-            if (i0.fastDistSqrM(pWND2.point) < minPtDistSqr) then begin
-              pWND2.isIn := 1;
+            if (i0.distTest(pWND2.point, minPtDist)) then begin
+              markNode(pWND2, 1);
               freeAndNil(i0);
             end
-            else if (i0.fastDistSqrM(pWND.point) < minPtDistSqr) then begin
-              pWND.isIn := 1;
+            else if (i0.distTest(pWND.point, minPtDist)) then begin
+              markNode(pWND, 1);
               freeAndNil(i0);
             end
             else begin
@@ -1775,7 +1999,7 @@ begin
                 point := i0;
                 i0 := nil;
                 bRect := TGTRect.create();
-                isIn := 1;
+                isIn := 1; //new node, so we can mark it directly
                 bRect.updateBoundRect(pWND2.point);
                 bRect.updateBoundRect(point);
                 pWND.bRect.resetBounds();
@@ -1796,13 +2020,9 @@ begin
       if (pWND.isIn = -1) then begin
         case prevIsIn of
           -1, 1:
-            //all boundary points marked with IsIn=1, so pWND can not be on-bound and pWND.node!=Unassigned
-            if isInInt(pWND.point) > 0 then
-              pWND.isIn := 2
-            else
-              pWND.isIn := 0;
+            pWND.isIn := isInInt(pWND.point); //pWND.isIn==-1, so mark it directly
           //all boundary points marked with IsIn=1, so pWND can not be on-bound
-          0, 2: pWND.isIn := prevIsIn;
+          0, 2: pWND.isIn := prevIsIn; //pWND.isIn==-1, so mark it directly
         else
           raise EIntOverflow.create(toString() + '.getIntersection: invalid isin=' +
             inttostr(prevIsIn));
@@ -1816,9 +2036,8 @@ begin
     while assigned(pWND2) do begin
       i := pWND.isIn * 4 + pWND2.isIn;
       case i of
-        0, 1, 4: {do not include this segment};
-        2, 8: raise EIntOverflow.create(toString() + '.getIntersection: rare case=' + inttostr(i));
-        5: begin
+        0, 1, 4 {'out-bound' segment}: {do not include this segment};
+        5 {'bound-bound' segments}: begin
             if not assigned(i0) then
               i0 := TGTPoint.create();
             i0.x := (pWND.point.x div 2) + (pWND2.point.x div 2);
@@ -1826,8 +2045,9 @@ begin
             if isInInt(i0) > 0 then
               includeSegment(pWND);
           end;
-        6, 9, 10: includeSegment(pWND);
+        6, 9, 10 {'bound-in' or 'in-in' segments}: includeSegment(pWND);
       else
+        //2, 8, {'out-in' - get a bug???}
         raise EIntOverflow.create(toString() + '.getIntersection: invalid case=' + inttostr(i));
       end;
       pWND := pWND2;
@@ -1850,7 +2070,7 @@ begin
   end;
 end;
 
-function TMultiPoly.isInInt(const pt: TGTPoint): Shortint;
+function TMultiPoly.isInInt(const pt: TGTPoint): integer;
 var
   xhash, yhash: cardinal;
   i: integer;
@@ -1889,7 +2109,748 @@ begin
   end;
 end;
 
+function TMultiPoly.getIntersection(const aMap,
+  anObj: OleVariant; newNodeId: int64): OleVariant;
+var
+  cvtObj: OleVariant;
+  l: integer;
+begin
+  if not isAllResolved() then
+    if not resolve(aMap) then
+      raise EConvertError.create(toString() +
+        '.getIntersection: not all references resolved or polygons closed.');
+  cvtObj := varFromJsObject(anObj);
+  if (varIsType(cvtObj, varVariant or varArray)) and (VarArrayDimCount(cvtObj) = 1) then begin
+    l := varArrayLength(cvtObj);
+    if (l < 3) or (cvtObj[0].id <> cvtObj[l - 1].id) then
+      result := getLineIntersection(aMap, cvtObj, newNodeId)
+    else
+      result := getPolyIntersection(aMap, cvtObj, newNodeId)
+  end
+  else
+    raise EConvertError.create(toString() + '.getIntersection: invalid nodeArray');
+end;
+
+function TMultiPoly.getPolyIntersection(const aMap,
+  aNodeArray: OleVariant; newNodeId: int64): OleVariant;
+type
+  TSegFlags = set of (sfOnBound1, sfOnBound2, sfVisited);
+  TSegDesc = record
+    pNode1, pNode2: POleVariant;
+    pPoint1, pPoint2: TGTPoint;
+    bbox: TGTRect;
+    flags: TSegFlags;
+  end;
+  PSegDesc = ^TSegDesc;
+
+  TIsInTestProc = function(const pt: TGTPoint): integer of object;
+
+var
+  newNodeCount: integer;
+  newNodes: array of OleVariant;
+  newPoints: array of TGTPoint;
+
+  procedure freeAndNilSeg(var pSeg: PSegDesc);
+  begin
+    if not assigned(pSeg) then
+      exit;
+    freeAndNil(pSeg.bbox);
+    dispose(pSeg);
+    pSeg := nil;
+  end;
+
+  procedure freeAndNilSegList(var sl: TDualLinkedRing);
+  var
+    p: PSegDesc;
+  begin
+    if not assigned(sl) then
+      exit;
+    while not sl.isEmpty() do begin
+      p := sl.delete();
+      freeAndNilSeg(p);
+    end;
+    freeAndNil(sl);
+  end;
+
+  function sortSeg(pNodeVar: POleVariant; iNodeVarStep: integer; polyA: TGTPoly; bboxB: TGTRect):
+      TDualLinkedRing;
+  var
+    i, l: integer;
+    p: PSegDesc;
+  begin
+    i := 0;
+    p := nil;
+    l := polyA.count - 1;
+    result := TDualLinkedRing.create();
+    try
+      while i < l do begin
+        if not assigned(p) then begin
+          new(p);
+          p.bbox := TGTRect.create();
+        end
+        else
+          p.bbox.resetBounds();
+        p.pNode1 := pNodeVar;
+        p.pPoint1 := polyA.fPoints[i];
+        inc(pbyte(pNodeVar), iNodeVarStep);
+        inc(i);
+        p.pNode2 := pNodeVar;
+        p.pPoint2 := polyA.fPoints[i];
+        p.bbox.updateBoundRect(p.pPoint1);
+        p.bbox.updateBoundRect(p.pPoint2);
+        p.flags := [];
+        if bboxB.canInterserts(p.bbox) then begin
+          result.insertAfter(p);
+          if result.hasNext() then
+            result.next();
+          p := nil;
+        end;
+      end;
+      if not result.isEmpty() then
+        result.first();
+    except
+      freeAndNilSeg(p);
+      freeAndNilSegList(result);
+      raise;
+    end;
+  end;
+
+  procedure splitAndStore(segList: TDualLinkedRing; pMidNode: POleVariant; pMidPoint: TGTPoint);
+  var
+    pSeg1, pSeg2: PSegDesc;
+  begin
+    pSeg1 := segList.data;
+    //create segment2
+    new(pSeg2);
+    //copy point2
+    pSeg2.pPoint2 := pSeg1.pPoint2;
+    pSeg2.pNode2 := pSeg1.pNode2;
+    //create point1 in segment2
+    pSeg2.pPoint1 := pMidPoint;
+    pSeg2.pNode1 := pMidNode;
+    //init bbox in segment2
+    pSeg2.bbox := TGTRect.create();
+    pSeg2.bbox.updateBoundRect(pMidPoint);
+    pSeg2.bbox.updateBoundRect(pSeg1.pPoint2);
+    //init flags in segment2
+    pSeg2.flags := pSeg1.flags;
+    include(pSeg2.flags, sfOnBound1);
+    //store segment2
+    segList.insertAfter(pSeg2);
+    //adjust segment1
+    //create point2
+    pSeg1.pPoint2 := pMidPoint;
+    pSeg1.pNode2 := pMidNode;
+    //update bbox
+    pSeg1.bbox.resetBounds();
+    pSeg1.bbox.updateBoundRect(pSeg1.pPoint1);
+    pSeg1.bbox.updateBoundRect(pMidPoint);
+    //adjust flags
+    include(pSeg1.flags, sfOnBound2);
+  end;
+
+  procedure createNewPoint(var pNewNode: POleVariant; var pNewPoint, crossPt: TGTPoint);
+  begin
+    if length(newNodes) <= newNodeCount then begin
+      setlength(newNodes, newNodeCount * 2 + 4);
+      setlength(newPoints, newNodeCount * 2 + 4);
+    end;
+
+    newNodes[newNodeCount] := aMap.createNode();
+    pNewNode := @newNodes[newNodeCount];
+    pNewNode^.id := newNodeId;
+    pNewNode^.lat := crossPt.lat;
+    pNewNode^.lon := crossPt.lon;
+    newPoints[newNodeCount] := crossPt;
+    pNewPoint := crossPt;
+
+    dec(newNodeId);
+    inc(newNodeCount);
+    crossPt := nil;
+  end;
+
+  procedure splitSegments(slA, slB: TDualLinkedRing);
+  var
+    pSegB, pSegA: PSegDesc;
+    crossPt, pNewPoint: TGTPoint;
+    pNewNode: POleVariant;
+    doSplitA, doSplitB: boolean;
+  begin
+    crossPt := nil;
+    try
+      pSegB := slB.first();
+      while assigned(pSegB) do begin
+        pSegA := slA.first();
+        while assigned(pSegA) and assigned(pSegB) do begin
+          if not pSegA.bbox.canInterserts(pSegB.bbox) then begin
+            if (slA.hasNext()) then
+              pSegA := slA.next()
+            else
+              pSegA := nil;
+            continue;
+          end;
+          crossPt := getSegmentIntersection(pSegA.pPoint1, pSegA.pPoint2, pSegB.pPoint1,
+            pSegB.pPoint2);
+          if assigned(crossPt) then begin
+            pNewNode := nil;
+            pNewPoint := nil;
+            //test distance between cross-point and SegB end-points
+            doSplitB := true;
+            if (crossPt.distTest(pSegB.pPoint1, minPtDist)) then begin
+              include(pSegB.flags, sfOnBound1);
+              doSplitB := false;
+              pNewNode := pSegB.pNode1;
+              pNewPoint := pSegB.pPoint1;
+            end
+            else if (crossPt.distTest(pSegB.pPoint2, minPtDist)) then begin
+              include(pSegB.flags, sfOnBound2);
+              doSplitB := false;
+              pNewNode := pSegB.pNode2;
+              pNewPoint := pSegB.pPoint2;
+            end;
+
+            //test distance between cross-point and segA end-points
+            doSplitA := true;
+            if (crossPt.distTest(pSegA.pPoint1, minPtDist)) then begin
+              include(pSegA.flags, sfOnBound1);
+              doSplitA := false;
+              if not assigned(pNewNode) then begin
+                pNewNode := pSegA.pNode1;
+                pNewPoint := pSegA.pPoint1;
+              end
+              else begin
+                pSegA.pNode1 := pNewNode;
+                pSegA.pPoint1 := pNewPoint;
+              end;
+            end
+            else if (crossPt.distTest(pSegA.pPoint2, minPtDist)) then begin
+              include(pSegA.flags, sfOnBound2);
+              doSplitA := false;
+              if not assigned(pNewNode) then begin
+                pNewNode := pSegA.pNode2;
+                pNewPoint := pSegA.pPoint2;
+              end
+              else begin
+                pSegA.pNode2 := pNewNode;
+                pSegA.pPoint2 := pNewPoint;
+              end;
+            end;
+
+            if not assigned(pNewNode) then begin
+              createNewPoint(pNewNode, pNewPoint, crossPt);
+            end;
+            if doSplitA then begin
+              splitAndStore(slA, pNewNode, pNewPoint);
+              pSegA := nil; //check pSegA agane
+            end;
+            if doSplitB then
+              splitAndStore(slB, pNewNode, pNewPoint);
+            if not (doSplitA or doSplitB) then begin
+              if ((pSegA.pNode1^.id = pSegB.pNode1^.id) and
+                (pSegA.pNode2^.id = pSegB.pNode2^.id)) or
+                ((pSegA.pNode1^.id = pSegB.pNode2^.id) and
+                (pSegA.pNode2^.id = pSegB.pNode1^.id)) then begin
+                //pSegA and pSegB is same
+                //mark segment as it was visited and marked in buildIntersection
+                pSegB.flags := pSegB.flags - [sfOnBound1, sfOnBound2] + [sfVisited];
+                freeAndNilSeg(pSegA);
+                slA.delete();
+              end;
+            end;
+          end;
+          freeAndNil(crossPt);
+          if assigned(pSegA) then begin
+            if slA.hasNext() then
+              pSegA := slA.next()
+            else
+              pSegA := nil;
+          end
+          else
+            pSegA := slA.data;
+        end;
+        if assigned(pSegB) then begin
+          if slB.hasNext() then
+            pSegB := slB.next()
+          else
+            pSegB := nil;
+        end
+        else if slB.isEmpty() then
+          pSegB := nil
+        else
+          pSegB := slB.data;
+      end;
+    finally
+      freeAndNil(crossPt);
+    end;
+  end;
+
+  function buildIntersection(slA, slB: TDualLinkedRing; polyA: TGTPoly): TDualLinkedRing;
+
+    procedure reverseSeg(pSeg: PSegDesc);
+    var
+      v: POleVariant;
+      p: TGTPoint;
+      f: TSegFlags;
+    begin
+      v := pSeg.pNode1;
+      pSeg.pNode1 := pSeg.pNode2;
+      pSeg.pNode2 := v;
+      p := pSeg.pPoint1;
+      pSeg.pPoint1 := pSeg.pPoint2;
+      pSeg.pPoint2 := p;
+      f := pSeg.flags;
+      if (sfOnBound1 in f) then
+        include(pSeg.flags, sfOnBound2)
+      else
+        exclude(pSeg.flags, sfOnBound2);
+      if (sfOnBound2 in f) then
+        include(pSeg.flags, sfOnBound1)
+      else
+        exclude(pSeg.flags, sfOnBound1);
+    end;
+
+    procedure buildPolygon(r: TDualLinkedRing);
+    var
+      curList, resList: TDualLinkedRing;
+      curTest, resTest: TIsInTestProc;
+      pSeg: PSegDesc;
+
+      procedure swapLists();
+      var
+        tmpList: TDualLinkedRing;
+        tmpTest: TIsInTestProc;
+      begin
+        tmpList := curList;
+        curList := resList;
+        resList := tmpList;
+        tmpTest := curTest;
+        curTest := resTest;
+        resTest := tmpTest;
+      end;
+
+      procedure deleteSeg();
+      begin
+        assert(pSeg = curList.data, '{5F0D288C-F5F7-485C-BB60-14C3B4F88D69}');
+        freeAndNilSeg(pSeg);
+        curList.delete();
+      end;
+    var
+      firstId, lastId, i641, i642: int64;
+      pt: TGTPoint;
+      bm: pointer;
+      i: integer;
+    begin
+      pt := nil;
+      curList := slA;
+      resList := slB;
+      curTest := isInInt;
+      resTest := polyA.isIn;
+      pSeg := curList.data;
+      firstId := pSeg.pNode1^.id;
+      lastId := pSeg.pNode2^.id;
+      r.insertAfter(pSeg);
+      r.next();
+      curList.delete();
+      try
+        while firstId <> lastId do begin
+          if curList.isEmpty() then
+            swapLists();
+          assert(not curList.isEmpty(), '{0A55EB07-09F5-401C-A312-9DC6E573B28C}');
+          pSeg := curList.data;
+          if not (sfVisited in pSeg.flags) then begin
+            i := ord(sfOnBound1 in pSeg.flags) + 2 * ord(sfOnBound2 in pSeg.flags);
+            case i of
+              0, 2:
+                case curTest(pSeg.pPoint1) of
+                  0: deleteSeg();
+                  1: assert(false, '{1646E1B7-E4DB-4DF0-BCDD-B4D95D344818}');
+                  2: include(pSeg.flags, sfVisited);
+                end;
+              1:
+                case curTest(pSeg.pPoint2) of
+                  0: deleteSeg();
+                  1: assert(false, '{1646E1B7-E4DB-4DF0-BCDD-B4D95D344818}');
+                  2: include(pSeg.flags, sfVisited);
+                end;
+              3: begin
+                  if not assigned(pt) then
+                    pt := TGTPoint.create();
+                  pt.x := (pSeg.pPoint1.x div 2) + (pSeg.pPoint2.x div 2);
+                  pt.y := (pSeg.pPoint1.y div 2) + (pSeg.pPoint2.y div 2);
+                  if curTest(pt) = 0 then
+                    deleteSeg()
+                  else
+                    include(pSeg.flags, sfVisited);
+                end;
+            end;
+          end;
+          if not assigned(pSeg) then
+            continue;
+          i641 := pSeg.pNode1^.id;
+          i642 := pSeg.pNode2^.id;
+          if (i641 = lastId) then begin
+            r.insertAfter(pSeg);
+            r.next();
+            curList.delete();
+            lastId := i642;
+          end
+          else if (i642 = lastId) then begin
+            reverseSeg(pSeg);
+            r.insertAfter(pSeg);
+            r.next();
+            curList.delete();
+            if not curList.isEmpty() then
+              curList.prev();
+            lastId := i641;
+          end
+          else begin
+            bm := curList.bookmark;
+            repeat
+              pSeg := curList.next();
+              if not (sfVisited in pSeg.flags) then
+                break;
+              i641 := pSeg.pNode1^.id;
+              i642 := pSeg.pNode2^.id;
+            until (bm = curList.bookmark) or (i641 = lastId) or (i642 = lastId);
+            if bm = curList.bookmark then
+              swapLists();
+          end;
+        end;
+      finally
+        freeAndNil(pt);
+      end;
+    end;
+  var
+    pSeg: PSegDesc;
+    pt: TGTPoint;
+  begin
+    result := TDualLinkedRing.create();
+    slA.first();
+    while not slA.isEmpty() do begin
+      pSeg := slA.data;
+      if ((not (sfOnBound1 in pSeg.flags)) and (isInInt(pSeg.pPoint1) = 2)) or
+        ((not (sfOnBound2 in pSeg.flags)) and (isInInt(pSeg.pPoint2) = 2)) then begin
+        //segment A is in B
+        buildPolygon(result);
+        continue;
+      end;
+      if (sfOnBound1 in pSeg.flags) and (sfOnBound2 in pSeg.flags) then begin
+        pt := TGTPoint.create();
+        pt.x := (pSeg.pPoint1.x div 2) + (pSeg.pPoint2.x div 2);
+        pt.y := (pSeg.pPoint1.y div 2) + (pSeg.pPoint2.y div 2);
+        if isInInt(pt) > 0 then
+          buildPolygon(result);
+        freeAndNil(pt);
+        continue;
+      end;
+      freeAndNilSeg(pSeg);
+      slA.delete();
+    end;
+  end;
+
+  function buildResult(sl: TDualLinkedRing): OleVariant;
+  var
+    firstId, lastId: int64;
+    nPolyNodes, nPolygons: integer;
+    varArrPoly: OleVariant;
+    pv: POleVariant;
+    pSeg: PSegDesc;
+  begin
+    result := VarArrayCreate([0, -1], varVariant);
+    pSeg := sl.first();
+    nPolygons := 0;
+    while assigned(pSeg) do begin
+      firstId := pSeg.pNode1^.id;
+      lastId := pSeg.pNode2^.id;
+      nPolyNodes := 2;
+      while firstId <> lastId do begin
+        pSeg := sl.next();
+        lastId := pSeg.pNode2^.id;
+        inc(nPolyNodes);
+      end;
+      varArrPoly := VarArrayCreate([0, nPolyNodes - 1], varVariant);
+      pv := VarArrayLock(varArrPoly);
+      inc(pv, nPolyNodes - 1);
+      firstId := pSeg.pNode1^.id;
+      pv^ := pSeg.pNode2^;
+      if (sfOnBound2 in pSeg.flags) then
+        pv^.tags.setByKey('osman:note', 'boundary');
+      while firstId <> lastId do begin
+        dec(pv);
+        pSeg := sl.delete();
+        if not sl.isEmpty() then
+          sl.prev();
+        pv^ := pSeg.pNode1^;
+        if (sfOnBound1 in pSeg.flags) then
+          pv^.tags.setByKey('osman:note', 'boundary');
+        firstId := pv^.id;
+      end;
+
+      if not (sl.isEmpty()) then
+        pSeg := sl.next()
+      else
+        pSeg := nil;
+      VarArrayUnlock(varArrPoly);
+      inc(nPolygons);
+      VarArrayRedim(result, nPolygons - 1);
+      result[nPolygons - 1] := varArrPoly;
+    end;
+  end;
+
+var
+  polyA: TGTPoly;
+  bboxB: TGTRect;
+  crossPt: TGTPoint;
+  i, k, nWayNodes: integer;
+  pNodeVar: POleVariant;
+  bboxVar: OleVariant;
+  segListA, segListB, segListR, tmpList: TDualLinkedRing;
+begin
+  result := VarArrayCreate([0, -1], varVariant);
+  nWayNodes := varArrayLength(aNodeArray);
+  if (aNodeArray[0].id <> aNodeArray[nWayNodes - 1].id) then
+    raise EConvertError.create(toString() + '.getPolyIntersection: node array is not closed.');
+  pNodeVar := nil;
+  bboxB := nil;
+  crossPt := nil;
+  segListA := nil;
+  segListB := nil;
+  segListR := nil;
+  newNodeCount := 0;
+  polyA := TGTPoly.create();
+  try
+    pNodeVar := VarArrayLock(aNodeArray);
+    for i := 0 to nWayNodes - 1 do begin
+      polyA.addNode(pNodeVar^);
+      inc(pNodeVar);
+    end;
+    bboxVar := getBBox(); //[n,e,s,w] in deg
+    bboxB := TGTRect.create();
+    bboxB.top := degToInt(bboxVar[0]);
+    bboxB.right := degToInt(bboxVar[1]);
+    bboxB.bottom := degToInt(bboxVar[2]);
+    bboxB.left := degToInt(bboxVar[3]);
+    if not polyA.canInterserts(bboxB) then
+      exit;
+    //check (segments from A) and (boundbox(B))
+    dec(pNodeVar, nWayNodes);
+    segListA := sortSeg(pNodeVar, sizeof(pNodeVar^), polyA, bboxB);
+    if segListA.isEmpty() then
+      exit;
+    //check (segments from B) and (boundbox(A))
+    k := 0;
+    segListB := TDualLinkedRing.create();
+    for i := 0 to high(simplePolyList) do begin
+      tmpList := sortSeg(@nodeList.items[k].obj, sizeof(nodeList.items[0]), simplePolyList[i],
+        polyA);
+      segListB.appendBefore(tmpList);
+      inc(k, simplePolyList[i].count);
+    end;
+    splitSegments(segListA, segListB);
+
+    segListR := buildIntersection(segListA, segListB, polyA);
+
+    if not (segListR.isEmpty()) then
+      result := buildResult(segListR);
+  finally
+    freeAndNilSegList(segListA);
+    freeAndNilSegList(segListB);
+    freeAndNilSegList(segListR);
+    freeAndNil(polyA);
+    freeAndNil(bboxB);
+    freeAndNil(crossPt);
+    if (assigned(pNodeVar)) then
+      VarArrayUnlock(aNodeArray);
+    for i := 0 to newNodeCount - 1 do begin
+      freeAndNil(newPoints[i]);
+    end;
+  end;
+end;
+
+class function TMultiPoly.getSegmentIntersection(const pt1, pt2, ptA,
+  ptB: TGTPoint): TGTPoint;
+var
+  dx21, dxba, dy21, dyba, dx1a, dy1a, sa2b1, k, t: double;
+begin
+  result := nil;
+  dx21 := pt2.x - pt1.x;
+  dy21 := pt2.y - pt1.y;
+  dxba := ptB.x - ptA.x;
+  dyba := ptB.y - ptA.y;
+  dx1a := pt1.x - ptA.x;
+  dy1a := pt1.y - ptA.y;
+  sa2b1 := dyba * dx21 - dxba * dy21;
+  if sa2b1 <> 0 then begin
+    sa2b1 := 1 / sa2b1;
+    k := (dxba * dy1a - dyba * dx1a) * sa2b1;
+    t := (dx21 * dy1a - dy21 * dx1a) * sa2b1;
+    if (k >= 0) and (k <= 1) and (t >= 0) and (t <= 1) then begin
+      result := TGTPoint.create();
+      result.x := pt1.x + round(k * dx21);
+      result.y := pt1.y + round(k * dy21);
+    end;
+  end
+  else begin
+    //parallel segments
+    k := (dxba * dy1a - dyba * dx1a);
+    if (k = 0) then begin
+      //segments are on one line
+      dxba := abs(dxba);
+      dyba := abs(dyba);
+      if (dxba = (abs(ptB.x - pt1.x) + abs(dx1a))) and
+        (dyba = (abs(ptB.y - pt1.y) + abs(dy1a))) then
+        //l(ba)==l(b1)+l(1a) => 1
+        result := pt1
+      else if (dxba = (abs(ptB.x - pt2.x) + abs(pt2.x - ptA.x))) and
+        (dyba = (abs(ptB.y - pt2.y) + abs(pt2.y - ptA.y))) then
+        //l(ba)==l(b2)+l(2a) => 2
+        result := pt2
+      else if (abs(dx21) = (abs(pt2.x - ptA.x) + abs(ptA.x - pt1.x))) and
+        (abs(dy21) = (abs(pt2.y - ptA.y) + abs(ptA.y - pt1.y))) then
+        //l(21)==l(2a)+l(a1) => a
+        result := ptA;
+      if assigned(result) then
+        result := TGTPoint(result.clone());
+    end;
+  end;
+end;
+{
+procedure test();
+var
+p1,p2:TGTPoint;
+d,md:double;
+i64:int64;
+i,mi:integer;
+begin
+p1:=TGTPoint.Create();
+p2:=TGTPoint.Create();
+p1.lat:=45;
+p1.lon:=46;
+p2.lat:=45.1;
+p2.lon:=46.1;
+d:=1;
+p1.fastDistM(p2);
+asm
+  push esi
+  push edi
+  push ebx
+  mov eax,p1
+  push eax
+  mov eax,p2
+  push eax
+
+  mov ebx,100000000
+//    fld d
+  fldz
+  rdtsc
+  mov esi,eax
+  mov edi,edx
+@@loop:
+  mov edx,[esp]
+  mov eax,[esp+4]
+  call TGTPoint.fastDistSqrM
+  faddp st(1),st(0)
+  sub ebx,1
+  jnz @@loop
+  rdtsc
+  fstp st(0)
+  add esp,8
+  sub eax,esi
+  sbb edx,edi
+  pop edi
+  pop esi
+  mov dword[i64],eax
+  mov dword[i64+4],edx
+end;
+d:=i64/100000000;
+asm
+  mov eax,dword(d)
+end;
+end;
+ }
+
+function TMultiPoly.getArea(): double;
+type
+  TListItem = record
+    area: double;
+    poly: TGTPoly;
+  end;
+  TList = array of TListItem;
+
+  function includes(greater, less: TGTPoly): boolean;
+  var
+    i: integer;
+    p:TGTPoint;
+  begin
+    for i := 0 to less.count - 1 do begin
+      case greater.isIn(less.fPoints[i]) of
+        0: begin
+            result := false;
+            exit;
+          end;
+        2: begin
+            result := true;
+            exit;
+          end;
+      end;
+    end;
+    //all less-poly bound points are on greater-poly bound
+    //check "middle" point of less-poly
+    i:=less.count div 2;
+    p:=TGTPoint.Create();
+    p.lat:=(less.fPoints[0].lat+less.fPoints[i].lat)/2;
+    p.lon:=(less.fPoints[0].lon+less.fPoints[i].lon)/2;
+    result:=greater.isIn(p)>0;
+    freeAndNil(p);
+  end;
+
+var
+  polyList: TList;
+  li: TListItem;
+  i, j: integer;
+begin
+  if not isAllResolved() then
+    raise EConvertError.create(toString() +
+      '.getArea : not all references resolved or polygons closed.');
+  if fArea >= 0 then begin
+    result := fArea;
+    exit;
+  end;
+  setlength(polyList, length(simplePolyList));
+  //fill polyList in area descending order
+  for i := 0 to high(simplePolyList) do begin
+    polyList[i].poly := simplePolyList[i];
+    polyList[i].area := simplePolyList[i].getArea();
+    j := i;
+    while (j > 0) and (polyList[j - 1].area < polyList[j].area) do begin
+      li := polyList[j - 1];
+      polyList[j - 1] := polyList[j];
+      polyList[j] := li;
+      dec(j);
+    end;
+  end;
+  //now set area sign. Positive for outer, negative for inner
+  //index 0, largest polygon always outer, so start with index 1.
+  for i := 1 to high(polyList) do begin
+    //check all greater polygons
+    for j := i - 1 downto 0 do begin
+      if includes(polyList[j].poly, polyList[i].poly) then begin
+        if polyList[j].area > 0 then
+          polyList[i].area := -abs(polyList[i].area)
+        else
+          polyList[i].area := abs(polyList[i].area);
+        break;
+      end;
+    end;
+  end;
+  result := 0;
+  for i := 0 to high(polyList) do
+    result := result + polyList[i].area;
+  fArea := result;
+end;
+
 initialization
   uModule.OSManRegister(TGeoTools, geoToolsClassGUID);
+  //  test();
 end.
 

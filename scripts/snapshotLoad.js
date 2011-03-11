@@ -108,6 +108,7 @@ function main(){
 					//delete from DlList
 					dl.deleteDl(dlf);
 					break;
+				case 6:
 				case 3:
 					dlf.startDownload();
 					echo(path+' restarted');
@@ -116,8 +117,9 @@ function main(){
 				case 5:
 					echo('load in progress');
 					break;
+				
 				default:
-					echo('unknown state '+dl.state+ ' info='+dlf.additionalInfo );
+					echo('unknown state '+dlf.state+ ' info='+dlf.additionalInfo );
 					break;
 				}
 			}else{

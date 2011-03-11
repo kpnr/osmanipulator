@@ -122,7 +122,7 @@ function testOSMReader(){
 	var stg=man.createObject('Storage');
 	stg.dbName=fso.buildPath(testFileDir,'test.db3');
 	map.storage=stg;
-	map.initStorage();
+	stg.initSchema();
 	echo('Map='+map.toString());
 	reader.setInputStream(ubz);
 	reader.setOutputMap(map);

@@ -44,7 +44,7 @@ type
     destructor Destroy; override;
     function CreateStmt(const SQL: WideString): TSQLiteStmt;
     procedure Close();
-    procedure Open(const FileName: WideString);
+    procedure Open(const FileName: WideString;openFlags:integer=SQLITE_OPEN_READWRITE or SQLITE_OPEN_CREATE);
     procedure StartTransaction();
     procedure Commit();
     procedure Rollback();
@@ -109,15 +109,16 @@ begin
   result := assigned(hDB) and (sqlite3_get_autocommit(hDB)=0);
 end;
 
-procedure TSQLiteDB.Open(const FileName: WideString);
+procedure TSQLiteDB.Open(const FileName: WideString;openFlags:integer=SQLITE_OPEN_READWRITE or SQLITE_OPEN_CREATE);
 var
   ec: integer;
 begin
   if (assigned(hDB)) then
     raise ESQLite.Create('TSQLiteDB.Open: already opened', SQLITE_ERROR);
-  ec := SQLite3_Open(pAnsiChar(UTF8Encode(FileName)), hDB);
+  ec := SQLite3_Open_v2(pAnsiChar(UTF8Encode(FileName)), hDB, openFlags,nil{use default vfs});
   if (ec <> SQLITE_OK) then
     raise ESQLite.Create('TSQLiteDB.Open: can`t open ' + FileName, ec);
+//  SQLite3_enable_load_extension(hDB,1);
 end;
 
 procedure TSQLiteDB.Rollback;

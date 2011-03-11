@@ -78,7 +78,8 @@ type
     //Keys and Values interlived - [0]=key[0],[1]=value[0]...[10]=key[5],[11]=value[5],...
     function getAll: OleVariant;
     //add items to list. On key conflict replaces old value with new one.
-    procedure setAll(const keys, values: OleVariant);
+    //kvArray interlived as in getAll() method
+    procedure setAll(const kvArray: OleVariant);
     //returns true if key exists in list.
     function hasKey(const key: WideString): WordBool;
     //returns value assiciated with key. If no such key empty string('') returned
@@ -139,7 +140,7 @@ type
 
   TNode = class(TMapObject, INode)
   protected
-    fLat, fLon: double;
+    fLat, fLon: integer;
   public
     function get_lat: double;
     procedure set_lat(const value: double);
@@ -225,9 +226,6 @@ type
 
     //IMapOnPutFilter
     property onPutFilter: OleVariant read get_onPutFilter write set_onPutFilter;
-
-    //initialize new storage - drop and create tables
-    procedure initStorage(); override;
 
     //set SQL-storage (IStorage). To free system resource set storage to unassigned
     //property storage:OleVariant read get_storage write set_storage;
@@ -364,8 +362,8 @@ begin
   result.userName := row[3];
   result.changeset := row[4];
   result.timestamp := row[5];
-  result.lat := row[6];
-  result.lon := row[7];
+  result.lat := intToDeg(row[6]);
+  result.lon := intToDeg(row[7]);
   if VarIsNull(row[8]) then
     //no tags
     exit;
@@ -551,177 +549,6 @@ begin
     result := unassigned;
 end;
 
-procedure TMap.initStorage;
-
-  procedure exec(const w: WideString);
-  var
-    q: OleVariant;
-  begin
-    q := fStorage.sqlPrepare(w);
-    fStorage.sqlExec(q, '', '');
-  end;
-begin
-  exec('DROP TABLE IF EXISTS nodes');
-  exec('CREATE TABLE IF NOT EXISTS nodes (' +
-    'id INTEGER PRIMARY KEY AUTOINCREMENT,' +
-    'lat FLOAT NOT NULL,' +
-    'lon FLOAT NOT NULL,' +
-    'version INTEGER DEFAULT 1 NOT NULL,' +
-    'timestamp VARCHAR(20),' +
-    'userId INTEGER DEFAULT 0,' +
-    'changeset BIGINT)');
-  exec('CREATE INDEX IF NOT EXISTS nodes_lat_i on nodes(lat);');
-  exec('CREATE INDEX IF NOT EXISTS nodes_lon_i on nodes(lon);');
-  exec('CREATE TRIGGER IF NOT EXISTS nodes_bi BEFORE INSERT ON nodes BEGIN ' +
-    'DELETE FROM objtags WHERE objid=4*NEW.id;' +
-    'END');
-  exec('CREATE TRIGGER IF NOT EXISTS nodes_bu BEFORE UPDATE ON nodes BEGIN ' +
-    'DELETE FROM objtags WHERE objid=4*NEW.id;' +
-    'END');
-  exec('CREATE TRIGGER nodes_bd BEFORE DELETE ON nodes BEGIN ' +
-    'DELETE FROM objtags WHERE objid=4*OLD.id;' +
-    'END');
-
-  exec('DROP TABLE IF EXISTS users');
-  exec('CREATE TABLE IF NOT EXISTS users (' +
-    'id INTEGER PRIMARY KEY AUTOINCREMENT,' +
-    'name VARCHAR(40) NOT NULL)');
-
-  exec('DROP VIEW IF EXISTS strnodes');
-  exec('CREATE VIEW IF NOT EXISTS strnodes AS ' +
-    'SELECT nodes.id AS id, lat AS lat, lon AS lon, version AS version, ' +
-    'timestamp AS timestamp, userId as userId, users.name AS userName, changeset as changeset ' +
-    'FROM nodes,users WHERE nodes.userId=users.id');
-  exec('CREATE TRIGGER IF NOT EXISTS strnodes_ii INSTEAD OF INSERT ON strnodes BEGIN ' +
-    'INSERT OR IGNORE INTO users (id, name) VALUES (NEW.userID, NEW.userName);' +
-    'INSERT OR REPLACE INTO nodes (id,lat,lon,version,timestamp,userId,changeset) ' +
-    'VALUES(NEW.id,NEW.lat,NEW.lon,NEW.version,NEW.timestamp,NEW.userId,NEW.changeset);' +
-    'END;');
-
-  exec('DROP TABLE IF EXISTS tags');
-  exec('CREATE TABLE IF NOT EXISTS tags(' +
-    'id INTEGER NOT NULL CONSTRAINT tags_pk PRIMARY KEY AUTOINCREMENT,' +
-    'tagname VARCHAR(50) CONSTRAINT tags_tagname_c COLLATE BINARY,' +
-    'tagvalue VARCHAR(150) CONSTRAINT tags_tagvalue_c COLLATE BINARY' +
-    ')');
-  exec('CREATE UNIQUE INDEX IF NOT EXISTS tags_tagname_tagvalue_i ' +
-    'ON tags(tagname,tagvalue)');
-
-  exec('DROP TABLE IF EXISTS objtags');
-  exec('CREATE TABLE IF NOT EXISTS objtags(' +
-    'objid BIGINT NOT NULL /* =id*4 + (0 for node, 1 for way, 2 for relation) */,' +
-    'tagid BIGINT NOT NULL,' +
-    'CONSTRAINT objtags_pk PRIMARY KEY (objid,tagid)' +
-    ')');
-
-  exec('DROP VIEW IF EXISTS strobjtags');
-  exec('CREATE VIEW strobjtags AS ' +
-    'SELECT objid AS ''objid'',tagname AS ''tagname'',tagvalue AS ''tagvalue'' ' +
-    'FROM objtags,tags WHERE objtags.tagid=tags.id');
-  exec('CREATE TRIGGER strobjtags_ii INSTEAD OF INSERT ON strobjtags BEGIN ' +
-    'INSERT OR IGNORE INTO tags (tagname, tagvalue) ' +
-    'VALUES (NEW.tagname,NEW.tagvalue);' +
-    'INSERT OR IGNORE INTO objtags(objid,tagid) ' +
-    'VALUES (NEW.objid,(SELECT id FROM tags WHERE tags.tagname=NEW.tagname AND tags.tagvalue=NEW.tagvalue));' +
-    'END;');
-
-  exec('DROP TABLE IF EXISTS ways');
-  exec('CREATE TABLE IF NOT EXISTS ways (' +
-    'id INTEGER PRIMARY KEY AUTOINCREMENT,' +
-    'version INTEGER DEFAULT 1 NOT NULL,' +
-    'timestamp VARCHAR(20),' +
-    'userId INTEGER DEFAULT 0,' +
-    'changeset BIGINT)');
-  exec('CREATE TRIGGER IF NOT EXISTS ways_bi BEFORE INSERT ON ways BEGIN ' +
-    'DELETE FROM objtags WHERE objid=1+4*NEW.id;' +
-    'DELETE FROM waynodes WHERE wayid=NEW.id;' +
-    'END');
-  exec('CREATE TRIGGER IF NOT EXISTS ways_bu BEFORE UPDATE ON ways BEGIN ' +
-    'DELETE FROM objtags WHERE objid=1+4*NEW.id;' +
-    'DELETE FROM waynodes WHERE wayid=NEW.id;' +
-    'END');
-  exec('CREATE TRIGGER was_bd BEFORE DELETE ON ways BEGIN ' +
-    'DELETE FROM objtags WHERE objid=1+4*OLD.id;' +
-    'DELETE FROM waynodes WHERE wayid=OLD.id;' +
-    'END');
-
-  exec('DROP VIEW IF EXISTS strways');
-  exec('CREATE VIEW IF NOT EXISTS strways AS ' +
-    'SELECT ways.id AS id, version AS version, ' +
-    'timestamp AS timestamp, userId as userId, users.name AS userName, changeset as changeset ' +
-    'FROM ways,users WHERE ways.userId=users.id');
-  exec('CREATE TRIGGER IF NOT EXISTS strways_ii INSTEAD OF INSERT ON strways BEGIN ' +
-    'INSERT OR IGNORE INTO users (id, name) VALUES (NEW.userId, NEW.userName);' +
-    'INSERT OR REPLACE INTO ways (id,version,timestamp,userId,changeset) ' +
-    'VALUES(NEW.id,NEW.version,NEW.timestamp,NEW.userId,NEW.changeset);' +
-    'END;');
-
-  exec('DROP TABLE IF EXISTS waynodes');
-  exec('CREATE TABLE IF NOT EXISTS waynodes (' +
-    'wayid INTEGER NOT NULL,' +
-    'nodeidx INTEGER NOT NULL,' +
-    'nodeid INTEGER NOT NULL,' +
-    'PRIMARY KEY (wayid,nodeidx))');
-  exec('CREATE INDEX IF NOT EXISTS waynodes_nodeid_i ON waynodes (nodeid)');
-
-  exec('DROP TABLE IF EXISTS relations');
-  exec('CREATE TABLE IF NOT EXISTS relations (' +
-    'id INTEGER PRIMARY KEY AUTOINCREMENT,' +
-    'version INTEGER DEFAULT 1 NOT NULL,' +
-    'timestamp VARCHAR(20),' +
-    'userId INTEGER DEFAULT 0,' +
-    'changeset BIGINT)');
-  exec('CREATE TRIGGER IF NOT EXISTS relations_bi BEFORE INSERT ON relations BEGIN ' +
-    'DELETE FROM objtags WHERE objid=2+4*NEW.id;' +
-    'DELETE FROM relationmembers WHERE relationid=NEW.id;' +
-    'END');
-  exec('CREATE TRIGGER IF NOT EXISTS relations_bu BEFORE UPDATE ON relations BEGIN ' +
-    'DELETE FROM objtags WHERE objid=2+4*NEW.id;' +
-    'DELETE FROM relationmembers WHERE relationid=NEW.id;' +
-    'END');
-  exec('CREATE TRIGGER relations_bd BEFORE DELETE ON relations BEGIN ' +
-    'DELETE FROM objtags WHERE objid=2+4*OLD.id;' +
-    'DELETE FROM relationmembers WHERE relationid=OLD.id;' +
-    'END');
-
-  exec('DROP VIEW IF EXISTS strrelations');
-  exec('CREATE VIEW IF NOT EXISTS strrelations AS ' +
-    'SELECT relations.id AS id, version AS version, ' +
-    'timestamp AS timestamp, userId as userId, users.name AS userName, changeset as changeset ' +
-    'FROM relations,users WHERE relations.userId=users.id');
-  exec('CREATE TRIGGER IF NOT EXISTS strrelations_ii INSTEAD OF INSERT ON strrelations BEGIN ' +
-    'INSERT OR IGNORE INTO users (id, name) VALUES (NEW.userId, NEW.userName);' +
-    'INSERT OR REPLACE INTO relations (id,version,timestamp,userId,changeset) ' +
-    'VALUES(NEW.id,NEW.version,NEW.timestamp,NEW.userId,NEW.changeset);' +
-    'END;');
-
-  exec('DROP TABLE IF EXISTS relationmembers');
-  exec('CREATE TABLE IF NOT EXISTS relationmembers(' +
-    'relationid INTEGER NOT NULL,' +
-    'memberidxtype INTEGER NOT NULL,/*=index*4+(0 for node, 1 for way, 2 for relation)*/' +
-    'memberid INTEGER NOT NULL,' +
-    'memberrole VARCHAR(20) DEFAUlT '''',' +
-    'PRIMARY KEY (relationid,memberidxtype))');
-  exec('CREATE INDEX IF NOT EXISTS relationmembers_memberid_i ON relationmembers(memberid)');
-
-  exec('DROP VIEW IF EXISTS strrelationmembers');
-  exec('CREATE VIEW IF NOT EXISTS strrelationmembers AS ' +
-    'SELECT relationid AS relationid, ' +
-    '(memberidxtype>>2) AS memberidx,' +
-    '(CASE (memberidxtype & 3) WHEN 0 THEN ''node'' WHEN 1 THEN ''way'' WHEN 2 THEN ''relation'' ELSE '''' END) AS membertype,' +
-    'memberid AS memberid,' +
-    'memberrole AS memberrole ' +
-    'FROM relationmembers');
-  exec('CREATE TRIGGER IF NOT EXISTS strrelationmembers_ii INSTEAD OF INSERT ON strrelationmembers BEGIN '
-    +
-    'INSERT OR REPLACE INTO relationmembers (relationid,memberidxtype,memberid,memberrole) ' +
-    'VALUES(NEW.relationid,' +
-    'NEW.memberidx*4+(CASE NEW.membertype WHEN ''node'' THEN 0 WHEN ''way'' THEN 1 WHEN ''relation'' THEN 2 ELSE 3 END),' +
-    'NEW.memberid,' +
-    'NEW.memberrole);' +
-    'END;');
-end;
-
 procedure TMap.putNode(const aNode: OleVariant);
 var
   id: int64;
@@ -741,7 +568,8 @@ begin
   end;
   fStorage.sqlExec(fQryPutNode, VarArrayOf([':id', ':lat', ':lon', ':version', ':timestamp',
     ':userId', ':userName', ':changeset']),
-      VarArrayOf([id, aNode.lat, aNode.lon, aNode.version, aNode.timestamp, aNode.userId,
+      VarArrayOf([id, degToInt(aNode.lat), degToInt(aNode.lon), aNode.version, aNode.timestamp,
+        aNode.userId,
     aNode.userName, aNode.changeset]));
   k := aNode.tags;
   putTags(id, 0, k.getAll);
@@ -1094,20 +922,28 @@ begin
     end;
 end;
 
-procedure TTags.setAll(const keys, values: OleVariant);
+procedure TTags.setAll(const kvArray: OleVariant);
 var
-  i, kl, kh, vl, vh: integer;
+  i, l: integer;
+  a: OleVariant;
+  pv1, pv2: POleVariant;
 begin
-  if (VarArrayDimCount(keys) <> 1) or (VarArrayDimCount(values) <> 1) then
-    raise ERangeError.create(toString() + '.setAll: need array arguments');
-  kl := VarArrayLowBound(keys, 1);
-  kh := VarArrayHighBound(keys, 1);
-  vl := VarArrayLowBound(values, 1);
-  vh := VarArrayHighBound(values, 1);
-  if (kh - kl) <> (vh - vl) then
-    raise ERangeError.create(toString() + '.setAll: need arrays of same size');
-  for i := 0 to kh - kl do begin
-    setByKey(VarArrayGet(keys, [kl + i]), VarArrayGet(values, [vl + i]));
+  a := varFromJsObject(kvArray);
+  if (VarArrayDimCount(a) <> 1) or odd(varArrayLength(a)) then
+    raise ERangeError.create(toString() + '.setAll: need even-length array');
+  l := varArrayLength(a) div 2;
+  pv1 := VarArrayLock(a);
+  try
+    pv2 := pv1;
+    inc(pv2);
+    fCount:=0;
+    for i := 0 to l - 1 do begin
+      setByKey(pv1^, pv2^);
+      inc(pv1,2);
+      inc(pv2,2);
+    end;
+  finally
+    VarArrayUnlock(a);
   end;
 end;
 
@@ -1156,26 +992,26 @@ end;
 
 function TNode.get_lat: double;
 begin
-  result := fLat;
+  result := intToDeg(fLat);
 end;
 
 function TNode.get_lon: double;
 begin
-  result := fLon;
+  result := intToDeg(fLon);
 end;
 
 procedure TNode.set_lat(const value: double);
 begin
   if (value > 90) or (value < -90) then
     raise ERangeError.create(toString() + '.set_lat: lat out of range');
-  fLat := value;
+  fLat := degToInt(value);
 end;
 
 procedure TNode.set_lon(const value: double);
 begin
   if (value > 180) or (value < -180) then
     raise ERangeError.create(toString() + '.set_lon: lon out of range');
-  fLon := value;
+  fLon := degToInt(value);
 end;
 
 { TWay }
@@ -1210,9 +1046,9 @@ var
   i: integer;
   pv: PVarData;
   pi: PInt64;
-  v:OleVariant;
+  v: OleVariant;
 begin
-  v:=varFromJsObject(newNodes);
+  v := varFromJsObject(newNodes);
   if (VarArrayDimCount(v) <> 1) or ((VarType(v) and varTypeMask) <> varVariant) then
     raise EConvertError.create(toString() + '.set_nodes: array of variants expected');
   i := VarArrayHighBound(v, 1) - VarArrayLowBound(v, 1) + 1;
@@ -1274,9 +1110,9 @@ end;
 
 procedure TMapObjectStream.initialize(const aMap: TMap; const aStorage, aFilter: OleVariant);
 
-procedure parseBox(var pv: POleVariant; var idx: integer; cnt: integer);
+  procedure parseBox(var pv: POleVariant; var idx: integer; cnt: integer);
   const
-    bboxextra=2e-7;
+    bboxextra = 2E-7;
   var
     n, e, s, w: double;
   begin
@@ -1284,23 +1120,25 @@ procedure parseBox(var pv: POleVariant; var idx: integer; cnt: integer);
     //set pv to north
     inc(pv);
     inc(idx);
-    n := pv^+bboxextra;
+    n := pv^ + bboxextra;
     inc(pv);
     inc(idx);
-    e := pv^+bboxextra;
+    e := pv^ + bboxextra;
     inc(pv);
     inc(idx);
-    s := pv^-bboxextra;
+    s := pv^ - bboxextra;
     inc(pv);
     inc(idx);
-    w := pv^-bboxextra;
+    w := pv^ - bboxextra;
     if fNodeSelectCondition <> '' then
       fNodeSelectCondition := fNodeSelectCondition + ' OR '
     else
       fNodeSelectCondition := ' WHERE ';
     fNodeSelectCondition := fNodeSelectCondition +
-      '( (lat BETWEEN ' + degToStr(s) + ' AND ' + degToStr(n) + ') AND ' +
-      '(lon BETWEEN ' + degToStr(w) + ' AND ' + degToStr(e) + ') )';
+      '( (lat BETWEEN ' + intToStr(degToInt(s)) + ' AND ' +
+      intToStr(degToInt(n)) + ') AND ' +
+      '(lon BETWEEN ' + intToStr(degToInt(w)) + ' AND ' +
+      intToStr(degToInt(e)) + ') )';
   end;
 
   procedure parsePoly(var pv: POleVariant; var idx: integer; cnt: integer);
@@ -1413,7 +1251,7 @@ end;
 
 function TMapObjectStream.read1: OleVariant;
 
-procedure addNodeToList(const nodeId: int64);
+  procedure addNodeToList(const nodeId: int64);
   begin
     fNodeList.add(nodeId);
   end;
@@ -1667,10 +1505,10 @@ var
   i: integer;
 begin
   if aEOS and not fEOS then begin
-    fNodeList:=unassigned;
-    fWayList:=unassigned;
-    fRelList:=unassigned;
-    fToDoRelList:=unassigned;
+    fNodeList := unassigned;
+    fWayList := unassigned;
+    fRelList := unassigned;
+    fToDoRelList := unassigned;
     for i := 0 to high(fCustomFilters) do
       FreeAndNil(fCustomFilters[i]);
     setLength(fCustomFilters, 0);
