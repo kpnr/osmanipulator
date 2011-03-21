@@ -7,4 +7,4 @@ if (WScript.FullName.search(re)>=0){
 var fso=WScript.CreateObject('Scripting.FileSystemObject');
 var scriptDir=fso.getParentFolderName(WScript.ScriptFullName);
 var r=sh.Run('regsvr32 "'+fso.buildPath(scriptDir,'OSMan.omm')+'"',1,true);
-WScript.echo('Install comleted '+((r)?('with errors'):('successfully')));
+WScript.echo('Install completed '+((r)?('with errors'):('successfully')));

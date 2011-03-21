@@ -268,8 +268,7 @@ begin
     fQryDeleteNode := fStorage.sqlPrepare(
       'DELETE FROM nodes WHERE id=:id');
   end;
-  fStorage.sqlExec(fQryDeleteNode, VarArrayOf([':id']),
-    VarArrayOf([nodeId]));
+  fStorage.sqlExec(fQryDeleteNode, ':id',nodeId);
 end;
 
 procedure TMap.deleteRelation(const relationId: int64);
@@ -280,8 +279,7 @@ begin
     fQryDeleteRelation := fStorage.sqlPrepare(
       'DELETE FROM relations WHERE id=:id');
   end;
-  fStorage.sqlExec(fQryDeleteRelation, VarArrayOf([':id']),
-    VarArrayOf([relationId]));
+  fStorage.sqlExec(fQryDeleteRelation, ':id',relationId);
 end;
 
 procedure TMap.deleteWay(const wayId: int64);
@@ -292,8 +290,7 @@ begin
     fQryDeleteWay := fStorage.sqlPrepare(
       'DELETE FROM ways WHERE id=:id');
   end;
-  fStorage.sqlExec(fQryDeleteWay, VarArrayOf([':id']),
-    VarArrayOf([wayId]));
+  fStorage.sqlExec(fQryDeleteWay, ':id',wayId);
 end;
 
 destructor TMap.destroy;
@@ -351,7 +348,7 @@ begin
   if VarIsEmpty(fQryGetNode) then begin
     fQryGetNode := fStorage.sqlPrepare(sQry);
   end;
-  qr := fStorage.sqlExec(fQryGetNode, VarArrayOf([':id']), VarArrayOf([id]));
+  qr := fStorage.sqlExec(fQryGetNode, ':id', id);
   result := false;
   if qr.eos then exit;
   row := qr.read(1);
@@ -414,7 +411,7 @@ begin
   if VarIsEmpty(fQryGetRelation) then begin
     fQryGetRelation := fStorage.sqlPrepare(sQry);
   end;
-  qr := fStorage.sqlExec(fQryGetRelation, VarArrayOf([':id']), VarArrayOf([id]));
+  qr := fStorage.sqlExec(fQryGetRelation, ':id',id);
   result := false;
   if qr.eos then exit;
   row := qr.read(1);
@@ -438,7 +435,7 @@ begin
   if VarIsEmpty(fQryGetRelationMembers) then begin
     fQryGetRelationMembers := fStorage.sqlPrepare(sQryMembers);
   end;
-  qr := fStorage.sqlExec(fQryGetRelationMembers, VarArrayOf([':id']), VarArrayOf([id]));
+  qr := fStorage.sqlExec(fQryGetRelationMembers, ':id', id);
   if not qr.eos then begin
     //relation has members
     t := result.members;
@@ -486,7 +483,7 @@ begin
   if VarIsEmpty(fQryGetWay) then begin
     fQryGetWay := fStorage.sqlPrepare(sQry);
   end;
-  qr := fStorage.sqlExec(fQryGetWay, VarArrayOf([':id']), VarArrayOf([id]));
+  qr := fStorage.sqlExec(fQryGetWay, ':id',id);
   result := false;
   if qr.eos then exit;
   row := qr.read(1);
@@ -510,7 +507,7 @@ begin
   if VarIsEmpty(fQryGetWayNodes) then begin
     fQryGetWayNodes := fStorage.sqlPrepare(sQryNodes);
   end;
-  qr := fStorage.sqlExec(fQryGetWayNodes, VarArrayOf([':id']), VarArrayOf([id]));
+  qr := fStorage.sqlExec(fQryGetWayNodes, ':id', id);
   if not qr.eos then begin
     //way has nodes
     ndCount := 0;

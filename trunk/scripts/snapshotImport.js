@@ -1,6 +1,7 @@
 //settings begin
 var scriptIniFile='F:\\db\\osm\\snapdl.ini';
 var scriptCfgFile='F:\\db\\osm\\snapdl.cfg';
+var cIntToDeg=1/10000000;
 //settings end
 
 function include(n){var w=WScript,h=w.createObject('WScript.Shell'),o=h.currentDirectory,s=w.createObject('Scripting.FileSystemObject'),f,t;h.currentDirectory=s.getParentFolderName(w.ScriptFullName);try{f=s.openTextFile(n,1,!1);try{t=f.ReadAll()}finally{f.close()}return eval(t)}catch(e){if(e instanceof Error)e.description+=' '+n;throw e}finally{h.currentDirectory=o}}
@@ -9,28 +10,8 @@ var h=new (include('helpers.js'))();
 var echo=h.echo;
 var Ini=include('inifile.js');
 
-function completeFromNet(strObjType,objIds,dstMap){
-	echo('Completing '+objIds.length+' '+strObjType+'s');
-	var netmap=h.man.createObject('NetMap');
-	netmap.storage=h.man.createObject('HTTPStorage');
-	for(var i=0;i<objIds.length;){
-		var obj=false;
-		switch(strObjType){
-			case 'node':
-				obj=netmap.getNode(objIds[i]);
-				break;
-			case 'way':
-				obj=netmap.getWay(objIds[i]);
-				break;
-			case 'relation':
-				obj=netmap.getRelation(objIds[i]);
-				break;
-		};
-		if(obj)dstMap.putObject(obj);
-		i++;
-		WScript.stdOut.write('	'+i+'/'+objIds.length+strObjType+'          \r');
-	};
-	echo('');
+function curTime(){
+	return (new Date()).toLocaleString();
 };
 
 function openMap(storageName,cacheSize){
@@ -45,12 +26,13 @@ function openMap(storageName,cacheSize){
 };
 
 function clipMap(cfg){
-	echo((new Date()).toLocaleString()+' Clipping map...');
+	echo(curTime()+' Clipping map...');
 	var startTime=new Date();
+	var chunkSize=1000;
 	var clipPoly=h.gt.createPoly();
 	var clipPoly=h.gt.createPoly();
 	var srcMapFileName=cfg.data['destDBName'];
-	var src=openMap(src.mapFileName);
+	var src=openMap(srcMapFileName);
 	try{
 		var clipStr=cfg.data['mapClipPoly'].split(':');
 		switch(clipStr[0]){
@@ -65,50 +47,128 @@ function clipMap(cfg){
 		};
 		if(!clipObj)return false;
 		clipPoly.addObject(clipObj);
+		echo(curTime()+' resolving boundary...');
 		if(!clipPoly.resolve(src.map)){
+			echo('	...failed');
 			return false;
 		};
+		echo('	...done');
 	}finally{
 		src.close();
 	};
+	echo('	copy old map...');
 	h.fso.copyFile(srcMapFileName,cfg.data['mapClipTempFile'],true);
 	h.fso.deleteFile(srcMapFileName);
-	var dst=openMap(srcMapFileName,200000);
-	src.map=openMap(cfg.data['mapClipTempFile'],50000);
-	var mapClipFilter=cfg.data['mapClipFilter'].split(',').concat(':bpoly',clipPoly);
-	var objCnt=0;
-	var chunkSize=1000;
-	var srcStream=src.map.getObjects(mapClipFilter);
-	while(!srcStream.eos){
-		var objs=srcStream.read(chunkSize).toArray();
-		for(var i=0;i<objs.length;i++)dst.map.putObject(objs[i]);
-		var dt=(new Date())-startTime;
-		objCnt+=chunkSize;
-		echo('	nObj='+objCnt+'	Speed='+Math.round(objCnt/dt*1000)+' obj/sec          \r',true);
+	echo('	done');
+	var dst=openMap(srcMapFileName,50000);
+	src=openMap(cfg.data['mapClipTempFile'],200000);
+	var netMap=h.man.createObject('NetMap');
+	netMap.storage=h.man.createObject('HTTPStorage');
+	var nodeList=src.map.storage.createIdList();
+	var wayList=src.map.storage.createIdList();
+	var relList=src.map.storage.createIdList();
+	var addList=src.map.storage.createIdList();
+	var qobj=src.exec('SELECT id, minlat as lat ,minlon as lon FROM nodes_latlon WHERE '+cfg.data['mapClipFilter']);
+	var objCnt=0,qryCnt=0;
+	var testNode=src.map.createNode();
+	echo(curTime()+' building node list');
+	while(!qobj.eos){
+		var nodes=qobj.read(chunkSize).toArray();
+		for(var i=0;i<nodes.length;i+=3){
+			testNode.lat=nodes[i+1]*cIntToDeg;
+			testNode.lon=nodes[i+2]*cIntToDeg;
+			if(clipPoly.isIn(testNode)){
+				nodeList.add(nodes[i]);
+				objCnt++;
+			}
+			qryCnt++;
+		}
+		echo(curTime()+' '+objCnt+' of '+qryCnt+' nodes added.',true);
+	}
+	echo('');
+	echo(curTime()+' building way list');
+	src.exec('INSERT OR IGNORE INTO '+wayList.tableName+'(id) SELECT wayid FROM waynodes WHERE nodeid IN (SELECT id FROM '+nodeList.tableName+')');
+	echo(curTime()+' building relation list');
+	src.exec('INSERT OR IGNORE INTO '+relList.tableName+'(id) SELECT relationid FROM relationmembers WHERE (memberid IN (SELECT id FROM '+nodeList.tableName+') AND memberidxtype&3=0) OR (memberid IN (SELECT id FROM '+wayList.tableName+') AND memberidxtype&3=1 )');
+	echo(curTime()+' completing relation list');
+	do{
+		src.exec('INSERT OR IGNORE INTO ' + addList.tableName + '(id) SELECT relationid FROM relationmembers WHERE memberid IN (SELECT id FROM ' + relList.tableName + ') AND (memberidxtype & 3)=2');
+		src.exec('DELETE FROM ' + addList.tableName + ' WHERE id IN (SELECT id FROM ' + relList.tableName + ')');
+		src.exec('INSERT INTO '+relList.tableName+'(id) SELECT id FROM '+addList.tableName);
+		qobj=src.exec('SELECT count(1) FROM '+addList.tableName);
+		objCnt=qobj.read(1).toArray()[0];
+		echo(curTime()+' added '+objCnt+' relations');
+	}while(objCnt>0);
+	echo(curTime()+' completing way list');
+	src.exec('INSERT OR IGNORE INTO '+wayList.tableName+'(id) SELECT memberid FROM relationmembers WHERE (relationid IN (SELECT id FROM '+relList.tableName+')) AND memberidxtype&3=1');
+	echo(curTime()+' completing node list (relations)');
+	src.exec('INSERT OR IGNORE INTO '+nodeList.tableName+'(id) SELECT memberid FROM relationmembers WHERE (relationid IN (SELECT id FROM '+relList.tableName+')) AND memberidxtype&3=0');
+	echo(curTime()+' completing node list (ways)');
+	src.exec('INSERT OR IGNORE INTO '+nodeList.tableName+'(id) SELECT nodeid FROM waynodes WHERE (wayid IN (SELECT id FROM '+wayList.tableName+'))');
+	echo(curTime()+' Exporting objects...');
+	qobj=src.exec('SELECT id FROM '+nodeList.tableName);
+	objCnt=0;
+	while(!qobj.eos){
+		var objs=qobj.read(chunkSize).toArray();
+		for(var i=0;i<objs.length;i++){
+			var obj=src.map.getNode(objs[i]);
+			if(!obj)try{
+				obj=netMap.getNode(objs[i]);
+			}catch(e){
+				echo('Can`t find node '+objs[i]+'. '+e.message);
+			};
+			if(obj){
+				dst.map.putObject(obj);
+				objCnt++;
+			}
+		};
+		echo(curTime()+' '+objCnt+' nodes exported',true);
 	};
 	echo('');
-	var objids=dst.completeRelationNodes(src.map);
-	if(objids.length){
-		completeFromNet('node',objids,dst.map);
+	qobj=src.exec('SELECT id FROM '+wayList.tableName);
+	objCnt=0;
+	while(!qobj.eos){
+		var objs=qobj.read(chunkSize).toArray();
+		for(var i=0;i<objs.length;i++){
+			var obj=src.map.getWay(objs[i]);
+			if(!obj)try{
+				obj=netMap.getWay(objs[i]);
+			}catch(e){
+				echo('Can`t find way '+objs[i]+'. '+e.message);
+			};
+			if(obj){
+				dst.map.putObject(obj);
+				objCnt++;
+			}
+		};
+		echo(curTime()+' '+objCnt+' ways exported',true);
 	};
-	objids=dst.completeRelationWays(src.map);
-	if(objids.length){
-		completeFromNet('way',objids,dst.map);
+	echo('');
+	qobj=src.exec('SELECT id FROM '+relList.tableName);
+	objCnt=0;
+	while(!qobj.eos){
+		var objs=qobj.read(chunkSize).toArray();
+		for(var i=0;i<objs.length;i++){
+			var obj=src.map.getRelation(objs[i]);
+			if(!obj)try{
+				obj=netMap.getRelation(objs[i]);
+			}catch(e){
+				echo('Can`t find relation '+objs[i]+'. '+e.message);
+			};
+			if(obj){
+				dst.map.putObject(obj);
+				objCnt++;
+			}
+		};
+		echo(curTime()+' '+objCnt+' relations exported',true);
 	};
-	objids=dst.completeWayNodes(src.map);
-	if(objids.length){
-		completeFromNet('node',objids,dst.map);
-	};
+	echo('');
+	//cleanup db objects
+	qobj='';
 	src.close();
 	dst.close();
-	echo((new Date()).toLocaleString()+' ...map clipped');
+	echo(curTime()+'... clipping finished');
 	return true;
-};
-
-function clipMapForce(){
-	return false;
-	var netMap=man.createObject('NetMap');
-	netMap.storage=man.createObject('HTTPStorage');
 };
 
 function main(){
