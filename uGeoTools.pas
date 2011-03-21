@@ -1358,18 +1358,18 @@ function TMultiPoly.resolve(const srcMap: OleVariant): boolean;
             inc(pv, 2);
             dec(mlen, 3);
             if (s = 'relation') then begin
-              newObj := srcMap.getRelation(id);
+              VarCopyNoInd(Variant(newObj), srcMap.getRelation(id));
               if varIsType(newObj, varDispatch) then
-                putList(relationList, VarAsType(newObj, varDispatch), i)
+                putList(relationList, newObj, i)
               else begin
                 addNotResolved('relation', id);
                 result := false;
               end;
             end
             else if (s = 'way') then begin
-              newObj := srcMap.getWay(id);
+              VarCopyNoInd(Variant(newObj),srcMap.getWay(id));
               if varIsType(newObj, varDispatch) then
-                putList(wayList, VarAsType(newObj, varDispatch), i)
+                putList(wayList, newObj, i)
               else begin
                 addNotResolved('way', id);
                 result := false;
@@ -1428,9 +1428,9 @@ var
           id := pv^;
           inc(pv);
           dec(mlen);
-          newObj := srcMap.getNode(id);
+          VarCopyNoInd(Variant(newObj),srcMap.getNode(id));
           if varIsType(newObj, varDispatch) then
-            putList(pwd^.way, VarAsType(newObj, varDispatch), i)
+            putList(pwd^.way, newObj, i)
           else begin
             addNotResolved('node', id);
             result := false;

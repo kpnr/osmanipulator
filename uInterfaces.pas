@@ -274,7 +274,7 @@ type
     property storage:OleVariant read get_storage write set_storage;
   end;
 
-  IStoredIdList=interface(IStorageUser)
+  IStoredIdList=interface(IOSManAll)
     function get_tableName:wideString; 
 
     //returns true if `id` is in list

@@ -401,7 +401,7 @@ begin
   mapObj := fReader.oMap.createWay;
   readObjAttributes(atts);
   ndCount := 0;
-  setLength(ndList, 4);
+  setLength(ndList, 14);
 end;
 
 procedure TWayHandler.endElement(const uri, localName, qName: SAXString);

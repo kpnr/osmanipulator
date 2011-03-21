@@ -3,7 +3,7 @@ unit SQLiteObj;
 interface
 
 uses
-  SysUtils, SQLite3;
+  SysUtils, SQLite3,Variants;
 
 type
   ESQLite = class(Exception)
@@ -52,8 +52,6 @@ type
   end;
 
 implementation
-
-uses Variants, Math;
 
 { TSQLiteDB }
 
@@ -112,13 +110,17 @@ end;
 procedure TSQLiteDB.Open(const FileName: WideString;openFlags:integer=SQLITE_OPEN_READWRITE or SQLITE_OPEN_CREATE);
 var
   ec: integer;
+  //pc:PAnsiChar;
 begin
   if (assigned(hDB)) then
     raise ESQLite.Create('TSQLiteDB.Open: already opened', SQLITE_ERROR);
   ec := SQLite3_Open_v2(pAnsiChar(UTF8Encode(FileName)), hDB, openFlags,nil{use default vfs});
   if (ec <> SQLITE_OK) then
     raise ESQLite.Create('TSQLiteDB.Open: can`t open ' + FileName, ec);
-//  SQLite3_enable_load_extension(hDB,1);
+  SQLite3_enable_load_extension(hDB,1);
+  {pc:=nil;
+  SQLite3_load_extension(hDB,'c:\tmp\vcc\mydll\Debug\mydll.dll',nil,pc);
+  if assigned(pc) then SQlite3_Free(pc);}
 end;
 
 procedure TSQLiteDB.Rollback;

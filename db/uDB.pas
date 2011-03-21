@@ -14,11 +14,16 @@ const
   dbfReaderClassGUID: TGUID = '{616CDC46-28E6-46FB-876F-623C867011D7}';
 
 type
-  TQueryResult = class(TOSManObject, IQueryResult)
+  TStorageChild = class(TOSManObject)
+  protected
+    fOnClose: TNotifyEvent;
+    procedure close(); virtual; abstract;
+  end;
+
+  TQueryResult = class(TStorageChild, IQueryResult)
   protected
     fQry: TSQLiteStmt;
-    fOnClose: TNotifyEvent;
-    procedure close();
+    procedure close(); override;
   public
     function get_eos(): WordBool;
     destructor destroy; override;
@@ -33,7 +38,7 @@ type
     procedure sqlExecInt(const paramNames, paramValues: OleVariant);
   end;
 
-  TStoredIdList = class(TOSManObject, IStoredIdList)
+  TStoredIdList = class(TStorageChild, IStoredIdList)
   protected
     fStorage: OleVariant;
     fQryAdd: OleVariant;
@@ -42,28 +47,27 @@ type
     fTableName: WideString;
     fTableCreated: boolean;
     function get_tableName: WideString;
+    procedure dbOpenCheck();
     procedure createTable();
     procedure deleteTable();
+    procedure close(); override;
   public
     destructor destroy; override;
-    function get_storage(): OleVariant;
-    procedure set_storage(const aStorage: OleVariant);
   published
     function isIn(const id: int64): boolean;
     procedure add(const id: int64);
     procedure delete(const id: int64);
     property tableName: WideString read get_tableName;
-    property storage: OleVariant read get_storage write set_storage;
   end;
 
   TStorage = class(TOSManObject, IStorage)
   protected
     fDBName: WideString;
     fDB: TSQLiteDB;
-    fQryList: TObjectList;
+    fChildList: TObjectList;
     fReadOnly: boolean;
     procedure exec(const sql: WideString);
-    procedure onCloseQuery(query: TObject);
+    procedure onCloseQuery(child: TObject);
     procedure initDBMode();
     procedure close();
   public
@@ -118,9 +122,9 @@ type
 
 procedure TStorage.close;
 begin
-  if assigned(fQryList) then begin
-    while (fQryList.Count > 0) do
-      TQueryResult(fQryList[fQryList.Count - 1]).close();
+  if assigned(fChildList) then begin
+    while (fChildList.Count > 0) do
+      TStorageChild(fChildList[fChildList.Count - 1]).close();
   end;
   if assigned(fDB) then begin
     if fDB.IsInTransaction then
@@ -133,9 +137,17 @@ function TStorage.createIdList: OleVariant;
 var
   sil: TStoredIdList;
 begin
+  if not assigned(fDB) then
+    raise EInOutError.Create(toString() +
+      '.createIdList: can not create IdList on closed database');
   sil := TStoredIdList.Create();
-  sil.storage := self as IDispatch;
+  sil.fStorage := self as IDispatch;
+  sil.fOnClose := onCloseQuery;
+  sil.createTable();
   result := sil as IDispatch;
+  if not assigned(fChildList) then
+    fChildList := TObjectList.Create(false);
+  fChildList.add(sil);
 end;
 
 destructor TStorage.destroy;
@@ -143,6 +155,7 @@ begin
   if assigned(fDB) then begin
     close();
   end;
+  FreeAndNil(fChildList);
   inherited;
 end;
 
@@ -241,8 +254,8 @@ begin
     'FROM nodes_attr,nodes_latlon,users ' +
     'WHERE nodes_attr.id=nodes_latlon.id AND nodes_attr.userId=users.id');
   exec('CREATE TRIGGER IF NOT EXISTS strnodes_ii INSTEAD OF INSERT ON strnodes BEGIN ' +
-    'DELETE FROM nodes_latlon WHERE id=NEW.id;'+
-    'DELETE FROM objtags WHERE objid=0+NEW.id*4;'+
+    'DELETE FROM nodes_latlon WHERE id=NEW.id;' +
+    'DELETE FROM objtags WHERE objid=0+NEW.id*4;' +
     'INSERT OR IGNORE INTO users (id, name) VALUES (NEW.userID, NEW.userName);' +
     'INSERT OR REPLACE INTO nodes_attr (id,version,timestamp,userId,changeset) ' +
     'VALUES (NEW.id,NEW.version,NEW.timestamp,NEW.userId,NEW.changeset);' +
@@ -308,8 +321,8 @@ begin
     'timestamp AS timestamp, userId as userId, users.name AS userName, changeset as changeset ' +
     'FROM ways,users WHERE ways.userId=users.id');
   exec('CREATE TRIGGER IF NOT EXISTS strways_ii INSTEAD OF INSERT ON strways BEGIN ' +
-    'DELETE FROM objtags WHERE objid=1+NEW.id*4;'+
-    'DELETE FROM waynodes WHERE wayid=NEW.id;'+
+    'DELETE FROM objtags WHERE objid=1+NEW.id*4;' +
+    'DELETE FROM waynodes WHERE wayid=NEW.id;' +
     'INSERT OR IGNORE INTO users (id, name) VALUES (NEW.userId, NEW.userName);' +
     'INSERT OR REPLACE INTO ways (id,version,timestamp,userId,changeset) ' +
     'VALUES(NEW.id,NEW.version,NEW.timestamp,NEW.userId,NEW.changeset);' +
@@ -363,17 +376,17 @@ begin
     'timestamp AS timestamp, userId as userId, users.name AS userName, changeset as changeset ' +
     'FROM relations,users WHERE relations.userId=users.id');
   exec('CREATE TRIGGER IF NOT EXISTS strrelations_ii INSTEAD OF INSERT ON strrelations BEGIN ' +
-    'DELETE FROM objtags WHERE objid=2+NEW.id*4;'+
-    'DELETE FROM relationmembers WHERE relationid=NEW.id;'+
+    'DELETE FROM objtags WHERE objid=2+NEW.id*4;' +
+    'DELETE FROM relationmembers WHERE relationid=NEW.id;' +
     'INSERT OR IGNORE INTO users (id, name) VALUES (NEW.userId, NEW.userName);' +
     'INSERT OR REPLACE INTO relations (id,version,timestamp,userId,changeset) ' +
     'VALUES(NEW.id,NEW.version,NEW.timestamp,NEW.userId,NEW.changeset);' +
     'END;');
 end;
 
-procedure TStorage.onCloseQuery(query: TObject);
+procedure TStorage.onCloseQuery(child: TObject);
 begin
-  fQryList.Remove(query);
+  fChildList.Remove(child);
 end;
 
 procedure TStorage.set_dbName(const newName: WideString);
@@ -415,6 +428,8 @@ function TStorage.sqlExec(const sqlQuery: OleVariant; const paramNames,
 var
   n, v: OleVariant;
 begin
+  if not assigned(fDB) then
+    raise EInOutError.Create(toString() + '.sqlExec: can not execute query on closed database');
   n := varFromJsObject(paramNames);
   v := varFromJsObject(paramValues);
   if (not VarIsArray(n)) and VarIsStr(n) and ('' <> n) then begin
@@ -432,14 +447,16 @@ var
   q: TSQLiteStmt;
   qr: TQueryResult;
 begin
+  if not assigned(fDB) then
+    raise EInOutError.Create(toString() + '.sqlPrepare: can not prepare query on closed database');
   q := fDB.CreateStmt(sqlProc);
   qr := TQueryResult.Create();
   qr.fQry := q;
   qr.fOnClose := onCloseQuery;
   result := qr as IDispatch;
-  if not assigned(fQryList) then
-    fQryList := TObjectList.Create(false);
-  fQryList.add(qr);
+  if not assigned(fChildList) then
+    fChildList := TObjectList.Create(false);
+  fChildList.add(qr);
 end;
 
 { TQueryResult }
@@ -509,7 +526,7 @@ begin
       //bind parameters before exec
       if ((varType(paramNames) and varTypeMask) <> varVariant) or
         ((varType(paramValues) and varTypeMask) <> varVariant) then
-        raise EConvertError.Create(toString() + '._sqlExec: array of variants expected');
+        raise EConvertError.Create(toString() + '.sqlExecInt: array of variants expected');
       n := VarArrayLockVarRec(paramNames);
       nLock := true;
       v := VarArrayLockVarRec(paramValues);
@@ -519,7 +536,7 @@ begin
       if not ((nl = vl) or //same size or empty
         ((nl > 0) and ((vl mod nl) = 0)) //not empty and vl=k*nl
         ) then
-        raise ERangeError.Create(toString() + '._sqlExec: invalid arrays lengths');
+        raise ERangeError.Create(toString() + '.sqlExecInt: invalid arrays lengths');
       if nl = vl then begin
         //simple params. one call.
         fQry.Bind(n, v);
@@ -549,8 +566,10 @@ procedure TQueryResult.close;
 begin
   if assigned(fQry) then
     FreeAndNil(fQry);
-  if assigned(fOnClose) then
+  if assigned(fOnClose) then begin
     fOnClose(self);
+    fOnClose := nil;
+  end;
 end;
 
 { TDBFReader }
@@ -653,12 +672,13 @@ end;
 
 procedure TStoredIdList.add(const id: int64);
 begin
+  dbOpenCheck();
   if VarIsEmpty(fQryAdd) then begin
     createTable();
     fQryAdd := fStorage.sqlPrepare(
       'INSERT INTO ' + tableName + '(id) VALUES (:id)');
   end;
-  fStorage.sqlExec(fQryAdd, VarArrayOf([':id']), VarArrayOf([id]));
+  fStorage.sqlExec(fQryAdd, ':id', id);
 end;
 
 procedure TStoredIdList.createTable;
@@ -667,6 +687,7 @@ var
 begin
   if fTableCreated then
     exit;
+  dbOpenCheck();
   q := fStorage.sqlPrepare(
     'CREATE TEMPORARY TABLE ' + tableName +
     '(id INTEGER PRIMARY KEY ON CONFLICT IGNORE)');
@@ -676,12 +697,13 @@ end;
 
 procedure TStoredIdList.delete(const id: int64);
 begin
+  dbOpenCheck();
   if VarIsEmpty(fQryDelete) then begin
     createTable();
     fQryDelete := fStorage.sqlPrepare(
       'DELETE FROM ' + tableName + ' WHERE id=:id');
   end;
-  fStorage.sqlExec(fQryDelete, VarArrayOf([':id']), VarArrayOf([id]));
+  fStorage.sqlExec(fQryDelete, ':id',id);
 end;
 
 procedure TStoredIdList.deleteTable;
@@ -689,20 +711,16 @@ var
   q: OleVariant;
 begin
   if not fTableCreated then exit;
+  fTableCreated := false;
+  dbOpenCheck();
   q := fStorage.sqlPrepare('DROP TABLE ' + tableName);
   fStorage.sqlExec(q, 0, 0);
-  fTableCreated := false;
 end;
 
 destructor TStoredIdList.destroy;
 begin
-  storage := unassigned;
+  close();
   inherited;
-end;
-
-function TStoredIdList.get_storage: OleVariant;
-begin
-  result := fStorage;
 end;
 
 function TStoredIdList.get_tableName: WideString;
@@ -716,25 +734,32 @@ function TStoredIdList.isIn(const id: int64): boolean;
 var
   i: integer;
 begin
+  dbOpenCheck();
   if VarIsEmpty(fQryIsIn) then begin
     createTable();
     fQryIsIn := fStorage.sqlPrepare('SELECT COUNT(1) FROM ' + tableName +
       ' WHERE id=:id');
   end;
-  i := fStorage.sqlExec(fQryIsIn, VarArrayOf([':id']), VarArrayOf([id])).read(1)[0];
+  i := fStorage.sqlExec(fQryIsIn, ':id',id).read(1)[0];
   result := i > 0;
 end;
 
-procedure TStoredIdList.set_storage(const aStorage: OleVariant);
+procedure TStoredIdList.close();
 begin
   fQryAdd := unassigned;
   fQryIsIn := unassigned;
-  deleteTable();
   fQryDelete := unassigned;
-  fStorage := aStorage;
-  if varIsType(fStorage, varDispatch) then begin
-    createTable();
-  end;
+  deleteTable();
+  fStorage := unassigned;
+  if assigned(fOnClose) then
+    fOnClose(self);
+  fOnClose := nil;
+end;
+
+procedure TStoredIdList.dbOpenCheck;
+begin
+  if VarIsEmpty(fStorage) then
+    raise EInOutError.Create(toString() + ': can not operate on closed db');
 end;
 
 initialization
