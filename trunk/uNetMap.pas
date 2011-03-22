@@ -18,7 +18,7 @@ type
   THTTPResponce = class(TOSManObject, IHTTPResponce)
   protected
     fState, fStatus: integer;
-    fConn,fAddHandle: HInternet;
+    fConn, fAddHandle: HInternet;
     fReadBuf: array of byte;
     fReadBufSize: integer;
     procedure grow(const delta: cardinal);
@@ -26,7 +26,7 @@ type
     constructor create(); override;
     destructor destroy(); override;
     procedure setStates(const aState, aStatus: integer);
-    procedure setConnection(const hConnection,hAddHandle: HInternet);
+    procedure setConnection(const hConnection, hAddHandle: HInternet);
   published
     //get state of operation.
     //  0 - waiting for connect
@@ -73,7 +73,7 @@ type
   published
     //returns IHTTPResponce for request 'GET http://hostName/location'
     function get(const location: WideString): OleVariant;
-    function send(const method,location, extraData: WideString): OleVariant;
+    function send(const method, location, extraData: WideString): OleVariant;
     //hostname for OSM-API server. Official server is api.openstreetmap.org
     property hostName: WideString read get_hostName write set_hostName;
     //timeout for network operations (in ms). By default 20000ms (20 sec)
@@ -88,7 +88,7 @@ type
     fFetchingResult: boolean;
     fResultObj: OleVariant;
     //result can
-    function fetchObjects(const method,objLocation,extraData: WideString): OleVariant;
+    function fetchObjects(const method, objLocation, extraData: WideString): OleVariant;
   published
     //get node by ID. If no node found returns false
     function getNode(const id: int64): OleVariant; override;
@@ -102,14 +102,15 @@ type
     procedure putNode(const aNode: OleVariant); override;
     procedure putWay(const aWay: OleVariant); override;
     procedure putRelation(const aRelation: OleVariant); override;
-    procedure putObject(const aObj:OleVariant);override;
+    procedure putObject(const aObj: OleVariant); override;
 
     //set HTTP-storage (IHTTPStorage). To free system resource set storage to unassigned
     //property storage:OleVariant read get_storage write set_storage;
   end;
 
   { TNetMap }
-function TNetMap.fetchObjects(const method,objLocation,
+
+function TNetMap.fetchObjects(const method, objLocation,
   extraData: WideString): OleVariant;
 
   procedure raiseError();
@@ -120,7 +121,7 @@ var
   hr: OleVariant;
   rdr: TOSMReader;
 begin
-  hr := fStorage.send(method,objLocation, extraData);
+  hr := fStorage.send(method, objLocation, extraData);
   hr.fetchAll();
   fResultObj := false;
   if (hr.getState() <> 4) then begin
@@ -136,7 +137,7 @@ begin
       raiseError();
     end;
   rdr := TOSMReader.create();
-  fResultObj:=unassigned;
+  fResultObj := unassigned;
   try
     rdr.setInputStream(hr);
     rdr.setOutputMap(self as IDispatch);
@@ -148,15 +149,15 @@ begin
   end;
   result := fResultObj;
   if varIsEmpty(result) then
-    result:=false;
-  fResultObj:=unassigned;
+    result := false;
+  fResultObj := unassigned;
 end;
 
 function TNetMap.getNode(const id: int64): OleVariant;
 begin
   if not VarIsType(fStorage, varDispatch) then
     raise EInOutError.create(toString() + '.getNode: storage not assigned');
-  result := fetchObjects('GET','/api/0.6/node/' + inttostr(id),'');
+  result := fetchObjects('GET', '/api/0.6/node/' + inttostr(id), '');
 end;
 
 function TNetMap.getNodes(const nodeIdArray: OleVariant): OleVariant;
@@ -177,23 +178,23 @@ begin
   try
     while i > 0 do begin
       dec(i);
-      s := s + VarAsType(pv^,varOleStr) + IfThen(i = 0, '', ',');
+      s := s + VarAsType(pv^, varOleStr) + IfThen(i = 0, '', ',');
       inc(pv);
     end;
   finally
     VarArrayUnlock(narr);
   end;
-  result := fetchObjects('POST','/api/0.6/nodes', s);
+  result := fetchObjects('POST', '/api/0.6/nodes', s);
 end;
 
 function TNetMap.getRelation(const id: int64): OleVariant;
 begin
-  result := fetchObjects('GET','/api/0.6/relation/' + inttostr(id),'');
+  result := fetchObjects('GET', '/api/0.6/relation/' + inttostr(id), '');
 end;
 
 function TNetMap.getWay(const id: int64): OleVariant;
 begin
-  result := fetchObjects('GET','/api/0.6/way/' + inttostr(id),'');
+  result := fetchObjects('GET', '/api/0.6/way/' + inttostr(id), '');
 end;
 
 procedure TNetMap.putNode(const aNode: OleVariant);
@@ -201,24 +202,24 @@ begin
   putObject(aNode);
 end;
 
-procedure TNetMap.putObject(const aObj:OleVariant);
+procedure TNetMap.putObject(const aObj: OleVariant);
 var
-  h:integer;
-  o:OleVariant;
+  h: integer;
+  o: Variant;
 begin
   if not fFetchingResult then
     raise EInOutError.create(toString() + ': put operations not supported');
-  varCopyNoInd(Variant(o),aObj);
-  if VarIsEmpty(fResultObj) then
+  varCopyNoInd(o, aObj);
+  if varIsEmpty(fResultObj) then
     fResultObj := o
   else if VarIsArray(fResultObj) then begin
-    h:=VarArrayHighBound(fResultObj,1)+1;
-    VarArrayRedim(fResultObj,h);
-    fResultObj[h]:=o;
+    h := VarArrayHighBound(fResultObj, 1) + 1;
+    VarArrayRedim(fResultObj, h);
+    fResultObj[h] := o;
   end
   else begin
-  //not empty and not array - create array now
-    fResultObj:=VarArrayOf([fResultObj,o]);
+    //not empty and not array - create array now
+    fResultObj := VarArrayOf([fResultObj, o]);
   end;
 end;
 
@@ -240,7 +241,8 @@ begin
   maxRetry := 3;
   timeout := 20000;
   fInet := nil;
-  hostName := 'api06.dev.openstreetmap.org';//$$$'api.openstreetmap.org';//'jxapi.openstreetmap.org/xapi';
+  hostName := 'api06.dev.openstreetmap.org';
+  //$$$'api.openstreetmap.org';//'jxapi.openstreetmap.org/xapi';
 end;
 
 destructor THTTPStorage.destroy;
@@ -284,7 +286,7 @@ begin
     resp.setStates(4, 504);
     exit;
   end;
-  resp.setConnection(hConn,nil);
+  resp.setConnection(hConn, nil);
 end;
 
 function THTTPStorage.get_hostName: WideString;
@@ -302,31 +304,31 @@ begin
   result := fTimeout;
 end;
 
-function THTTPStorage.send(const method,location,
+function THTTPStorage.send(const method, location,
   extraData: WideString): OleVariant;
 var
   rCnt: integer;
   hConn, hReq: HInternet;
   resp: THTTPResponce;
-  s,h,l,e:AnsiString;
-  uc:TURLComponents;
+  s, h, l, e: AnsiString;
+  uc: TURLComponents;
 begin
   resp := THTTPResponce.create();
   result := resp as IDispatch;
 
-  fillchar(uc,sizeof(uc),0);
-  uc.dwStructSize:=sizeof(uc);
-  s:='http://'+hostName+location;
-  setlength(h,length(s));
-  setlength(l,length(s));
-  setlength(e,length(s));
-  uc.dwHostNameLength:=length(s);
-  uc.dwUrlPathLength:=length(s);
-  uc.dwExtraInfoLength:=length(s);
-  uc.lpszHostName:=@h[1];
-  uc.lpszUrlPath:=@l[1];
-  uc.lpszExtraInfo:=@e[1];
-  if not InternetCrackUrlA(pAnsiChar(s),length(s),0,uc) then begin
+  fillchar(uc, sizeof(uc), 0);
+  uc.dwStructSize := sizeof(uc);
+  s := 'http://' + hostName + location;
+  setlength(h, length(s));
+  setlength(l, length(s));
+  setlength(e, length(s));
+  uc.dwHostNameLength := length(s);
+  uc.dwUrlPathLength := length(s);
+  uc.dwExtraInfoLength := length(s);
+  uc.lpszHostName := @h[1];
+  uc.lpszUrlPath := @l[1];
+  uc.lpszExtraInfo := @e[1];
+  if not InternetCrackUrlA(pAnsiChar(s), length(s), 0, uc) then begin
     resp.setStates(4, 503);
     exit;
   end;
@@ -346,38 +348,41 @@ begin
   hReq := nil;
   rCnt := maxRetry;
   try
-  while (not assigned(hConn)) and (rCnt > 0) do begin
-    hConn := InternetConnectA(fInet, uc.lpszHostName, uc.nPort, nil, nil,
-      uc.nScheme, 0, 0);
-    dec(rCnt);
-    if (not assigned(hConn)) and (rCnt > 0) then
-      sleep(fTimeout);
-  end;
-  if (not assigned(hConn)) then begin
-    resp.setStates(4, 504);
-    exit;
-  end;
-  rCnt := maxRetry;
-  while (not assigned(hReq)) and (rCnt > 0) do begin
-    hReq := HttpOpenRequestA(hConn, pAnsiChar(AnsiString(method)), pAnsiChar(AnsiString(uc.lpszUrlPath)+AnsiString(uc.lpszExtraInfo)), '1.1', nil, nil, 0, 0);
-    dec(rCnt);
-    if (not assigned(hReq)) and (rCnt > 0) then
-      sleep(fTimeout);
-  end;
-  if (not assigned(hReq)) then begin
-    InternetCloseHandle(hConn);
-    resp.setStates(4, 504);
-    exit;
-  end;
-  if not HttpSendRequestA(hReq,nil,0,pAnsiChar(AnsiString(extraData)),length(extraData)) then begin
-    InternetCloseHandle(hConn);
-    InternetCloseHandle(hReq);
-    resp.setStates(4, 504);
-    exit;
-  end;
-  resp.setConnection(hReq,hConn);
-  hReq:=nil;
-  hConn:=nil;
+    while (not assigned(hConn)) and (rCnt > 0) do begin
+      hConn := InternetConnectA(fInet, uc.lpszHostName, uc.nPort, nil, nil,
+        uc.nScheme, 0, 0);
+      dec(rCnt);
+      if (not assigned(hConn)) and (rCnt > 0) then
+        sleep(fTimeout);
+    end;
+    if (not assigned(hConn)) then begin
+      resp.setStates(4, 504);
+      exit;
+    end;
+    rCnt := maxRetry;
+    while (not assigned(hReq)) and (rCnt > 0) do begin
+      hReq := HttpOpenRequestA(hConn, pAnsiChar(AnsiString(method)),
+        pAnsiChar(AnsiString(uc.lpszUrlPath) + AnsiString(uc.lpszExtraInfo)), '1.1', nil, nil, 0,
+          0);
+      dec(rCnt);
+      if (not assigned(hReq)) and (rCnt > 0) then
+        sleep(fTimeout);
+    end;
+    if (not assigned(hReq)) then begin
+      InternetCloseHandle(hConn);
+      resp.setStates(4, 504);
+      exit;
+    end;
+    if not HttpSendRequestA(hReq, nil, 0, pAnsiChar(AnsiString(extraData)), length(extraData)) then
+      begin
+      InternetCloseHandle(hConn);
+      InternetCloseHandle(hReq);
+      resp.setStates(4, 504);
+      exit;
+    end;
+    resp.setConnection(hReq, hConn);
+    hReq := nil;
+    hConn := nil;
   finally
     if assigned(hReq) then
       InternetCloseHandle(hReq);
@@ -533,10 +538,10 @@ begin
   fStatus := 100;
 end;
 
-procedure THTTPResponce.setConnection(const hConnection,hAddHandle: HInternet);
+procedure THTTPResponce.setConnection(const hConnection, hAddHandle: HInternet);
 begin
   fConn := hConnection;
-  fAddHandle:=hAddHandle;
+  fAddHandle := hAddHandle;
   setStates(3, 206);
 end;
 
@@ -550,17 +555,17 @@ destructor THTTPResponce.destroy;
 begin
   if assigned(fConn) then
     InternetCloseHandle(fConn);
-  fConn:=nil;
+  fConn := nil;
   if assigned(fAddHandle) then
     InternetCloseHandle(fAddHandle);
-  fAddHandle:=nil;
+  fAddHandle := nil;
   inherited;
 end;
 
 procedure THTTPResponce.grow(const delta: cardinal);
 begin
   if (fReadBufSize + integer(delta)) > length(fReadBuf) then
-    setLength(fReadBuf, (fReadBufSize + integer(delta) + 4 * 1024 - 1) and (-4 * 1024));
+    setlength(fReadBuf, (fReadBufSize + integer(delta) + 4 * 1024 - 1) and (-4 * 1024));
 end;
 
 initialization

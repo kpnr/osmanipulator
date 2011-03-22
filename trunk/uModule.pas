@@ -24,7 +24,7 @@ type
   protected
     function getModuleName: WideString;
   public
-    constructor Create; reintroduce;virtual;
+    constructor Create; reintroduce; virtual;
   published
     function toString: WideString; virtual;
     //class
@@ -41,7 +41,7 @@ function OSManModule(const IID: TGUID; out Module: IUnknown): HResult; stdcall;
 
 procedure OSManRegister(myClass: TOSManClass; const myClassGUID: TGUID);
 
-procedure OSManLog(const msg:WideString);
+procedure OSManLog(const msg: WideString);
 
 exports OSManModule;
 
@@ -69,11 +69,11 @@ type
 
 var
   regInfo: array of TOSManRegInfo;
-  fLogger:OleVariant;
+  fLogger: OleVariant;
 
-procedure OSManLog(const msg:WideString);
+procedure OSManLog(const msg: WideString);
 begin
-  if not varIsType(fLogger,varDispatch) then
+  if not varIsType(fLogger, varDispatch) then
     exit;
   fLogger.log(msg);
 end;
@@ -127,7 +127,7 @@ end;
 
 destructor TOSManModule.Destroy;
 begin
-  fLogger:=unassigned;
+  fLogger := unassigned;
   inherited;
 end;
 
@@ -147,12 +147,12 @@ end;
 
 function TOSManModule.Get_logger: OleVariant;
 begin
-  result:=fLogger;
+  result := fLogger;
 end;
 
 procedure TOSManModule.Set_logger(Value: OleVariant);
 begin
-  fLogger:=Value;
+  fLogger := Value;
 end;
 
 function TOSManModule._AddRef: Integer;
@@ -169,7 +169,7 @@ end;
 
 constructor TOSManObject.Create;
 begin
-  inherited Create(self,false);
+  inherited Create(self, false);
 end;
 
 function TOSManObject.getClassName: WideString;
@@ -199,6 +199,6 @@ begin
 end;
 
 initialization
-DecimalSeparator:='.';
+  DecimalSeparator := '.';
 end.
 

@@ -5,7 +5,7 @@ uses SysUtils, Variants, uGeoTools, ActiveX, uModule, uOSMCommon, uInterfaces;
 type
   TAbstractMap = class(TOSManObject, IMap)
   protected
-    fStorage: OleVariant;
+    fStorage: Variant;
   public
     function get_storage: OleVariant; virtual;
     procedure set_storage(const newStorage: OleVariant); virtual;
@@ -234,7 +234,7 @@ type
   TMapObjectStream = class(TOSManObject, IInputStream)
   protected
     fMap: TMap;
-    fStorage, fQry: OleVariant;
+    fStorage, fQry: Variant;
     fBPolies: array of OleVariant;
     fCustomFilters: array of TPutFilterAdaptor;
     fNodeList, fWayList, fRelList, fToDoRelList: OleVariant;
@@ -268,7 +268,7 @@ begin
     fQryDeleteNode := fStorage.sqlPrepare(
       'DELETE FROM nodes WHERE id=:id');
   end;
-  fStorage.sqlExec(fQryDeleteNode, ':id',nodeId);
+  fStorage.sqlExec(fQryDeleteNode, ':id', nodeId);
 end;
 
 procedure TMap.deleteRelation(const relationId: int64);
@@ -279,7 +279,7 @@ begin
     fQryDeleteRelation := fStorage.sqlPrepare(
       'DELETE FROM relations WHERE id=:id');
   end;
-  fStorage.sqlExec(fQryDeleteRelation, ':id',relationId);
+  fStorage.sqlExec(fQryDeleteRelation, ':id', relationId);
 end;
 
 procedure TMap.deleteWay(const wayId: int64);
@@ -290,7 +290,7 @@ begin
     fQryDeleteWay := fStorage.sqlPrepare(
       'DELETE FROM ways WHERE id=:id');
   end;
-  fStorage.sqlExec(fQryDeleteWay, ':id',wayId);
+  fStorage.sqlExec(fQryDeleteWay, ':id', wayId);
 end;
 
 destructor TMap.destroy;
@@ -411,7 +411,7 @@ begin
   if VarIsEmpty(fQryGetRelation) then begin
     fQryGetRelation := fStorage.sqlPrepare(sQry);
   end;
-  qr := fStorage.sqlExec(fQryGetRelation, ':id',id);
+  qr := fStorage.sqlExec(fQryGetRelation, ':id', id);
   result := false;
   if qr.eos then exit;
   row := qr.read(1);
@@ -483,7 +483,7 @@ begin
   if VarIsEmpty(fQryGetWay) then begin
     fQryGetWay := fStorage.sqlPrepare(sQry);
   end;
-  qr := fStorage.sqlExec(fQryGetWay, ':id',id);
+  qr := fStorage.sqlExec(fQryGetWay, ':id', id);
   result := false;
   if qr.eos then exit;
   row := qr.read(1);
@@ -566,8 +566,8 @@ begin
   fStorage.sqlExec(fQryPutNode, VarArrayOf([':id', ':lat', ':lon', ':version', ':timestamp',
     ':userId', ':userName', ':changeset']),
       VarArrayOf([id, degToInt(aNode.lat), degToInt(aNode.lon), aNode.version, aNode.timestamp,
-        aNode.userId,
-    aNode.userName, aNode.changeset]));
+    aNode.userId,
+      aNode.userName, aNode.changeset]));
   k := aNode.tags;
   putTags(id, 0, k.getAll);
 end;
@@ -933,11 +933,11 @@ begin
   try
     pv2 := pv1;
     inc(pv2);
-    fCount:=0;
+    fCount := 0;
     for i := 0 to l - 1 do begin
       setByKey(pv1^, pv2^);
-      inc(pv1,2);
-      inc(pv2,2);
+      inc(pv1, 2);
+      inc(pv2, 2);
     end;
   finally
     VarArrayUnlock(a);
@@ -1180,7 +1180,7 @@ begin
   if assigned(fMap) then fMap._Release();
   fMap := aMap;
   if assigned(fMap) then fMap._AddRef();
-  fStorage := aStorage;
+  varCopyNoInd(fStorage, aStorage);
   fClipIncompleteWays := false;
   //parse filter options
   if (VarArrayDimCount(aFilter) <> 1) then
@@ -1558,7 +1558,7 @@ end;
 
 procedure TAbstractMap.set_storage(const newStorage: OleVariant);
 begin
-  fStorage := newStorage;
+  varCopyNoInd(fStorage, newStorage);
 end;
 
 initialization
