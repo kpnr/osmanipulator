@@ -577,7 +577,7 @@ begin
     result:=ws;
     exit;
   end;
-  setlength(result,nl);
+  setLength(result,nl);
   pwc:=PWideChar(ws);
   pwc1:=PWideChar(result);
   for i:=1 to ol do begin

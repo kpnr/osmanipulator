@@ -328,7 +328,7 @@ begin
   else
     nItems := 0;
   pLockedVariantArray := varArrayLock(VarArray);
-  setlength(result, nItems);
+  setLength(result, nItems);
   pVR := @result[0];
   while nItems > 0 do begin
     pVar := pLockedVariantArray;
@@ -646,9 +646,9 @@ var
 begin
   if count >= length(fRefIds) then begin
     i := (count or 3) + 1;
-    setlength(fRefTypes, i);
-    setlength(fRefIds, i);
-    setlength(fRefRoles, i);
+    setLength(fRefTypes, i);
+    setLength(fRefIds, i);
+    setLength(fRefRoles, i);
   end;
 end;
 

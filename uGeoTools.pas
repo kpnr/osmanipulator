@@ -347,7 +347,7 @@ begin
   if n <= 1 then
     exit;
   i := length(fRefList);
-  setlength(fRefList, i + n);
+  setLength(fRefList, i + n);
   pv := VarArrayLock(members);
   pr := @fRefList[i];
   try
@@ -380,7 +380,7 @@ var
 
   procedure grow();
   begin
-    setlength(fRefList, i + j - 1);
+    setLength(fRefList, i + j - 1);
   end;
 begin
   i := length(fRefList);
@@ -444,7 +444,7 @@ begin
   if n <= 0 then
     exit;
   i := length(fRefList);
-  setlength(fRefList, i + n);
+  setLength(fRefList, i + n);
   pv := VarArrayLock(members);
   pr := @fRefList[i];
   try
@@ -772,7 +772,7 @@ var
 begin
   p := TGTPoly.create();
   p.fCount := fCount;
-  setlength(p.fPoints, fCount);
+  setLength(p.fPoints, fCount);
   for i := 0 to fCount - 1 do begin
     p.fPoints[i] := TGTPoint(fPoints[i].clone());
   end;
@@ -921,7 +921,7 @@ end;
 procedure TGTPoly.set_capacity(const Value: integer);
 begin
   if Value <= count then exit;
-  setlength(fPoints, Value);
+  setLength(fPoints, Value);
 end;
 
 function approx(const x1, y1, x2, y2, x: integer): integer;
@@ -956,7 +956,7 @@ begin
   result := TGTPoly.create();
   result.capacity := count * 2;
   rightPoly := result;
-  setlength(newPoints, count * 2);
+  setLength(newPoints, count * 2);
   li := 0;
   ri := 0;
   resetBounds();
@@ -1029,7 +1029,7 @@ begin
   result := TGTPoly.create();
   result.capacity := count * 2;
   topPoly := result;
-  setlength(newPoints, count * 2);
+  setLength(newPoints, count * 2);
   bi := 0;
   ti := 0;
   resetBounds();
@@ -1150,10 +1150,10 @@ end;
 procedure TMultiPoly.addObject(const aMapObject: OleVariant);
 var
   s: WideString;
-  o:Variant;
+  o: Variant;
 begin
   //add object to inList
-  varCopyNoInd(o,aMapObject);
+  varCopyNoInd(o, aMapObject);
   if VarIsType(o, varDispatch) then begin
     s := o.getClassName();
     if (s = 'Relation') or (s = 'Way') then begin
@@ -1168,7 +1168,7 @@ end;
 
 procedure TMultiPoly.clearList(var list: TMultiPolyList);
 begin
-  setlength(list.items, 0);
+  setLength(list.items, 0);
   list.count := 0;
 end;
 
@@ -1191,14 +1191,14 @@ begin
     if assigned(simplePolyList[i]) then
       freeAndNil(simplePolyList[i]);
   end;
-  setlength(simplePolyList, 0);
+  setLength(simplePolyList, 0);
   for i := 0 to high(optimizedPolyList) do begin
     if assigned(optimizedPolyList[i]) then
       freeAndNil(optimizedPolyList[i]);
   end;
-  setlength(optimizedPolyList, 0);
-  setlength(optimizedPolyParent, 0);
-  setlength(optimizedPolyHash, 0);
+  setLength(optimizedPolyList, 0);
+  setLength(optimizedPolyParent, 0);
+  setLength(optimizedPolyHash, 0);
   fArea := -1;
 end;
 
@@ -1278,7 +1278,7 @@ begin
   nl := list.count + delta;
   if (nl > l) then begin
     nl := (nl or 15) + 1;
-    setlength(list.items, nl);
+    setLength(list.items, nl);
   end;
 end;
 
@@ -1412,7 +1412,7 @@ var
     pwd: PWayDescItem;
   begin
     result := true;
-    setlength(wayMergeList.items, wayList.count);
+    setLength(wayMergeList.items, wayList.count);
     wayMergeList.count := 0;
     pwd := @wayMergeList.items[0];
     //resolve ways into nodes.
@@ -1422,7 +1422,7 @@ var
       mlen := varArrayLength(ml);
       if mlen < 2 then continue; //skip zero- or one-node ways
       pwd.way.count := 0;
-      setlength(pwd.way.items, mlen);
+      setLength(pwd.way.items, mlen);
       pv := VarArrayLock(ml);
       try
         pwd.id0 := pv^;
@@ -1490,7 +1490,7 @@ var
         pwd1.way.items[startIdx].obj := Unassigned;
         len := pwd2.way.count;
         pwd1.way.count := startIdx + len;
-        setlength(pwd1.way.items, pwd1.way.count);
+        setLength(pwd1.way.items, pwd1.way.count);
         pwd1.id1 := pwd2.id1;
         sz := len * sizeof(pwd2.way.items[0]);
         move(pwd2.way.items[0], pwd1.way.items[startIdx], sz);
@@ -1613,7 +1613,7 @@ var
     sPoly: TGTPoly;
   begin
     sz := 0;
-    setlength(simplePolyList, wayMergeList.count);
+    setLength(simplePolyList, wayMergeList.count);
     for i := 0 to wayMergeList.count - 1 do begin
       pWDI := @wayMergeList.items[i];
       inc(sz, pWDI.way.count);
@@ -1624,7 +1624,7 @@ var
         sPoly.addNode(pWDI.way.items[j].obj);
       end;
     end;
-    setlength(nodeList.items, sz);
+    setLength(nodeList.items, sz);
     nodeList.count := 0;
     for i := 0 to wayMergeList.count - 1 do begin
       pli := @wayMergeList.items[i].way.items[0];
@@ -1719,8 +1719,8 @@ begin
   pCnt := length(simplePolyList);
   if (nOpt < pCnt) or (nCnt < 100) then
     nOpt := pCnt;
-  setlength(optimizedPolyList, nOpt);
-  setlength(optimizedPolyParent, nOpt);
+  setLength(optimizedPolyList, nOpt);
+  setLength(optimizedPolyParent, nOpt);
   for i := 0 to pCnt - 1 do begin
     optimizedPolyList[i] := simplePolyList[i].clone() as TGTPoly;
     optimizedPolyParent[i] := i;
@@ -1750,9 +1750,9 @@ procedure TMultiPoly.buildOptimizedPolyHash;
     l: integer;
   begin
     if cardinal(length(optimizedPolyHash[x])) <= y then
-      setlength(optimizedPolyHash[x], y + 1);
+      setLength(optimizedPolyHash[x], y + 1);
     l := length(optimizedPolyHash[x][y]);
-    setlength(optimizedPolyHash[x][y], l + 1);
+    setLength(optimizedPolyHash[x][y], l + 1);
     optimizedPolyHash[x][y][l] := p;
   end;
 var
@@ -1761,8 +1761,8 @@ var
   xminhash, xmaxhash, yminhash, ymaxhash: cardinal;
 begin
   //hash clean up
-  setlength(optimizedPolyHash, 0);
-  setlength(optimizedPolyHash, hashSize);
+  setLength(optimizedPolyHash, 0);
+  setLength(optimizedPolyHash, hashSize);
   for polyidx := 0 to high(optimizedPolyList) do begin
     poly := optimizedPolyList[polyidx];
     xminhash := intToHash(poly.left);
@@ -1840,8 +1840,8 @@ var
       //start new segment
       inc(iWaySeg);
       if (iWaySeg > high(waySegList)) then begin
-        setlength(waySegList, iWaySeg + 4);
-        setlength(waySegLength, iWaySeg + 4);
+        setLength(waySegList, iWaySeg + 4);
+        setLength(waySegLength, iWaySeg + 4);
       end;
       includeSegment(pWND1);
     end;
@@ -1932,8 +1932,8 @@ begin
     exit;
   end;
   //init subroutine data
-  setlength(waySegList, 4);
-  setlength(waySegLength, 4);
+  setLength(waySegList, 4);
+  setLength(waySegLength, 4);
   iWaySeg := 0;
   //end init
   polySegmentBRect := nil;
@@ -2255,8 +2255,8 @@ var
   procedure createNewPoint(var pNewNode: POleVariant; var pNewPoint, crossPt: TGTPoint);
   begin
     if length(newNodes) <= newNodeCount then begin
-      setlength(newNodes, newNodeCount * 2 + 4);
-      setlength(newPoints, newNodeCount * 2 + 4);
+      setLength(newNodes, newNodeCount * 2 + 4);
+      setLength(newPoints, newNodeCount * 2 + 4);
     end;
 
     newNodes[newNodeCount] := aMap.createNode();
@@ -2819,7 +2819,7 @@ begin
     result := fArea;
     exit;
   end;
-  setlength(polyList, length(simplePolyList));
+  setLength(polyList, length(simplePolyList));
   //fill polyList in area descending order
   for i := 0 to high(simplePolyList) do begin
     polyList[i].poly := simplePolyList[i];
