@@ -319,9 +319,9 @@ begin
   fillchar(uc, sizeof(uc), 0);
   uc.dwStructSize := sizeof(uc);
   s := 'http://' + hostName + location;
-  setlength(h, length(s));
-  setlength(l, length(s));
-  setlength(e, length(s));
+  setLength(h, length(s));
+  setLength(l, length(s));
+  setLength(e, length(s));
   uc.dwHostNameLength := length(s);
   uc.dwUrlPathLength := length(s);
   uc.dwExtraInfoLength := length(s);
@@ -363,7 +363,7 @@ begin
     while (not assigned(hReq)) and (rCnt > 0) do begin
       hReq := HttpOpenRequestA(hConn, pAnsiChar(AnsiString(method)),
         pAnsiChar(AnsiString(uc.lpszUrlPath) + AnsiString(uc.lpszExtraInfo)), '1.1', nil, nil, 0,
-          0);
+        0);
       dec(rCnt);
       if (not assigned(hReq)) and (rCnt > 0) then
         sleep(fTimeout);
@@ -565,7 +565,7 @@ end;
 procedure THTTPResponce.grow(const delta: cardinal);
 begin
   if (fReadBufSize + integer(delta)) > length(fReadBuf) then
-    setlength(fReadBuf, (fReadBufSize + integer(delta) + 4 * 1024 - 1) and (-4 * 1024));
+    setLength(fReadBuf, (fReadBufSize + integer(delta) + 4 * 1024 - 1) and (-4 * 1024));
 end;
 
 initialization
