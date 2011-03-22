@@ -163,8 +163,8 @@ type
   published
     function createPoly(): OleVariant;
     function distance(const node1, node2: OleVariant): double;
-    procedure bitRound(aNode:OleVariant;aBitLevel:integer);
-    function wayToNodeArray(aMap,aWayOrWayId:OleVariant):OleVariant;
+    procedure bitRound(aNode: OleVariant; aBitLevel: integer);
+    function wayToNodeArray(aMap, aWayOrWayId: OleVariant): OleVariant;
   end;
 
   TMultiPolyListItem = record
@@ -240,18 +240,18 @@ type
 
 procedure TGeoTools.bitRound(aNode: OleVariant; aBitLevel: integer);
 var
-  l,k:double;
+  l, k: double;
 begin
-  if aBitLevel>31 then
-  //no conversion needed
+  if aBitLevel > 31 then
+    //no conversion needed
     exit;
-  if aBitLevel<2 then
-    aBitLevel:=2;
-  l:=aNode.lat;
-  k:=360/(cardinal(1) shl aBitLevel); //k*(2^bitLevel)==360
-  aNode.lat:=round(l/k)*k;
-  l:=aNode.lon;
-  aNode.lon:=round(l/k)*k;
+  if aBitLevel < 2 then
+    aBitLevel := 2;
+  l := aNode.lat;
+  k := 360 / (cardinal(1) shl aBitLevel); //k*(2^bitLevel)==360
+  aNode.lat := round(l / k) * k;
+  l := aNode.lon;
+  aNode.lon := round(l / k) * k;
 end;
 
 function TGeoTools.createPoly: OleVariant;
@@ -278,28 +278,29 @@ end;
 function TGeoTools.wayToNodeArray(aMap,
   aWayOrWayId: OleVariant): OleVariant;
 var
-  h,i:integer;
-  pId,pNd:POleVariant;
-  i64:int64;
+  h, i: integer;
+  pId, pNd: POleVariant;
+  i64: int64;
 begin
-  aWayOrWayId:=varFromJsObject(aWayOrWayId);
-  if not VarIsType(aWayOrWayId,varDispatch) then begin
+  aWayOrWayId := varFromJsObject(aWayOrWayId);
+  if not VarIsType(aWayOrWayId, varDispatch) then begin
     //not object, so treat it as Id
-    i64:=aWayOrWayId;
-    aWayOrWayId:=aMap.getWay(i64);
+    i64 := aWayOrWayId;
+    aWayOrWayId := aMap.getWay(i64);
   end;
-  if not VarIsType(aWayOrWayId,varDispatch) then
-    raise EReadError.Create(toString()+'.wayToNodeArray: way '+inttostr(i64)+' not found');
-  aWayOrWayId:=aWayOrWayId.nodes;
-  h:=varArrayLength(aWayOrWayId)-1;
-  result:=VarArrayCreate([0,h],varVariant);
-  pNd:=VarArrayLock(result);
-  pId:=VarArrayLock(aWayOrWayId);
+  if not VarIsType(aWayOrWayId, varDispatch) then
+    raise EReadError.create(toString() + '.wayToNodeArray: way ' + inttostr(i64) + ' not found');
+  aWayOrWayId := aWayOrWayId.nodes;
+  h := varArrayLength(aWayOrWayId) - 1;
+  result := VarArrayCreate([0, h], varVariant);
+  pNd := VarArrayLock(result);
+  pId := VarArrayLock(aWayOrWayId);
   try
-    for i:=0 to h do begin
-      pNd^:=aMap.getNode(pId^);
-      if not varIsType(pNd^,varDispatch) then
-        raise EReadError.Create(toString()+'.wayToNodeArray: node '+inttostr(pId^)+' not found');
+    for i := 0 to h do begin
+      pNd^ := aMap.getNode(pId^);
+      if not VarIsType(pNd^, varDispatch) then
+        raise EReadError.create(toString() + '.wayToNodeArray: node ' + inttostr(pId^) +
+          ' not found');
       inc(pNd);
       inc(pId);
     end;
@@ -359,7 +360,7 @@ begin
       dec(n);
     end;
   finally
-    VarArrayUnlock(members);
+    varArrayUnlock(members);
   end;
 end;
 
@@ -458,7 +459,7 @@ begin
       dec(n);
     end;
   finally
-    VarArrayUnlock(members);
+    varArrayUnlock(members);
   end;
 end;
 
@@ -1149,12 +1150,14 @@ end;
 procedure TMultiPoly.addObject(const aMapObject: OleVariant);
 var
   s: WideString;
+  o:Variant;
 begin
   //add object to inList
-  if varIsType(aMapObject, varDispatch) then begin
-    s := aMapObject.getClassName();
+  varCopyNoInd(o,aMapObject);
+  if VarIsType(o, varDispatch) then begin
+    s := o.getClassName();
     if (s = 'Relation') or (s = 'Way') then begin
-      putList(srcList, VarAsType(aMapObject, varDispatch), -1);
+      putList(srcList, o, -1);
       clearInternalLists();
     end
     else begin
@@ -1335,7 +1338,7 @@ function TMultiPoly.resolve(const srcMap: OleVariant): boolean;
   function resolveRelations(): boolean; //true if all relations and members resolved
   var
     i, mlen: integer;
-    v, ml, newObj: OleVariant;
+    v, ml, newObj: Variant;
     pv: POleVariant;
     s: WideString;
     id: int64;
@@ -1358,8 +1361,8 @@ function TMultiPoly.resolve(const srcMap: OleVariant): boolean;
             inc(pv, 2);
             dec(mlen, 3);
             if (s = 'relation') then begin
-              VarCopyNoInd(Variant(newObj), srcMap.getRelation(id));
-              if varIsType(newObj, varDispatch) then
+              varCopyNoInd(newObj, srcMap.getRelation(id));
+              if VarIsType(newObj, varDispatch) then
                 putList(relationList, newObj, i)
               else begin
                 addNotResolved('relation', id);
@@ -1367,8 +1370,8 @@ function TMultiPoly.resolve(const srcMap: OleVariant): boolean;
               end;
             end
             else if (s = 'way') then begin
-              VarCopyNoInd(Variant(newObj),srcMap.getWay(id));
-              if varIsType(newObj, varDispatch) then
+              varCopyNoInd(newObj, srcMap.getWay(id));
+              if VarIsType(newObj, varDispatch) then
                 putList(wayList, newObj, i)
               else begin
                 addNotResolved('way', id);
@@ -1377,7 +1380,7 @@ function TMultiPoly.resolve(const srcMap: OleVariant): boolean;
             end
           end;
         finally
-          VarArrayUnlock(ml);
+          varArrayUnlock(ml);
         end;
       end;
       inc(i);
@@ -1403,7 +1406,7 @@ var
   function resolveWays(): boolean; //returns true if all node refs resolved
   var
     i, mlen: integer;
-    v, ml, newObj: OleVariant;
+    v, ml, newObj: Variant;
     pv: POleVariant;
     id: int64;
     pwd: PWayDescItem;
@@ -1428,8 +1431,8 @@ var
           id := pv^;
           inc(pv);
           dec(mlen);
-          VarCopyNoInd(Variant(newObj),srcMap.getNode(id));
-          if varIsType(newObj, varDispatch) then
+          varCopyNoInd(newObj, srcMap.getNode(id));
+          if VarIsType(newObj, varDispatch) then
             putList(pwd^.way, newObj, i)
           else begin
             addNotResolved('node', id);
@@ -1441,7 +1444,7 @@ var
           end;
         end;
       finally
-        VarArrayUnlock(ml);
+        varArrayUnlock(ml);
       end;
     end;
   end;
@@ -1725,8 +1728,8 @@ begin
   if (nOpt = pCnt) then
     //no optimization needed
     exit;
-  maxSplitCnt:=nOpt*2;//prevent infinite loop on "non-splittable" poly
-  while (pCnt < nOpt) and (maxSplitCnt>0) do begin
+  maxSplitCnt := nOpt * 2; //prevent infinite loop on "non-splittable" poly
+  while (pCnt < nOpt) and (maxSplitCnt > 0) do begin
     maxCnt := 0;
     maxIdx := 0;
     for i := 0 to pCnt - 1 do begin
@@ -1902,7 +1905,7 @@ var
           dec(j);
         end;
       finally
-        VarArrayUnlock(ws);
+        varArrayUnlock(ws);
       end;
       result[i] := ws;
     end;
@@ -2120,7 +2123,7 @@ begin
       raise EConvertError.create(toString() +
         '.getIntersection: not all references resolved or polygons closed.');
   cvtObj := varFromJsObject(anObj);
-  if (varIsType(cvtObj, varVariant or varArray)) and (VarArrayDimCount(cvtObj) = 1) then begin
+  if (VarIsType(cvtObj, varVariant or varArray)) and (VarArrayDimCount(cvtObj) = 1) then begin
     l := varArrayLength(cvtObj);
     if (l < 3) or (cvtObj[0].id <> cvtObj[l - 1].id) then
       result := getLineIntersection(aMap, cvtObj, newNodeId)
@@ -2590,7 +2593,7 @@ var
         pSeg := sl.next()
       else
         pSeg := nil;
-      VarArrayUnlock(varArrPoly);
+      varArrayUnlock(varArrPoly);
       inc(nPolygons);
       VarArrayRedim(result, nPolygons - 1);
       result[nPolygons - 1] := varArrPoly;
@@ -2660,7 +2663,7 @@ begin
     freeAndNil(bboxB);
     freeAndNil(crossPt);
     if (assigned(pNodeVar)) then
-      VarArrayUnlock(aNodeArray);
+      varArrayUnlock(aNodeArray);
     for i := 0 to newNodeCount - 1 do begin
       freeAndNil(newPoints[i]);
     end;
@@ -2780,7 +2783,7 @@ type
   function includes(greater, less: TGTPoly): boolean;
   var
     i: integer;
-    p:TGTPoint;
+    p: TGTPoint;
   begin
     for i := 0 to less.count - 1 do begin
       case greater.isIn(less.fPoints[i]) of
@@ -2796,11 +2799,11 @@ type
     end;
     //all less-poly bound points are on greater-poly bound
     //check "middle" point of less-poly
-    i:=less.count div 2;
-    p:=TGTPoint.Create();
-    p.lat:=(less.fPoints[0].lat+less.fPoints[i].lat)/2;
-    p.lon:=(less.fPoints[0].lon+less.fPoints[i].lon)/2;
-    result:=greater.isIn(p)>0;
+    i := less.count div 2;
+    p := TGTPoint.create();
+    p.lat := (less.fPoints[0].lat + less.fPoints[i].lat) / 2;
+    p.lon := (less.fPoints[0].lon + less.fPoints[i].lon) / 2;
+    result := greater.isIn(p) > 0;
     freeAndNil(p);
   end;
 

@@ -100,7 +100,7 @@ type
 
   TDBFReader = class(TOSManObject, IResourceInputStream, IStorageUser)
   protected
-    fStorage: OleVariant;
+    fStorage: Variant;
     fDBF: TDBF;
   public
     function get_storage: OleVariant;
@@ -665,7 +665,7 @@ end;
 
 procedure TDBFReader.set_storage(const newStorage: OleVariant);
 begin
-  fStorage := newStorage;
+  varCopyNoInd(fStorage, newStorage);
 end;
 
 { TStoredIdList }
@@ -703,7 +703,7 @@ begin
     fQryDelete := fStorage.sqlPrepare(
       'DELETE FROM ' + tableName + ' WHERE id=:id');
   end;
-  fStorage.sqlExec(fQryDelete, ':id',id);
+  fStorage.sqlExec(fQryDelete, ':id', id);
 end;
 
 procedure TStoredIdList.deleteTable;
@@ -740,7 +740,7 @@ begin
     fQryIsIn := fStorage.sqlPrepare('SELECT COUNT(1) FROM ' + tableName +
       ' WHERE id=:id');
   end;
-  i := fStorage.sqlExec(fQryIsIn, ':id',id).read(1)[0];
+  i := fStorage.sqlExec(fQryIsIn, ':id', id).read(1)[0];
   result := i > 0;
 end;
 

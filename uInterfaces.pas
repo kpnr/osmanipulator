@@ -13,7 +13,7 @@ type
 
   //logger interface
   ILogger = interface(IOSManAll)
-    procedure log(const logMessage:WideString);
+    procedure log(const logMessage: WideString);
   end;
 
   //Read only byte stream interface
@@ -38,11 +38,11 @@ type
   end;
 
   //Write only byte stream interface
-  IOutputStream=interface(IOSManAll)
+  IOutputStream = interface(IOSManAll)
     //Write data from zero-based one dimensional SafeArray of bytes (VT_ARRAY | VT_UI1)
-    procedure write(const aBuf:OleVariant);
-    procedure set_eos(const aEOS:WordBool);
-    function get_eos:WordBool;
+    procedure write(const aBuf: OleVariant);
+    procedure set_eos(const aEOS: WordBool);
+    function get_eos: WordBool;
     //write "true" if all data stored and stream should to release system resources
     //once set to "true" no write oprerations allowed on stream
     property eos: WordBool read get_eos write set_eos;
@@ -116,12 +116,12 @@ type
     procedure deleteByIdx(idx: integer);
     //returns interlived SafeArray of variants
     //[0]-refType[0](string), [1]-refId[0](int64), [2]-refRole[0](string), [3]-refType[1]....
-    function getAll:OleVariant;
-    //replace old list with new one. Deletes all old items then adds new 
+    function getAll: OleVariant;
+    //replace old list with new one. Deletes all old items then adds new
     //See getAll() result description for refTypesIdsRoles layout
     procedure setAll(refTypesIdsRoles: OleVariant);
     //idx - if idx => count then item appended to end of list, if idx<0 exception raised
-    procedure insertBefore(idx: integer; const refType: WideString; refId: int64; const refRole:
+    procedure insertBefore(idx: integer; const refType: WideString; refId: Int64; const refRole:
       WideString);
 
     function get_count: integer;
@@ -193,60 +193,60 @@ type
   //onPutObject called before any other function.
   // If onPutObject returns false, then other filter functions(onPutNode, etc.)
   //  not called for this object.
-  IMapOnPutFilter=interface
-    function onPutObject(const mapObject:OleVariant):boolean;
-    function onPutNode(const node:OleVariant):boolean;
-    function onPutWay(const way:OleVariant):boolean;
-    function onPutRealtion(const relation:OleVariant):boolean;
+  IMapOnPutFilter = interface
+    function onPutObject(const mapObject: OleVariant): boolean;
+    function onPutNode(const node: OleVariant): boolean;
+    function onPutWay(const way: OleVariant): boolean;
+    function onPutRealtion(const relation: OleVariant): boolean;
   end;
 
   //responce for http-requests
   //Use IInputStream to read responce body.
-  IHTTPResponce=interface(IInputStream)
+  IHTTPResponce = interface(IInputStream)
     //get state of operation.
     //  0 - waiting for connect
     //  1 - connected
     //  2 - sending data to server
     //  3 - receiving data from server
     //  4 - transfer complete. Success/fail determined by getStatus() call.
-    function getState():integer;
+    function getState(): integer;
     //get HTTP-status. It implemented as follows:
     // 1.If connection broken or not established in state < 3 then status '503 Service Unavailable' set;
     // 2.If connection broken in state=3 then status '504 Gateway Time-out' set;
     // 3.If state=3 (transfer operation pending) then status '206 Partial Content' set;
     // 4.If state=4 then status set to server-returned status
-    function getStatus():integer;
+    function getStatus(): integer;
     //wait for tranfer completition. On function exit all pending
     //  data send/receive completed and connection closed.
     procedure fetchAll();
   end;
 
   //HTTP storage for NetMap
-  IHTTPStorage=interface(IOSManAll)
+  IHTTPStorage = interface(IOSManAll)
     //property setters-getters
-    function get_hostName():WideString;
-    procedure set_hostName(const aName:WideString);
-    function get_timeout():integer;
-    procedure set_timeout(const aTimeout:integer);
-    function get_maxRetry():integer;
-    procedure set_maxRetry(const aMaxRetry:integer);
+    function get_hostName(): WideString;
+    procedure set_hostName(const aName: WideString);
+    function get_timeout(): integer;
+    procedure set_timeout(const aTimeout: integer);
+    function get_maxRetry(): integer;
+    procedure set_maxRetry(const aMaxRetry: integer);
 
     //returns IHTTPResponce for request 'GET http://hostName/location'
-    function get(const location:WideString):OleVariant;
+    function get(const location: WideString): OleVariant;
     //hostname for OSM-API server. Official server is api.openstreetmap.org
-    property hostName:WideString read get_hostName write set_hostName;
+    property hostName: WideString read get_hostName write set_hostName;
     //timeout for network operations (in ms). By default 20000ms (20 sec)
-    property timeOut:integer read get_timeout write set_timeout;
+    property timeOut: integer read get_timeout write set_timeout;
     //max retries for connection/DNS requests. By default 3.
-    property maxRetry:integer read get_maxRetry write set_maxRetry;
+    property maxRetry: integer read get_maxRetry write set_maxRetry;
   end;
 
   //SQL storage for map data
   IStorage = interface(IOSManAll)
     function get_dbName(): WideString;
     procedure set_dbName(const newName: WideString);
-    function get_readOnly():boolean;
-    procedure set_readOnly(roFlag:boolean);
+    function get_readOnly(): boolean;
+    procedure set_readOnly(roFlag: boolean);
 
     //returns opaque Query object
     function sqlPrepare(const sqlProc: WideString): OleVariant;
@@ -255,34 +255,34 @@ type
     //returns IQueryResult object
     //It can do batch execution if length(ParamValues)==k*length(paramsNames) and k>=1.
     //In such case only last resultset returned
-    function sqlExec(const sqlQuery: OleVariant; const paramNames,paramValues: OleVariant):
+    function sqlExec(const sqlQuery: OleVariant; const paramNames, paramValues: OleVariant):
       OleVariant;
     //creates IStoredIdList object
-    function createIdList():OleVariant;
+    function createIdList(): OleVariant;
     //initialize new storage - create database schema (tables, indexes, triggers...)
     procedure initSchema();
     //set this property before open to use db in readonly mode
-    property readOnly:boolean read get_readOnly write set_readOnly;
+    property readOnly: boolean read get_readOnly write set_readOnly;
     //database resource locator (file name, server name, etc).
     property dbName: WideString read get_dbName write set_dbName;
   end;
 
-  IStorageUser=interface(IOSManAll)
-    function get_storage:OleVariant;
-    procedure set_storage(const newStorage:OleVariant);
+  IStorageUser = interface(IOSManAll)
+    function get_storage: OleVariant;
+    procedure set_storage(const newStorage: OleVariant);
     //IStorage object
-    property storage:OleVariant read get_storage write set_storage;
+    property storage: OleVariant read get_storage write set_storage;
   end;
 
-  IStoredIdList=interface(IOSManAll)
-    function get_tableName:wideString; 
+  IStoredIdList = interface(IOSManAll)
+    function get_tableName: WideString;
 
     //returns true if `id` is in list
-    function isIn(const id: int64): boolean;
+    function isIn(const id: Int64): boolean;
     //add `id` into list. If `id` already in list do nothing.
-    procedure add(const id: int64);
+    procedure add(const id: Int64);
     //deletes `id from list. If `id` not in list do nothing.
-    procedure delete(const id: int64);
+    procedure delete(const id: Int64);
     //read-only temporary table name. Use it in SQL-queries.
     property tableName: WideString read get_tableName;
   end;
@@ -305,11 +305,11 @@ type
     procedure putObject(const aObj: OleVariant);
 
     //delete Node and its tags from Storage. Ways and Relations is not updated.
-    procedure deleteNode(const nodeId:int64);
+    procedure deleteNode(const nodeId: Int64);
     //delete Way, its tags and node-list from Storage. Relations is not updated.
-    procedure deleteWay(const wayId:int64);
+    procedure deleteWay(const wayId: Int64);
     //delete Relation, its tags and ref-list from Storage. Parent and child Relations is not updated.
-    procedure deleteRelation(const relationId:int64);
+    procedure deleteRelation(const relationId: Int64);
 
     //get node by ID. If no node found returns false
     function getNode(const id: Int64): OleVariant;
@@ -342,11 +342,11 @@ type
     //     subsequent filters not called and object not passed (short AND evaluation).
     //    Params:
     //     cFilter - IMapOnPutFilter object.
-    function getObjects(const filterOptions:OleVariant):OleVariant;
-    function get_onPutFilter:OleVariant;
-    procedure set_onPutFilter(const aFilter:OleVariant);
+    function getObjects(const filterOptions: OleVariant): OleVariant;
+    function get_onPutFilter: OleVariant;
+    procedure set_onPutFilter(const aFilter: OleVariant);
     //IMapOnPutFilter
-    property onPutFilter:Olevariant read get_onPutFilter write set_onPutFilter;
+    property onPutFilter: OleVariant read get_onPutFilter write set_onPutFilter;
   end;
 
   //results of query
@@ -357,32 +357,32 @@ type
     function getColNames(): OleVariant;
   end;
 
-  IGeoTools=interface(IOSManAll)
+  IGeoTools = interface(IOSManAll)
     //returns multipolygon Object
-    function createPoly():OleVariant;
+    function createPoly(): OleVariant;
     //returns distance in meters
-    function distance(const node1,node2:OleVariant):double;
+    function distance(const node1, node2: OleVariant): Double;
     //returns node rounded to certain bit level.
     //aBitLevel should be between 2 and 31.
     //Suitable for mp-format convertion
-    procedure bitRound(aNode:OleVariant;aBitLevel:integer);
+    procedure bitRound(aNode: OleVariant; aBitLevel: integer);
     //returns array of Nodes of way.
     //if some objects not found in aMap then exception raised
     //aMap - source of Nodes and Way
     //aWayOrWayId - Way object or id of way.
-    function wayToNodeArray(aMap,aWayOrWayId:OleVariant):OleVariant;
+    function wayToNodeArray(aMap, aWayOrWayId: OleVariant): OleVariant;
   end;
 
-  IMultiPoly=interface(IOSManAll)
+  IMultiPoly = interface(IOSManAll)
     //add MapObject to polygon. Nodes not allowed,
     //node-members in Relation are ignored
-    procedure addObject(const aMapObject:OleVariant);
+    procedure addObject(const aMapObject: OleVariant);
     //returns true if all relations/way/nodes resolved, false otherwise
-    function resolve(const srcMap:OleVariant):boolean;
+    function resolve(const srcMap: OleVariant): boolean;
     //IRefList of not resolved references
-    function getNotResolved():OleVariant;
+    function getNotResolved(): OleVariant;
     //IRefList of not closed nodes.
-    function getNotClosed():OleVariant;
+    function getNotClosed(): OleVariant;
     //returns intersection of Poly boundary and NodeArray.
     //Result is array of arrrays of Node`s. Tag 'osman:note' filled with
     //'boundary' value for nodes layed on-bound.
@@ -394,16 +394,16 @@ type
     // poly=(1,0) - (3,0) - (3,2) - (1,2) - (1,0)
     // newNodeId=-11
     // result=[nA(1,1, id=-11, osman:note=boundary), n2(2,1), nB(3,1, id=-12, osman:note=boundary)]
-    function getIntersection(const aMap,aNodeArray:OleVariant; newNodeId:int64):OleVariant;
+    function getIntersection(const aMap, aNodeArray: OleVariant; newNodeId: Int64): OleVariant;
     //returns true if node is in poly (including border)
-    function isIn(const aNode:OleVariant):boolean;
+    function isIn(const aNode: OleVariant): boolean;
     //returns multipoly area in square meters
     //if poly not resolved then exception raised
-    function getArea():double;
+    function getArea(): Double;
     //returns bounding box for poly. Returns SafeArray of four double variants
     // for N,E,S and W bounds respectively. If poly not resolved then
     // exception raised.
-    function getBBox:OleVariant;
+    function getBBox: OleVariant;
   end;
 
 implementation
