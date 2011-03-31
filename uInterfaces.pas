@@ -231,8 +231,8 @@ type
     function get_maxRetry(): integer;
     procedure set_maxRetry(const aMaxRetry: integer);
 
-    //returns IHTTPResponce for request 'GET http://hostName/location'
-    function get(const location: WideString): OleVariant;
+    //returns IHTTPResponce for request 'method http://hostName/location' and POSTed extraData
+    function send(const method, location, extraData: WideString): OleVariant;
     //hostname for OSM-API server. Official server is api.openstreetmap.org
     property hostName: WideString read get_hostName write set_hostName;
     //timeout for network operations (in ms). By default 20000ms (20 sec)
@@ -317,6 +317,13 @@ type
     function getWay(const id: Int64): OleVariant;
     //get relation by ID. If no relation found returns false
     function getRelation(const id: Int64): OleVariant;
+
+    //get nodes with Ids in nodeIdArray. If at least one object not found empty array returned (see OSM API wiki)
+    function getNodes(const nodeIdArray: OleVariant): OleVariant;
+    //get ways with Ids in wayIdArray. If at least one object not found empty array returned (see OSM API wiki)
+    function getWays(const wayIdArray: OleVariant): OleVariant;
+    //get relations with Ids in relationIdArray. If at least one object not found empty array returned (see OSM API wiki)
+    function getRelations(const relationIdArray: OleVariant): OleVariant;
 
     //get filtered object set
     //returns IInputStream of MapObjects

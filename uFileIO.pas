@@ -104,6 +104,7 @@ end;
 
 destructor TFileReader.Destroy;
 begin
+  OutputDebugStringW('TFileReader.destroy');//$$$debug
   if hFile <> INVALID_HANDLE_VALUE then
     CloseHandle(hFile);
   hFile := INVALID_HANDLE_VALUE;
@@ -127,6 +128,7 @@ end;
 
 destructor TFileWriter.Destroy;
 begin
+  OutputDebugStringW('TFileWriter.destroy');//$$$debug
   if not eos then
     eos:=true;
   inherited;

@@ -13,7 +13,7 @@ IniFile.prototype.read=function(fname,useUnicode){
 		while(!ini.atEndOfStream){
 			var s=ini.readLine();
 			var i=s.indexOf('=');
-			if(i<1)continue;
+			if((i<1)||(s.charAt(0)==';'))continue;
 			r[s.substr(0,i)]=s.substr(i+1);
 		};
 	}finally{

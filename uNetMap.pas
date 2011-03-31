@@ -71,8 +71,7 @@ type
     constructor create(); override;
     destructor destroy(); override;
   published
-    //returns IHTTPResponce for request 'GET http://hostName/location'
-    function get(const location: WideString): OleVariant;
+    //returns IHTTPResponce for request
     function send(const method, location, extraData: WideString): OleVariant;
     //hostname for OSM-API server. Official server is api.openstreetmap.org
     property hostName: WideString read get_hostName write set_hostName;
@@ -87,8 +86,12 @@ type
   protected
     fFetchingResult: boolean;
     fResultObj: OleVariant;
-    //result can
+    //result can be:
+    //1. 'false' in no objects fetched
+    //2. mapObject(Node,Way or Relation) if fetched exactly one object
+    //3. array of mapObjects if fetched more than one object
     function fetchObjects(const method, objLocation, extraData: WideString): OleVariant;
+    function IdArrayToAnsiStr(idArray:Variant):AnsiString;
   published
     //get node by ID. If no node found returns false
     function getNode(const id: int64): OleVariant; override;
@@ -97,7 +100,9 @@ type
     //get relation by ID. If no relation found returns false
     function getRelation(const id: int64): OleVariant; override;
 
-    function getNodes(const nodeIdArray: OleVariant): OleVariant; //$$$ no interface
+    function getNodes(const nodeIdArray: OleVariant): OleVariant; override;
+    function getWays(const wayIdArray: OleVariant): OleVariant; override;
+    function getRelations(const relationIdArray: OleVariant): OleVariant; override;
 
     procedure putNode(const aNode: OleVariant); override;
     procedure putWay(const aWay: OleVariant); override;
@@ -163,8 +168,6 @@ end;
 function TNetMap.getNodes(const nodeIdArray: OleVariant): OleVariant;
 var
   narr: OleVariant;
-  pv: POleVariant;
-  i: integer;
   s: AnsiString;
 begin
   narr := varFromJsObject(nodeIdArray);
@@ -172,19 +175,14 @@ begin
     raise EInOutError.create(toString() + '.getNodes: storage not assigned');
   if (VarArrayDimCount(narr) <> 1) then
     raise EInOutError.create(toString() + '.getNodes: one dimension array expected');
-  s := 'nodes=';
-  i := varArrayLength(narr);
-  pv := VarArrayLock(narr);
-  try
-    while i > 0 do begin
-      dec(i);
-      s := s + VarAsType(pv^, varOleStr) + IfThen(i = 0, '', ',');
-      inc(pv);
-    end;
-  finally
-    VarArrayUnlock(narr);
-  end;
+  s := 'nodes='+idArrayToAnsiStr(narr);
   result := fetchObjects('POST', '/api/0.6/nodes', s);
+  if not varIsArray(result) then begin
+    if varIsType(result,varDispatch) then
+      result:=varArrayOf([result])
+    else
+      result:=varArrayOf([]);
+  end;
 end;
 
 function TNetMap.getRelation(const id: int64): OleVariant;
@@ -192,9 +190,68 @@ begin
   result := fetchObjects('GET', '/api/0.6/relation/' + inttostr(id), '');
 end;
 
+function TNetMap.getRelations(const relationIdArray: OleVariant): OleVariant;
+var
+  narr: OleVariant;
+  s: AnsiString;
+begin
+  narr := varFromJsObject(relationIdArray);
+  if not VarIsType(fStorage, varDispatch) then
+    raise EInOutError.create(toString() + '.getRelations: storage not assigned');
+  if (VarArrayDimCount(narr) <> 1) then
+    raise EInOutError.create(toString() + '.getRelations: one dimension array expected');
+  s := 'relations='+idArrayToAnsiStr(narr);
+  result := fetchObjects('POST', '/api/0.6/relations', s);
+  if not varIsArray(result) then begin
+    if varIsType(result,varDispatch) then
+      result:=varArrayOf([result])
+    else
+      result:=varArrayOf([]);
+  end;
+end;
+
 function TNetMap.getWay(const id: int64): OleVariant;
 begin
   result := fetchObjects('GET', '/api/0.6/way/' + inttostr(id), '');
+end;
+
+function TNetMap.getWays(const wayIdArray: OleVariant): OleVariant;
+var
+  narr: OleVariant;
+  s: AnsiString;
+begin
+  narr := varFromJsObject(wayIdArray);
+  if not VarIsType(fStorage, varDispatch) then
+    raise EInOutError.create(toString() + '.getWays: storage not assigned');
+  if (VarArrayDimCount(narr) <> 1) then
+    raise EInOutError.create(toString() + '.getWays: one dimension array expected');
+  s := 'ways='+idArrayToAnsiStr(narr);
+  result := fetchObjects('POST', '/api/0.6/ways', s);
+  if not varIsArray(result) then begin
+    if varIsType(result,varDispatch) then
+      result:=varArrayOf([result])
+    else
+      result:=varArrayOf([]);
+  end;
+end;
+
+function TNetMap.IdArrayToAnsiStr(idArray: Variant): AnsiString;
+var
+  i:integer;
+  pv:PVariant;
+begin
+  i := varArrayLength(idArray);
+  pv := VarArrayLock(idArray);
+  result:='';
+  try
+    while i > 0 do begin
+      dec(i);
+      result := result + VarAsType(pv^, varOleStr) + IfThen(i = 0, '', ',');
+      inc(pv);
+    end;
+  finally
+    VarArrayUnlock(idArray);
+  end;
 end;
 
 procedure TNetMap.putNode(const aNode: OleVariant);
@@ -241,12 +298,14 @@ begin
   maxRetry := 3;
   timeout := 20000;
   fInet := nil;
-  hostName := 'api06.dev.openstreetmap.org';
-  //$$$'api.openstreetmap.org';//'jxapi.openstreetmap.org/xapi';
+  hostName := 'api.openstreetmap.org';
+  //'api06.dev.openstreetmap.org';
+  //'jxapi.openstreetmap.org/xapi';
 end;
 
 destructor THTTPStorage.destroy;
 begin
+  debugPrint('THTTPStorage.destroy');//$$$debug
   if assigned(fInet) then begin
     InternetCloseHandle(fInet);
     fInet := nil;
@@ -254,40 +313,6 @@ begin
   inherited;
 end;
 
-function THTTPStorage.get(const location: WideString): OleVariant;
-var
-  rCnt: integer;
-  hConn: HInternet;
-  resp: THTTPResponce;
-begin
-  rCnt := maxRetry;
-  resp := THTTPResponce.create();
-  result := resp as IDispatch;
-  while (not assigned(fInet)) and (rCnt > 0) do begin
-    fInet := InternetOpen('OSMan.HTTPStorage.1', INTERNET_OPEN_TYPE_PRECONFIG, nil, nil, 0);
-    dec(rCnt);
-    if (not assigned(fInet)) and (rCnt > 0) then
-      sleep(fTimeout);
-  end;
-  if (not assigned(fInet)) then begin
-    resp.setStates(4, 503);
-    exit;
-  end;
-  hConn := nil;
-  rCnt := maxRetry;
-  while (not assigned(hConn)) and (rCnt > 0) do begin
-    hConn := InternetOpenUrlA(fInet, pAnsiChar(AnsiString('http://' + hostName + location)), nil,
-      0, INTERNET_FLAG_NO_CACHE_WRITE or INTERNET_FLAG_NO_UI, 0);
-    dec(rCnt);
-    if (not assigned(hConn)) and (rCnt > 0) then
-      sleep(fTimeout);
-  end;
-  if (not assigned(hConn)) then begin
-    resp.setStates(4, 504);
-    exit;
-  end;
-  resp.setConnection(hConn, nil);
-end;
 
 function THTTPStorage.get_hostName: WideString;
 begin
@@ -369,14 +394,11 @@ begin
         sleep(fTimeout);
     end;
     if (not assigned(hReq)) then begin
-      InternetCloseHandle(hConn);
       resp.setStates(4, 504);
       exit;
     end;
     if not HttpSendRequestA(hReq, nil, 0, pAnsiChar(AnsiString(extraData)), length(extraData)) then
       begin
-      InternetCloseHandle(hConn);
-      InternetCloseHandle(hReq);
       resp.setStates(4, 504);
       exit;
     end;
@@ -553,6 +575,7 @@ end;
 
 destructor THTTPResponce.destroy;
 begin
+  debugPrint('THTTPResponce.destroy');//$$$debug
   if assigned(fConn) then
     InternetCloseHandle(fConn);
   fConn := nil;
