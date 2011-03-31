@@ -1,7 +1,8 @@
 //settings begin
 var scriptIniFile='F:\\db\\osm\\snapdl.ini';
 var scriptCfgFile='F:\\db\\osm\\snapdl.cfg';
-var cIntToDeg=1/10000000;
+var cDegToInt=10000000;
+var cIntToDeg=1/cDegToInt;
 //settings end
 
 function include(n){var w=WScript,h=w.createObject('WScript.Shell'),o=h.currentDirectory,s=w.createObject('Scripting.FileSystemObject'),f,t;h.currentDirectory=s.getParentFolderName(w.ScriptFullName);try{f=s.openTextFile(n,1,!1);try{t=f.ReadAll()}finally{f.close()}return eval(t)}catch(e){if(e instanceof Error)e.description+=' '+n;throw e}finally{h.currentDirectory=o}}
@@ -28,7 +29,7 @@ function openMap(storageName,cacheSize){
 function clipMap(cfg){
 	echo(curTime()+' Clipping map...');
 	var startTime=new Date();
-	var chunkSize=1000;
+	var chunkSize=1000,netChunkSize=100;
 	var clipPoly=h.gt.createPoly();
 	var clipPoly=h.gt.createPoly();
 	var srcMapFileName=cfg.data['destDBName'];
@@ -68,7 +69,8 @@ function clipMap(cfg){
 	var wayList=src.map.storage.createIdList();
 	var relList=src.map.storage.createIdList();
 	var addList=src.map.storage.createIdList();
-	var qobj=src.exec('SELECT id, minlat as lat ,minlon as lon FROM nodes_latlon WHERE '+cfg.data['mapClipFilter']);
+	var bbox=clipPoly.getBBox().toArray();
+	var qobj=src.exec('SELECT id, minlat as lat ,minlon as lon FROM nodes_latlon WHERE '+cfg.data['mapClipFilter']+' AND ((lat BETWEEN '+(bbox[2]*cDegToInt)+' AND '+(bbox[0]*cDegToInt)+') AND (lon BETWEEN '+(bbox[3]*cDegToInt)+' AND '+(bbox[1]*cDegToInt)+'))');
 	var objCnt=0,qryCnt=0;
 	var testNode=src.map.createNode();
 	echo(curTime()+' building node list');
@@ -106,63 +108,103 @@ function clipMap(cfg){
 	echo(curTime()+' completing node list (ways)');
 	src.exec('INSERT OR IGNORE INTO '+nodeList.tableName+'(id) SELECT nodeid FROM waynodes WHERE (wayid IN (SELECT id FROM '+wayList.tableName+'))');
 	echo(curTime()+' Exporting objects...');
+	
+	echo(curTime()+'  Exporting nodes...');
 	qobj=src.exec('SELECT id FROM '+nodeList.tableName);
-	objCnt=0;
+	objCnt=0;qryCnt=0;
+	var notFoundObj=[];
 	while(!qobj.eos){
 		var objs=qobj.read(chunkSize).toArray();
 		for(var i=0;i<objs.length;i++){
 			var obj=src.map.getNode(objs[i]);
-			if(!obj)try{
-				obj=netMap.getNode(objs[i]);
-			}catch(e){
-				echo('Can`t find node '+objs[i]+'. '+e.message);
-			};
 			if(obj){
 				dst.map.putObject(obj);
 				objCnt++;
-			}
+			}else{
+				notFoundObj.push(objs[i]);
+			};
+			qryCnt++;
 		};
-		echo(curTime()+' '+objCnt+' nodes exported',true);
+		echo(curTime()+' '+objCnt+' of '+qryCnt+' nodes exported',true);
 	};
 	echo('');
+	
+	echo(curTime()+'  Getting nodes from net...');
+	objCnt=0;qryCnt=0;
+	while(notFoundObj.length>0){
+		objs=netMap.getNodes(notFoundObj.splice(0,netChunkSize)).toArray();
+		for(var i=0;i<objs.length;i++){
+			dst.map.putObject(objs[i]);
+			objCnt++;
+		}
+		qryCnt+=netChunkSize;
+		echo(curTime()+' '+objCnt+' of '+qryCnt+' nodes exported',true);
+	};
+	echo('');
+	
+	echo(curTime()+'  Exporting ways...');
 	qobj=src.exec('SELECT id FROM '+wayList.tableName);
-	objCnt=0;
+	objCnt=0;qryCnt=0;notFoundObj=[];
 	while(!qobj.eos){
 		var objs=qobj.read(chunkSize).toArray();
 		for(var i=0;i<objs.length;i++){
 			var obj=src.map.getWay(objs[i]);
-			if(!obj)try{
-				obj=netMap.getWay(objs[i]);
-			}catch(e){
-				echo('Can`t find way '+objs[i]+'. '+e.message);
-			};
 			if(obj){
 				dst.map.putObject(obj);
 				objCnt++;
+			}else{
+				notFoundObj.push(objs[i]);
 			}
+			qryCnt++;
 		};
-		echo(curTime()+' '+objCnt+' ways exported',true);
+		echo(curTime()+' '+objCnt+' of '+qryCnt+' ways exported',true);
 	};
 	echo('');
+
+	echo(curTime()+'  Getting ways from net...');
+	objCnt=0;qryCnt=0;
+	while(notFoundObj.length>0){
+		objs=netMap.getWays(notFoundObj.splice(0,netChunkSize)).toArray();
+		for(var i=0;i<objs.length;i++){
+			dst.map.putObject(objs[i]);
+			objCnt++;
+		}
+		qryCnt+=netChunkSize;
+		echo(curTime()+' '+objCnt+' of '+qryCnt+' ways exported',true);
+	};
+	echo('');
+
 	qobj=src.exec('SELECT id FROM '+relList.tableName);
-	objCnt=0;
+	objCnt=0;qryCnt=0;notFoundObj=[];
 	while(!qobj.eos){
 		var objs=qobj.read(chunkSize).toArray();
 		for(var i=0;i<objs.length;i++){
 			var obj=src.map.getRelation(objs[i]);
-			if(!obj)try{
-				obj=netMap.getRelation(objs[i]);
-			}catch(e){
-				echo('Can`t find relation '+objs[i]+'. '+e.message);
-			};
 			if(obj){
 				dst.map.putObject(obj);
 				objCnt++;
+			}else{
+				notFoundObj.push(objs[i]);
 			}
+			qryCnt++;
 		};
-		echo(curTime()+' '+objCnt+' relations exported',true);
+		echo(curTime()+' '+objCnt+' of '+qryCnt+' relations exported',true);
 	};
 	echo('');
+
+	echo(curTime()+'  Getting relations from net...');
+	objCnt=0;qryCnt=0;
+	while(notFoundObj.length>0){
+		objs=netMap.getRelations(notFoundObj.splice(0,netChunkSize)).toArray();
+		for(var i=0;i<objs.length;i++){
+			dst.map.putObject(objs[i]);
+			objCnt++;
+		}
+		qryCnt+=netChunkSize;
+		echo(curTime()+' '+objCnt+' of '+qryCnt+' relations exported',true);
+	};
+	echo('');
+
 	//cleanup db objects
 	qobj='';
 	src.close();

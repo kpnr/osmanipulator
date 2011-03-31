@@ -1,5 +1,4 @@
 unit uOSMCommon;
-
 interface
 
 uses ActiveX, Windows, SysConst, uModule, uInterfaces, SysUtils, Classes, Variants;
@@ -29,7 +28,6 @@ type
     procedure grow();
   public
     function get_count: integer;
-    destructor destroy(); override;
   published
     procedure getByIdx(idx: integer; out refType: WideString; out refId: int64; out refRole:
       WideString);
@@ -109,7 +107,7 @@ function isDispNameExists(const disp: IDispatch; const aName: WideString): boole
 //converts jsObject into OleVariant. If jsObj already OleVariant then returns unchanged jsObj
 function varFromJsObject(const jsObj: OleVariant): OleVariant;
 //returns length of fisrt dimension of variant array
-function varArrayLength(const vArr: OleVariant): integer;
+function varArrayLength(const vArr: Variant): integer;
 
 //convert floating Degrees into WideString
 function degToStr(const deg: double): WideString;
@@ -118,7 +116,15 @@ function degToStr(const deg: double): WideString;
 function degToInt(const deg: double): integer;
 function IntToDeg(const i: integer): double;
 
+//emit message to debugger
+procedure debugPrint(const msg:WideString);
+
 implementation
+
+procedure debugPrint(const msg:WideString);
+begin
+  OutputDebugStringW(PWideChar(msg));
+end;
 
 function degToInt(const deg: double): integer;
 asm
@@ -137,7 +143,7 @@ asm
   pop eax
 end;
 
-function varArrayLength(const vArr: OleVariant): integer;
+function varArrayLength(const vArr: Variant): integer;
 begin
   result := varArrayHighBound(vArr, 1) - varArrayLowBound(vArr, 1) + 1;
 end;
@@ -485,6 +491,7 @@ end;
 
 destructor TOSMDecompressStream.destroy;
 begin
+  OutputDebugStringW('OSMDecompressStream.destroy');//$$$debug
   if assigned(zStream) then
     FreeAndNil(zStream);
   if assigned(inStreamAdaptor) then
@@ -650,11 +657,6 @@ begin
     setLength(fRefIds, i);
     setLength(fRefRoles, i);
   end;
-end;
-
-destructor TRefList.destroy;
-begin
-  inherited;
 end;
 
 { TPutFilterAdaptor }

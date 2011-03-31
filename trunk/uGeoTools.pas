@@ -261,6 +261,7 @@ end;
 
 destructor TGeoTools.destroy;
 begin
+  debugPrint('TGeoTools.destroy');//$$$debug
   freeAndNil(pt1);
   freeAndNil(pt2);
   inherited;
@@ -787,6 +788,7 @@ destructor TGTPoly.destroy;
 var
   i: integer;
 begin
+  debugPrint('TGTPoly.destroy');//$$$debug
   for i := 0 to count - 1 do
     freeAndNil(fPoints[i]);
   inherited;
@@ -1220,6 +1222,7 @@ end;
 
 destructor TMultiPoly.destroy;
 begin
+  debugPrint('TMultiPoly.destroy');//$$$debug
   clearInternalLists();
   inherited;
 end;
@@ -1340,7 +1343,7 @@ function TMultiPoly.resolve(const srcMap: OleVariant): boolean;
     i, mlen: integer;
     v, ml, newObj: Variant;
     pv: POleVariant;
-    s: WideString;
+    s,role: WideString;
     id: int64;
   begin
     //resolve relations into child-relations and ways
@@ -1358,8 +1361,12 @@ function TMultiPoly.resolve(const srcMap: OleVariant): boolean;
             s := pv^;
             inc(pv);
             id := pv^;
-            inc(pv, 2);
+            inc(pv);
+            role := pv^;
+            inc(pv);
             dec(mlen, 3);
+            //skip subareas
+            if (role='subarea') then continue;
             if (s = 'relation') then begin
               varCopyNoInd(newObj, srcMap.getRelation(id));
               if VarIsType(newObj, varDispatch) then

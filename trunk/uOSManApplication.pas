@@ -25,10 +25,12 @@ type
     appPath: WideString;
     moduleList: TTNTStringList;
     fLogger:OleVariant;
+    fZeroCnt:integer;
     function createObject(const ObjClassName: WideString): IDispatch;
       safecall;
     function getModuleClasses(const ModuleName: WideString): OleVariant;
       safecall;
+    function ObjRelease: Integer; override;
     function getModules: OleVariant; safecall;
     function toString: WideString; safecall;
     function getClassName: WideString; safecall;
@@ -146,12 +148,16 @@ var
   pModuleFunc: TOSManModuleFunc;
   clist: TModuleClassList;
   iu: IUnknown;
+  idi:IDispatch;
   cnames, cids: OleVariant;
+
 begin
   inherited;
   fLogger:=Unassigned;
   getmem(pwc, sizeof(WideChar) * MAX_PATH);
   try
+    idi:=self;
+    fZeroCnt:=RefCount;
     l := getModuleFileNameW(HInstance, pwc, MAX_PATH);
     if l = 0 then raise EOleError.create(toString() + ': ' + sysErrorMessage(getLastError()));
     appPath := WideExtractFilePath(pwc);
@@ -164,7 +170,7 @@ begin
       if hMod <> 0 then begin
         pModuleFunc := getProcAddress(hMod, 'OSManModule');
         if assigned(pModuleFunc) then begin
-          if succeeded(pModuleFunc(IID_IOSManModule, iu)) and
+          if succeeded(pModuleFunc(idi,IID_IOSManModule, iu)) and
             succeeded((iu as IOSManModule).getClasses(cnames, cids)) then begin
             clist := nil;
             try
@@ -194,6 +200,8 @@ begin
     WideFindClose(sr);
   finally
     freemem(pwc);
+    //compare fZeroCnt and RefCount before Release call, so add 1
+    fZeroCnt:=RefCount-fZeroCnt+1;
   end;
 end;
 
@@ -202,6 +210,8 @@ var
   i: integer;
   o: TObject;
 begin
+  OutputDebugStringW('TApplication.destroy');//$$$debug
+  fZeroCnt:=-1;
   fLogger:=Unassigned;
   if assigned(moduleList) then
     for i := moduleList.Count - 1 downto 0 do begin
@@ -213,6 +223,7 @@ begin
     end;
   FreeAndNil(moduleList);
   inherited;
+  OutputDebugStringW('TApplication.destroy done');//$$$debug
 end;
 
 { TModuleClassList }
@@ -224,8 +235,11 @@ end;
 
 destructor TModuleClassList.destroy;
 begin
-  if assigned(iModule) then
+  OutputDebugStringW('TModuleClassList.destroy');//$$$debug
+  if assigned(iModule) then begin
+    iModule.appRef:=nil;
     iModule := nil;
+  end;
   if hModule <> 0 then
     freeLibrary(hModule);
   hModule := 0;
@@ -257,6 +271,17 @@ begin
         clist.iModule.set_logger(Value);
     end;
   end;
+end;
+
+function TApplication.ObjRelease: Integer;
+begin
+  if (RefCount<=fZeroCnt) then begin
+    if RefCount=fZeroCnt then
+      destroy();
+    result:=0;
+  end
+  else
+    result:=inherited ObjRelease();
 end;
 
 initialization

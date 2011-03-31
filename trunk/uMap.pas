@@ -6,6 +6,7 @@ type
   TAbstractMap = class(TOSManObject, IMap)
   protected
     fStorage: Variant;
+    function getMultiObjects(const ObjType:AnsiString;objIdArray:Variant):OleVariant;
   public
     function get_storage: OleVariant; virtual;
     procedure set_storage(const newStorage: OleVariant); virtual;
@@ -41,6 +42,13 @@ type
     function getWay(const id: int64): OleVariant; virtual; abstract;
     //get relation by ID. If no relation found returns false
     function getRelation(const id: int64): OleVariant; virtual; abstract;
+
+    //get nodes with Ids in nodeIdArray. If at least one object not found <false> returned (see OSM API wiki)
+    function getNodes(const nodeIdArray: OleVariant): OleVariant;virtual;
+    //get ways with Ids in wayIdArray. If at least one object not found <false> returned (see OSM API wiki)
+    function getWays(const wayIdArray: OleVariant): OleVariant;virtual;
+    //get relations with Ids in relationIdArray. If at least one object not found <false> returned (see OSM API wiki)
+    function getRelations(const relationIdArray: OleVariant): OleVariant;virtual;
 
     //get filtered object set
     function getObjects(const filterOptions: OleVariant): OleVariant; virtual; abstract;
@@ -295,6 +303,7 @@ end;
 
 destructor TMap.destroy;
 begin
+  debugPrint('TMap.destroy');//$$$debug
   FreeAndNil(fOnPutFilter);
   inherited;
 end;
@@ -1096,6 +1105,7 @@ end;
 
 destructor TMapObjectStream.destroy;
 begin
+  debugPrint('TMapObjectStream.destroy');//$$$debug
   set_eos(true);
   inherited;
 end;
@@ -1534,6 +1544,63 @@ end;
 function TAbstractMap.createWay: IDispatch;
 begin
   result := TWay.create();
+end;
+
+function TAbstractMap.getMultiObjects(const ObjType: AnsiString;
+  objIdArray: Variant): OleVariant;
+type
+  TObjGetter=function (const id: int64): OleVariant of object;
+var
+  i:integer;
+  pv,pv2:PVariant;
+  narr:Variant;
+  getter:TObjGetter;
+begin
+  if ObjType='Node' then getter:=getNode
+  else if ObjType='Way' then getter:=getWay
+  else if ObjType='Relation' then getter:=getRelation
+  else raise ERangeError.Create(toString()+'.getMultiObjects: invalid object type '+ObjType);
+  if not VarIsType(fStorage, varDispatch) then
+    raise EInOutError.create(toString() + '.get'+ObjType+'s: storage not assigned');
+  narr := varFromJsObject(objIdArray);
+  if (VarArrayDimCount(narr) <> 1) then
+    raise EInOutError.create(toString() + '.get'+ObjType+'s: one dimension array expected');
+  i:=varArrayLength(narr);
+  result:=varArrayCreate([0,i-1],varVariant);
+  pv2:=varArrayLock(narr);
+  pv:=varArrayLock(result);
+  try
+    while i > 0 do begin
+      dec(i);
+      varCopyNoInd(pv^,getter(pv2^));
+      if not varIsType(pv^,varDispatch) then
+        i:=-1;
+      inc(pv);
+      inc(pv2);
+    end;
+  finally
+    varArrayUnlock(result);
+    varArrayUnlock(narr);
+  end;
+  if(i=-1) then
+    result:=varArrayOf([]);
+end;
+
+
+function TAbstractMap.getNodes(const nodeIdArray: OleVariant): OleVariant;
+begin
+  result:=getMultiObjects('Node',nodeIdArray);
+end;
+
+function TAbstractMap.getRelations(
+  const relationIdArray: OleVariant): OleVariant;
+begin
+  result:=getMultiObjects('Relation',relationIdArray);
+end;
+
+function TAbstractMap.getWays(const wayIdArray: OleVariant): OleVariant;
+begin
+  result:=getMultiObjects('Way',wayIdArray);
 end;
 
 function TAbstractMap.get_storage: OleVariant;

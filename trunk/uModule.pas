@@ -12,8 +12,11 @@ type
     ['{E5B171BA-F29C-45E2-BDDA-51F2C0651A5D}']
     function getClasses(out ClassNames: OleVariant; out ClassGUIDS: OleVariant): HResult; stdcall;
     function createObjectByCLSID(ClassGUID: TGUID; out rslt: IDispatch): HResult; stdcall;
+    function Get_appRef: IDispatch; stdcall;
+    procedure Set_appRef(Value: IDispatch); stdcall;
     function Get_logger: OleVariant; safecall;
     procedure Set_logger(Value: OleVariant); safecall;
+    property appRef: IDispatch read Get_appRef write Set_appRef;
     property logger: OleVariant read Get_logger write Set_logger;
   end;
 
@@ -25,6 +28,7 @@ type
     function getModuleName: WideString;
   public
     constructor Create; reintroduce; virtual;
+    destructor Destroy; override;
   published
     function toString: WideString; virtual;
     //class
@@ -35,13 +39,16 @@ type
   {$TYPEINFO OFF}
 
   TOSManClass = class of TOSManObject;
-  TOSManModuleFunc = function(const IID: TGUID; out Module: IUnknown): HResult; stdcall;
+  TOSManModuleFunc = function(const osmanApp:IDispatch;const IID: TGUID; out Module: IUnknown): HResult; stdcall;
 
-function OSManModule(const IID: TGUID; out Module: IUnknown): HResult; stdcall;
+function OSManModule(const osmanApp:IDispatch;const IID: TGUID; out Module: IUnknown): HResult; stdcall;
 
 procedure OSManRegister(myClass: TOSManClass; const myClassGUID: TGUID);
 
 procedure OSManLog(const msg: WideString);
+
+procedure AppAddRef();
+procedure AppRelease();
 
 exports OSManModule;
 
@@ -54,8 +61,11 @@ type
     function _Release: Integer; stdcall;
     function getClasses(out ClassNames: OleVariant; out ClassGUIDS: OleVariant): HResult; stdcall;
     function createObjectByCLSID(ClassGUID: TGUID; out rslt: IDispatch): HResult; stdcall;
+    function Get_appRef: IDispatch; stdcall;
+    procedure Set_appRef(Value: IDispatch); stdcall;
     function Get_logger: OleVariant; safecall;
     procedure Set_logger(Value: OleVariant); safecall;
+    property appRef: IDispatch read Get_appRef write Set_appRef;
     property logger: OleVariant read Get_logger write Set_logger;
   public
     destructor Destroy; override;
@@ -70,6 +80,23 @@ type
 var
   regInfo: array of TOSManRegInfo;
   fLogger: OleVariant;
+  gAppRef:IDispatch;
+  AppRefCount:integer;
+
+
+procedure AppAddRef();
+begin
+  if (AppRefCount=0) and assigned(gAppRef) then
+    gAppRef._AddRef();
+  inc(AppRefCount);
+end;
+
+procedure AppRelease();
+begin
+  dec(AppRefCount);
+  if (AppRefCount=0) and assigned(gAppRef) then
+    gAppRef._Release();
+end;
 
 procedure OSManLog(const msg: WideString);
 begin
@@ -78,12 +105,13 @@ begin
   fLogger.log(msg);
 end;
 
-function OSManModule(const IID: TGUID; out Module: IUnknown): HResult;
+function OSManModule(const osmanApp:IDispatch;const IID: TGUID; out Module: IUnknown): HResult;
 begin
   result := E_NOINTERFACE;
   if IsEqualGUID(IID, IID_IOSManModule) then begin
     try
       Module := TOSManModule.Create();
+      (Module as IOSManModule).appRef:=osmanApp;
       result := S_OK;
     except
       result := E_UNEXPECTED;
@@ -127,6 +155,7 @@ end;
 
 destructor TOSManModule.Destroy;
 begin
+  OutputDebugStringW('TOSManModule.destroy');//$$$debug
   fLogger := unassigned;
   inherited;
 end;
@@ -145,9 +174,19 @@ begin
   result := S_OK;
 end;
 
+function TOSManModule.Get_appRef: IDispatch;
+begin
+  result:=gAppRef;
+end;
+
 function TOSManModule.Get_logger: OleVariant;
 begin
   result := fLogger;
+end;
+
+procedure TOSManModule.Set_appRef(Value: IDispatch);
+begin
+  gAppRef:=Value;
 end;
 
 procedure TOSManModule.Set_logger(Value: OleVariant);
@@ -169,7 +208,14 @@ end;
 
 constructor TOSManObject.Create;
 begin
+  AppAddRef();
   inherited Create(self, false);
+end;
+
+destructor TOSManObject.Destroy;
+begin
+  inherited;
+  AppRelease();
 end;
 
 function TOSManObject.getClassName: WideString;
@@ -200,5 +246,6 @@ end;
 
 initialization
   DecimalSeparator := '.';
+  AppRefCount:=0;
 end.
 
