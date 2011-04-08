@@ -1,0 +1,28 @@
+#summary base interface for OSM map objects.
+#labels Phase-Implementation
+
+= Summary =
+
+*IMapObject* supported by all OSM map objects - [INode Node], [IWay Way], [IRelation Relation]. It used to store common properties like _id_, _version_, _timestamp_.
+
+= Interface =
+ * Base interface is IOSManAll .
+  * *id* <br> OSM object identifier *id*. In scripting enviroment it can be autoconverted from _Int64_ into _DoublePrecision_, so only 53 bit *id* fully suppoted. *id* is *0* by default.
+  * *changeset* <br> Last committed _changeset_. In scripting enviroment it can be autoconverted from _Int64_ into _DoublePrecision_, so only 53 bit *changeset* fully suppoted. *changeset* is *0* by default.
+  //OSM object version
+  * *version* <br> OSM object version. It is 32-bit _Integer_. It is *0* by default.
+    //OSM object userID
+  * *userId* <br> Last editor _userId_. It is 32-bit _Integer_. It is *0* by default.
+    //OSM object userName
+  * *userName* <br> Last editor _userName_. It is _String_. It is empty string by default.
+  * *timestamp* <br> OSM object timestamp. It is _String_. It is empty string by default. Format "yyyy-mm-ddThh:nn:ssZ" like in OSM files. By now _timestamp_ not parsed by OSMan.
+  * *tags* <br> optional object tags (_highway=seconadry_ etc). This property supports [IKeyList IKeyList] interface.
+
+= Usage =
+All this properties are read-write, so you can examine and modify it as needed. <br> *Example:*
+{{{
+ //modify existing node
+ node.version=node.version+1;
+ node.userId=123;
+ node.userName='Adam';
+}}}
