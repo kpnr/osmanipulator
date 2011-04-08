@@ -2,8 +2,6 @@ unit uDataStructures;
 
 interface
 
-uses uOSMCommon{debugPrint};
-
 type
 
   PsllItem = ^TsllItem;
@@ -117,7 +115,6 @@ end;
 
 destructor TSingleLinkedList.destroy;
 begin
-  debugPrint('TSingleLinkedList.destroy');//$$$debug
   clear();
   inherited;
 end;
@@ -272,7 +269,6 @@ end;
 
 destructor TDualLinkedRing.destroy;
 begin
-  debugPrint('TDualLinkedRing.destroy');//$$$debug
   clear();
   inherited;
 end;

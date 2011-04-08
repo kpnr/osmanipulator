@@ -261,7 +261,6 @@ end;
 
 destructor TGeoTools.destroy;
 begin
-  debugPrint('TGeoTools.destroy');//$$$debug
   freeAndNil(pt1);
   freeAndNil(pt2);
   inherited;
@@ -788,7 +787,6 @@ destructor TGTPoly.destroy;
 var
   i: integer;
 begin
-  debugPrint('TGTPoly.destroy');//$$$debug
   for i := 0 to count - 1 do
     freeAndNil(fPoints[i]);
   inherited;
@@ -995,6 +993,8 @@ begin
         saveLeft(pt1);
     end;
   end;
+  if count>0 then//delete old extraNode
+    freeAndNil(fPoints[count-1]);
   fCount := li;
   capacity := li + 1;
   move(newPoints[0], fPoints[0], sizeof(fPoints[0]) * li);
@@ -1068,6 +1068,8 @@ begin
         saveBottom(pt1);
     end;
   end;
+  if count>0 then//delete old extraNode
+    freeAndNil(fPoints[count-1]);
   fCount := bi;
   capacity := bi + 1;
   move(newPoints[0], fPoints[0], sizeof(fPoints[0]) * bi);
@@ -1222,7 +1224,6 @@ end;
 
 destructor TMultiPoly.destroy;
 begin
-  debugPrint('TMultiPoly.destroy');//$$$debug
   clearInternalLists();
   inherited;
 end;

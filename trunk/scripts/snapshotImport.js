@@ -131,14 +131,18 @@ function clipMap(cfg){
 	
 	echo(curTime()+'  Getting nodes from net...');
 	objCnt=0;qryCnt=0;
-	while(notFoundObj.length>0){
-		objs=netMap.getNodes(notFoundObj.splice(0,netChunkSize)).toArray();
-		for(var i=0;i<objs.length;i++){
-			dst.map.putObject(objs[i]);
-			objCnt++;
-		}
-		qryCnt+=netChunkSize;
-		echo(curTime()+' '+objCnt+' of '+qryCnt+' nodes exported',true);
+	try{
+		while(notFoundObj.length>0){
+			objs=netMap.getNodes(notFoundObj.splice(0,netChunkSize)).toArray();
+			for(var i=0;i<objs.length;i++){
+				dst.map.putObject(objs[i]);
+				objCnt++;
+			}
+			qryCnt+=netChunkSize;
+			echo(curTime()+' '+objCnt+' of '+qryCnt+' nodes exported',true);
+		};
+	}catch(e){
+		echo(curTime()+' Exception'+e.message);
 	};
 	echo('');
 	
@@ -163,14 +167,18 @@ function clipMap(cfg){
 
 	echo(curTime()+'  Getting ways from net...');
 	objCnt=0;qryCnt=0;
-	while(notFoundObj.length>0){
-		objs=netMap.getWays(notFoundObj.splice(0,netChunkSize)).toArray();
-		for(var i=0;i<objs.length;i++){
-			dst.map.putObject(objs[i]);
-			objCnt++;
-		}
-		qryCnt+=netChunkSize;
-		echo(curTime()+' '+objCnt+' of '+qryCnt+' ways exported',true);
+	try{
+		while(notFoundObj.length>0){
+			objs=netMap.getWays(notFoundObj.splice(0,netChunkSize)).toArray();
+			for(var i=0;i<objs.length;i++){
+				dst.map.putObject(objs[i]);
+				objCnt++;
+			}
+			qryCnt+=netChunkSize;
+			echo(curTime()+' '+objCnt+' of '+qryCnt+' ways exported',true);
+		};
+	}catch(e){
+		echo(curTime()+' Exception'+e.message);
 	};
 	echo('');
 
@@ -194,14 +202,18 @@ function clipMap(cfg){
 
 	echo(curTime()+'  Getting relations from net...');
 	objCnt=0;qryCnt=0;
-	while(notFoundObj.length>0){
-		objs=netMap.getRelations(notFoundObj.splice(0,netChunkSize)).toArray();
-		for(var i=0;i<objs.length;i++){
-			dst.map.putObject(objs[i]);
-			objCnt++;
-		}
-		qryCnt+=netChunkSize;
-		echo(curTime()+' '+objCnt+' of '+qryCnt+' relations exported',true);
+	try{
+		while(notFoundObj.length>0){
+			objs=netMap.getRelations(notFoundObj.splice(0,netChunkSize)).toArray();
+			for(var i=0;i<objs.length;i++){
+				dst.map.putObject(objs[i]);
+				objCnt++;
+			}
+			qryCnt+=netChunkSize;
+			echo(curTime()+' '+objCnt+' of '+qryCnt+' relations exported',true);
+		};
+	}catch(e){
+		echo(curTime()+' Exception'+e.message);
 	};
 	echo('');
 

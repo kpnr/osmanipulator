@@ -305,7 +305,6 @@ end;
 
 destructor THTTPStorage.destroy;
 begin
-  debugPrint('THTTPStorage.destroy');//$$$debug
   if assigned(fInet) then begin
     InternetCloseHandle(fInet);
     fInet := nil;
@@ -575,7 +574,6 @@ end;
 
 destructor THTTPResponce.destroy;
 begin
-  debugPrint('THTTPResponce.destroy');//$$$debug
   if assigned(fConn) then
     InternetCloseHandle(fConn);
   fConn := nil;
