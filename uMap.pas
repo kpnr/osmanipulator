@@ -303,7 +303,6 @@ end;
 
 destructor TMap.destroy;
 begin
-  debugPrint('TMap.destroy');//$$$debug
   FreeAndNil(fOnPutFilter);
   inherited;
 end;
@@ -1105,7 +1104,6 @@ end;
 
 destructor TMapObjectStream.destroy;
 begin
-  debugPrint('TMapObjectStream.destroy');//$$$debug
   set_eos(true);
   inherited;
 end;

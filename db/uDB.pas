@@ -152,7 +152,6 @@ end;
 
 destructor TStorage.destroy;
 begin
-  OutputDebugStringW('TStorage.destroy');//$$$debug
   if assigned(fDB) then begin
     close();
   end;
@@ -464,7 +463,6 @@ end;
 
 destructor TQueryResult.destroy;
 begin
-  OutputDebugStringW('TQueryResult.destroy');//$$$debug
   close();
   inherited;
 end;
@@ -721,7 +719,6 @@ end;
 
 destructor TStoredIdList.destroy;
 begin
-  OutputDebugStringW('TStoredIdList.destroy');//$$$debug
   close();
   inherited;
 end;

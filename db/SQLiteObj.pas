@@ -3,7 +3,7 @@ unit SQLiteObj;
 interface
 
 uses
-  SysUtils, SQLite3,Variants,uOSMCommon{debugPrint};
+  SysUtils, SQLite3,Variants;
 
 type
   ESQLite = class(Exception)
@@ -92,7 +92,6 @@ end;
 
 destructor TSQLiteDB.Destroy;
 begin
-  debugPrint('TSQLiteDB.destroy');//$$$debug
   if assigned(stmtCommit) then
     FreeAndNil(stmtCommit);
   if assigned(stmtRollback) then
@@ -209,7 +208,6 @@ end;
 
 destructor TSQLiteStmt.Destroy;
 begin
-  debugPrint('TSQLiteStmt.destroy');//$$$debug
   if assigned(hStmt) then
     SQLite3_Finalize(hStmt);
   hStmt := nil;

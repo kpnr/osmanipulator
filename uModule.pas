@@ -155,7 +155,6 @@ end;
 
 destructor TOSManModule.Destroy;
 begin
-  OutputDebugStringW('TOSManModule.destroy');//$$$debug
   fLogger := unassigned;
   inherited;
 end;

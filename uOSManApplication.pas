@@ -6,8 +6,7 @@ interface
 
 uses
   StrUtils, uModule, TntClasses, TntSysUtils, Windows, ComServ, ComObj, ActiveX, OSMan_TLB,
-  SysUtils, StdVcl,
-  Variants;
+  SysUtils, StdVcl, Variants;
 
 implementation
 type
@@ -210,7 +209,6 @@ var
   i: integer;
   o: TObject;
 begin
-  OutputDebugStringW('TApplication.destroy');//$$$debug
   fZeroCnt:=-1;
   fLogger:=Unassigned;
   if assigned(moduleList) then
@@ -223,7 +221,6 @@ begin
     end;
   FreeAndNil(moduleList);
   inherited;
-  OutputDebugStringW('TApplication.destroy done');//$$$debug
 end;
 
 { TModuleClassList }
@@ -235,7 +232,6 @@ end;
 
 destructor TModuleClassList.destroy;
 begin
-  OutputDebugStringW('TModuleClassList.destroy');//$$$debug
   if assigned(iModule) then begin
     iModule.appRef:=nil;
     iModule := nil;

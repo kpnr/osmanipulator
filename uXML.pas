@@ -174,7 +174,6 @@ type
 
 destructor TOSMReader.destroy;
 begin
-  debugPrint('TOSMReader.destroy');//$$$debug
   if assigned(inStreamAdaptor) then
     FreeAndNil(inStreamAdaptor);
   oMap := Unassigned;

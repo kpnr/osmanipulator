@@ -491,7 +491,6 @@ end;
 
 destructor TOSMDecompressStream.destroy;
 begin
-  OutputDebugStringW('OSMDecompressStream.destroy');//$$$debug
   if assigned(zStream) then
     FreeAndNil(zStream);
   if assigned(inStreamAdaptor) then
