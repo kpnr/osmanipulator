@@ -9,7 +9,7 @@ E=0
 F=0
 G=1
 H=1
-I=0
+I=1
 J=0
 K=0
 L=1
@@ -17,8 +17,8 @@ M=0
 N=1
 O=1
 P=1
-Q=0
-R=0
+Q=1
+R=1
 S=0
 T=0
 U=0
@@ -87,7 +87,7 @@ DebugInfo=0
 RemoteSymbols=0
 MinStackSize=16384
 MaxStackSize=1048576
-ImageBase=15990784
+ImageBase=16187392
 ExeDescription=
 [Directories]
 OutputDir=
@@ -100,7 +100,7 @@ Conditionals=
 DebugSourceDirs=
 UsePackages=0
 [Parameters]
-RunParams=c:\work\osm2russa\OSMan\scripts\TestGeoTools.js
+RunParams=c:\work\osm2russa\OSMan\scripts\areaCut.js
 HostApplication=D:\WINDOWS\system32\cscript.exe
 Launcher=
 UseLauncher=0
@@ -111,7 +111,7 @@ AutoIncBuild=1
 MajorVer=0
 MinorVer=0
 Release=0
-Build=70
+Build=85
 Debug=0
 PreRelease=0
 Special=0
@@ -122,7 +122,7 @@ CodePage=1252
 [Version Info Keys]
 CompanyName=hkm
 FileDescription=OSM manipulator
-FileVersion=0.0.0.70
+FileVersion=0.0.0.85
 InternalName=OSMan
 LegalCopyright=BSD licence
 LegalTrademarks=
@@ -130,9 +130,3 @@ OriginalFilename=
 ProductName=OSMan
 ProductVersion=0.0.0.0
 Comments=
-[HistoryLists\hlUnitAliases]
-Count=1
-Item0=WinTypes=Windows;WinProcs=Windows;DbiTypes=BDE;DbiProcs=BDE;DbiErrs=BDE;
-[HistoryLists\hlSearchPath]
-Count=1
-Item0=$(DELPHI)\Lib\Debug;C:\Delphi\jcl\lib\d7\debug

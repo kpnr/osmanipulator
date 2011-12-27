@@ -67,7 +67,7 @@ type
   public
     constructor create();
     function clone: TGTShape; override;
-    function canInterserts(const r: TGTRect): boolean;
+    function canIntersects(const r: TGTRect): boolean;
     //isIn returns:
     //0 - pt outside
     //1 - pt is on bound
@@ -179,6 +179,8 @@ type
     count: integer;
   end;
 
+  TIsInTestProc = function(const pt: TGTPoint): integer of object;
+
   TMultiPoly = class(TOSManObject, IMultiPoly)
   protected
     srcList, //parentIdx ignored
@@ -193,6 +195,7 @@ type
     fArea: double;
 
     class function getSegmentIntersection(const pt1, pt2, ptA, ptB: TGTPoint): TGTPoint;
+    class function triangleTest(pt1,pt2,pt3,workingPoint:TGTPoint;LessTest,GreaterTest:TIsInTestProc):integer;
 
     function isAllResolved(): boolean;
 
@@ -825,11 +828,11 @@ begin
   result := inherited isIn(pt);
   if result = 0 then exit;
   result := 0;
-  i := count;
-  while (i > 1) do begin
+  i := count-1;
+  while (i > 0) do begin
     dec(i);
-    b1 := fPoints[i];
-    b2 := fPoints[i - 1];
+    b1 := fPoints[i+1];
+    b2 := fPoints[i];
     asm
       mov eax,pt;
       mov eax,TGTPoint(eax).fx;
@@ -1086,7 +1089,7 @@ begin
   result := 2 * ord((v > min) and (v < max)) + ord((v = min) or (v = max));
 end;
 
-function TGTRect.canInterserts(const r: TGTRect): boolean;
+function TGTRect.canIntersects(const r: TGTRect): boolean;
 begin
   result := (left <= r.right) and (right >= r.left) and
     (bottom <= r.top) and (top >= r.bottom);
@@ -1690,6 +1693,7 @@ begin
   buildOptimizedPolyList();
   //build hash-grid for fast point-to-polygon_list translation
   buildOptimizedPolyHash();
+  result := isAllResolved();
 end;
 
 function TMultiPoly.isAllResolved: boolean;
@@ -1970,7 +1974,7 @@ begin
         end;
     end;
     for simplePolyIdx := 0 to high(simplePolyList) do begin
-      if not wayBRect.canInterserts(simplePolyList[simplePolyIdx]) or
+      if not wayBRect.canIntersects(simplePolyList[simplePolyIdx]) or
         (simplePolyList[simplePolyIdx].count < 3) then
         continue;
       polyPoints := simplePolyList[simplePolyIdx].fPoints;
@@ -1981,13 +1985,13 @@ begin
         polySegmentBRect.resetBounds();
         polySegmentBRect.updateBoundRect(p1);
         polySegmentBRect.updateBoundRect(p2);
-        if not wayBRect.canInterserts(polySegmentBRect) then
+        if not wayBRect.canIntersects(polySegmentBRect) then
           continue;
         pWND := wayPoints;
         while assigned(pWND) do begin
           pWND2 := pWND;
           pWND := pWND.pNextNode;
-          if not (assigned(pWND) and polySegmentBRect.canInterserts(pWND.bRect)) then
+          if not (assigned(pWND) and polySegmentBRect.canIntersects(pWND.bRect)) then
             continue;
           //find and store intersection point
           i0 := getSegmentIntersection(p1, p2, pWND2.point, pWND.point);
@@ -2154,11 +2158,9 @@ type
   end;
   PSegDesc = ^TSegDesc;
 
-  TIsInTestProc = function(const pt: TGTPoint): integer of object;
-
 var
   newNodeCount: integer;
-  newNodes: array of OleVariant;
+  newNodes: array of POleVariant;
   newPoints: array of TGTPoint;
 
   procedure freeAndNilSeg(var pSeg: PSegDesc);
@@ -2194,33 +2196,36 @@ var
     l := polyA.count - 1;
     result := TDualLinkedRing.create();
     try
-      while i < l do begin
-        if not assigned(p) then begin
-          new(p);
-          p.bbox := TGTRect.create();
-        end
-        else
-          p.bbox.resetBounds();
-        p.pNode1 := pNodeVar;
-        p.pPoint1 := polyA.fPoints[i];
-        inc(pbyte(pNodeVar), iNodeVarStep);
-        inc(i);
-        p.pNode2 := pNodeVar;
-        p.pPoint2 := polyA.fPoints[i];
-        p.bbox.updateBoundRect(p.pPoint1);
-        p.bbox.updateBoundRect(p.pPoint2);
-        p.flags := [];
-        if bboxB.canInterserts(p.bbox) then begin
-          result.insertAfter(p);
-          if result.hasNext() then
-            result.next();
-          p := nil;
+      try
+        while i < l do begin
+          if not assigned(p) then begin
+            new(p);
+            p.bbox := TGTRect.create();
+          end
+          else
+            p.bbox.resetBounds();
+          p.pNode1 := pNodeVar;
+          p.pPoint1 := polyA.fPoints[i];
+          inc(pbyte(pNodeVar), iNodeVarStep);
+          inc(i);
+          p.pNode2 := pNodeVar;
+          p.pPoint2 := polyA.fPoints[i];
+          p.bbox.updateBoundRect(p.pPoint1);
+          p.bbox.updateBoundRect(p.pPoint2);
+          p.flags := [];
+          if bboxB.canIntersects(p.bbox) then begin
+            result.insertAfter(p);
+            if result.hasNext() then
+              result.next();
+            p := nil;
+          end;
         end;
+        if not result.isEmpty() then
+          result.first();
+      finally
+        freeAndNilSeg(p);
       end;
-      if not result.isEmpty() then
-        result.first();
     except
-      freeAndNilSeg(p);
       freeAndNilSegList(result);
       raise;
     end;
@@ -2267,8 +2272,9 @@ var
       setLength(newPoints, newNodeCount * 2 + 4);
     end;
 
-    newNodes[newNodeCount] := aMap.createNode();
-    pNewNode := @newNodes[newNodeCount];
+    new(newNodes[newNodeCount]);
+    newNodes[newNodeCount]^ := aMap.createNode();
+    pNewNode := newNodes[newNodeCount];
     pNewNode^.id := newNodeId;
     pNewNode^.lat := crossPt.lat;
     pNewNode^.lon := crossPt.lon;
@@ -2285,44 +2291,35 @@ var
     pSegB, pSegA: PSegDesc;
     crossPt, pNewPoint: TGTPoint;
     pNewNode: POleVariant;
-    doSplitA, doSplitB: boolean;
+    doSplitA, doSplitB, isSameSeg: boolean;
   begin
     crossPt := nil;
     try
       pSegB := slB.first();
-      while assigned(pSegB) do begin
+      while assigned(pSegB) and not slA.isEmpty() do begin
         pSegA := slA.first();
         while assigned(pSegA) and assigned(pSegB) do begin
-          if not pSegA.bbox.canInterserts(pSegB.bbox) then begin
+          if not pSegA.bbox.canIntersects(pSegB.bbox) then begin
+            //try next segment pair
             if (slA.hasNext()) then
               pSegA := slA.next()
             else
               pSegA := nil;
             continue;
           end;
+          //find (one of) cross point(s)
           crossPt := getSegmentIntersection(pSegA.pPoint1, pSegA.pPoint2, pSegB.pPoint1,
             pSegB.pPoint2);
           if assigned(crossPt) then begin
+            //segments are crossed
             pNewNode := nil;
             pNewPoint := nil;
-            //test distance between cross-point and SegB end-points
-            doSplitB := true;
-            if (crossPt.distTest(pSegB.pPoint1, minPtDist)) then begin
-              include(pSegB.flags, sfOnBound1);
-              doSplitB := false;
-              pNewNode := pSegB.pNode1;
-              pNewPoint := pSegB.pPoint1;
-            end
-            else if (crossPt.distTest(pSegB.pPoint2, minPtDist)) then begin
-              include(pSegB.flags, sfOnBound2);
-              doSplitB := false;
-              pNewNode := pSegB.pNode2;
-              pNewPoint := pSegB.pPoint2;
-            end;
 
             //test distance between cross-point and segA end-points
+            //segA must be checked before segB to keep tags of polygonA nodes
             doSplitA := true;
             if (crossPt.distTest(pSegA.pPoint1, minPtDist)) then begin
+              //crossed at SegA start
               include(pSegA.flags, sfOnBound1);
               doSplitA := false;
               if not assigned(pNewNode) then begin
@@ -2335,6 +2332,7 @@ var
               end;
             end
             else if (crossPt.distTest(pSegA.pPoint2, minPtDist)) then begin
+              //crossed at SegA end
               include(pSegA.flags, sfOnBound2);
               doSplitA := false;
               if not assigned(pNewNode) then begin
@@ -2347,20 +2345,60 @@ var
               end;
             end;
 
+            //test distance between cross-point and SegB end-points
+            doSplitB := true;
+            if (crossPt.distTest(pSegB.pPoint1, minPtDist)) then begin
+              //crossed at SegB start
+              include(pSegB.flags, sfOnBound1);
+              doSplitB := false;
+              if not assigned(pNewNode) then begin
+                pNewNode := pSegB.pNode1;
+                pNewPoint := pSegB.pPoint1;
+              end
+              else begin
+                pSegB.pNode1 := pNewNode;
+                pSegB.pPoint1 := pNewPoint;
+              end;
+            end
+            else if (crossPt.distTest(pSegB.pPoint2, minPtDist)) then begin
+              //crossed at SegB end
+              include(pSegB.flags, sfOnBound2);
+              doSplitB := false;
+              if not assigned(pNewNode) then begin
+                pNewNode := pSegB.pNode2;
+                pNewPoint := pSegB.pPoint2;
+              end
+              else begin
+                pSegB.pNode2 := pNewNode;
+                pSegB.pPoint2 := pNewPoint;
+              end;
+            end;
+
             if not assigned(pNewNode) then begin
+              //cross in middle of both segments, so we need new point and node
               createNewPoint(pNewNode, pNewPoint, crossPt);
             end;
             if doSplitA then begin
               splitAndStore(slA, pNewNode, pNewPoint);
-              pSegA := nil; //check pSegA agane
+              pSegA := nil; //check pSegA agane - it may be same as SegB
             end;
             if doSplitB then
               splitAndStore(slB, pNewNode, pNewPoint);
-            if not (doSplitA or doSplitB) then begin
+            if (not doSplitA) and (not doSplitB) then begin
+              isSameSeg:=false;
               if ((pSegA.pNode1^.id = pSegB.pNode1^.id) and
-                (pSegA.pNode2^.id = pSegB.pNode2^.id)) or
-                ((pSegA.pNode1^.id = pSegB.pNode2^.id) and
+                (pSegA.pNode2^.id = pSegB.pNode2^.id)) then begin
+                pSegB.pNode1:=pSegA.pNode1;
+                pSegB.pNode2:=pSegA.pNode2;
+                isSameSeg:=true;
+              end
+              else if ((pSegA.pNode1^.id = pSegB.pNode2^.id) and
                 (pSegA.pNode2^.id = pSegB.pNode1^.id)) then begin
+                pSegB.pNode1:=pSegA.pNode2;
+                pSegB.pNode2:=pSegA.pNode1;
+                isSameSeg:=true;
+              end;
+              if isSameSeg then begin
                 //pSegA and pSegB is same
                 //mark segment as it was visited and marked in buildIntersection
                 pSegB.flags := pSegB.flags - [sfOnBound1, sfOnBound2] + [sfVisited];
@@ -2376,7 +2414,7 @@ var
             else
               pSegA := nil;
           end
-          else
+          else if not slA.isEmpty() then
             pSegA := slA.data;
         end;
         if assigned(pSegB) then begin
@@ -2385,9 +2423,7 @@ var
           else
             pSegB := nil;
         end
-        else if slB.isEmpty() then
-          pSegB := nil
-        else
+        else if not slB.isEmpty() then
           pSegB := slB.data;
       end;
     finally
@@ -2456,6 +2492,8 @@ var
       resList := slB;
       curTest := isInInt;
       resTest := polyA.isIn;
+      if curList.isEmpty() then
+        swapLists();
       pSeg := curList.data;
       firstId := pSeg.pNode1^.id;
       lastId := pSeg.pNode2^.id;
@@ -2536,6 +2574,7 @@ var
     pt: TGTPoint;
   begin
     result := TDualLinkedRing.create();
+    assert(not slA.isEmpty(),'{B96A48BE-A404-460A-8D66-7D047D11D79F}');
     slA.first();
     while not slA.isEmpty() do begin
       pSeg := slA.data;
@@ -2576,6 +2615,7 @@ var
       nPolyNodes := 2;
       while firstId <> lastId do begin
         pSeg := sl.next();
+        assert(lastId=pSeg.pNode1^.id,'{A688E5BD-6396-47C5-97CF-E7BD1EAC5A80}');
         lastId := pSeg.pNode2^.id;
         inc(nPolyNodes);
       end;
@@ -2595,6 +2635,7 @@ var
         if (sfOnBound1 in pSeg.flags) then
           pv^.tags.setByKey('osman:note', 'boundary');
         firstId := pv^.id;
+        freeAndNilSeg(pSeg);
       end;
 
       if not (sl.isEmpty()) then
@@ -2605,6 +2646,76 @@ var
       inc(nPolygons);
       VarArrayRedim(result, nPolygons - 1);
       result[nPolygons - 1] := varArrPoly;
+    end;
+  end;
+
+  function buildExtremeIntersection(slA: TDualLinkedRing; TestA,TestB:TIsInTestProc): TDualLinkedRing;
+  //build intersection in extreme case - A fully in/out of B, so intersection
+  // is empty or same as A
+    procedure moveFirstPoly(src,dst:TDualLinkedRing);
+    var
+      firstId:Int64;
+      pSeg:PSegDesc;
+    begin
+      pSeg:=src.first();
+      src.delete();
+      firstId:=pSeg.pNode1^.id;
+      while pSeg.pNode2^.id<>firstId do begin
+        dst.insertLast(pSeg);
+        pSeg:=src.delete();
+      end;
+      dst.insertLast(pSeg);
+    end;
+
+    procedure deleteFirstPoly(sl:TDualLinkedRing);
+    var
+      firstId:Int64;
+      pSeg:PSegDesc;
+    begin
+      sl.first();
+      repeat
+        pSeg:=sl.delete();
+        firstId:=pSeg.pNode2^.id;
+        freeAndNilSeg(pSeg);
+      until (sl.isEmpty())or(firstId<>PSegDesc(sl.data).pNode1^.id);
+    end;
+  var
+    pSeg1,pSeg2:PSegDesc;
+    midPoint:TGTPoint;
+    tst:integer;
+  begin
+    result:=TDualLinkedRing.Create();
+    if slA.isEmpty then exit;
+    midPoint:=TGTPoint.Create();
+    try
+      pSeg1:=slA.first;
+      while not slA.isEmpty do begin
+      //slA - list of linked segments of one or several polygons,
+      //  so we need no check for infinite loop
+        pSeg2:=slA.next();
+        tst:=TestB(pSeg1.pPoint2);
+        case tst of
+        0:
+          deleteFirstPoly(slA);
+        1:begin
+          tst:= triangleTest(pSeg1.pPoint1,pSeg1.pPoint2,pSeg2.pPoint2,midPoint,TestA,TestB);
+          case tst of
+          0:deleteFirstPoly(slA);
+          1:;
+          2:moveFirstPoly(slA,result);
+          else
+            assert(false,'{84DA2DA8-1178-48B1-B2A9-84BAD0623692}');
+          end;
+        end;
+        2:
+          moveFirstPoly(slA,result);
+        else
+          assert(false,'{F5842433-1FD9-4196-94B9-DFC2F3A21393}');
+        end;
+        pSeg1:=pSeg2;
+      end;
+    finally
+      freeAndNil(midPoint);
     end;
   end;
 
@@ -2641,13 +2752,11 @@ begin
     bboxB.right := degToInt(bboxVar[1]);
     bboxB.bottom := degToInt(bboxVar[2]);
     bboxB.left := degToInt(bboxVar[3]);
-    if not polyA.canInterserts(bboxB) then
+    if not polyA.canIntersects(bboxB) then
       exit;
     //check (segments from A) and (boundbox(B))
     dec(pNodeVar, nWayNodes);
     segListA := sortSeg(pNodeVar, sizeof(pNodeVar^), polyA, bboxB);
-    if segListA.isEmpty() then
-      exit;
     //check (segments from B) and (boundbox(A))
     k := 0;
     segListB := TDualLinkedRing.create();
@@ -2657,11 +2766,50 @@ begin
       segListB.appendBefore(tmpList);
       inc(k, simplePolyList[i].count);
     end;
-    splitSegments(segListA, segListB);
+    if not (segListA.isEmpty() or segListB.isEmpty()) then begin
+      //both lists not empty, split intersecting segments
+      splitSegments(segListA, segListB);
+    end;
+    //handle intersection type cases
+    i := ord(segListA.isEmpty())+2*ord(segListB.isEmpty);
+    if i=0 then begin
+      //both lists not empty - polygons intersects in usual way
+      segListR := buildIntersection(segListA, segListB, polyA);
+      if segListR.isEmpty() then begin
+        //we have extreme case. ListA and ListB modified by
+        //  buildIntersection routine, so we can re-check intersection case
+        i := ord(segListA.isEmpty())+2*ord(segListB.isEmpty);
+        freeAndNilSegList(segListR);
+      end;
+    end;
+    case i of
+      0:{already intersected, nothing to do};
+      1:begin
+        //listA is empty, listB is filled.
+        //No A-segments intersects B-bbox and B-bound => all A-segments outside B
+        //No B-segments intersects A-bound and some of them inside A-bbox =>
+        //  case 1. B outside A, but intersects A-bbox => empty intersection
+        //  case 2. B fully inside A => intersection is B itself
+        //B can be multipoly, so we need check every simple polygon.
+        segListR:=buildExtremeIntersection(segListB,isInInt,polyA.isIn);
+      end;
+      2:begin
+        //listA is filled, listB is empty.
+        //No B-segments intersects A-bbox and A-bound => all B-segments outside A
+        //No A-segments intersects B-bound and some of them inside B-bbox =>
+        //  case 1. A outside B, but intersects B-bbox => empty intersection
+        //  case 2. A fully inside B => intersection is A itself
+        segListR:=buildExtremeIntersection(segListA,polyA.isIn,isInInt);
+      end;
+      3:begin
+        //both lists is empty. No intersection possible
+        segListR:=segListA;
+        segListA:=nil;
 
-    segListR := buildIntersection(segListA, segListB, polyA);
+      end;
+    end;
 
-    if not (segListR.isEmpty()) then
+    if assigned(segListR) and not (segListR.isEmpty()) then
       result := buildResult(segListR);
   finally
     freeAndNilSegList(segListA);
@@ -2674,6 +2822,8 @@ begin
       varArrayUnlock(aNodeArray);
     for i := 0 to newNodeCount - 1 do begin
       freeAndNil(newPoints[i]);
+      VarClear(newNodes[i]^);
+      dispose(newNodes[i]);
     end;
   end;
 end;
@@ -2791,28 +2941,37 @@ type
   function includes(greater, less: TGTPoly): boolean;
   var
     i: integer;
-    p: TGTPoint;
+    midPoint:TGTPoint;
   begin
-    for i := 0 to less.count - 1 do begin
-      case greater.isIn(less.fPoints[i]) of
-        0: begin
-            result := false;
-            exit;
-          end;
-        2: begin
-            result := true;
-            exit;
-          end;
+    result:=false;
+    midPoint:=TGTPoint.Create();
+    try
+      for i := 0 to less.count - 1 do begin
+        case greater.isIn(less.fPoints[i]) of
+          0: begin
+              exit;
+            end;
+          1: if i>1 then begin
+              case triangleTest(less.fPoints[i-2],less.fPoints[i-1],less.fPoints[i],midPoint,less.isIn,greater.isIn) of
+              0:begin
+                  exit;
+                end;
+              2:begin
+                  result := true;
+                  exit;
+                end;
+              end;
+            end;
+          2: begin
+              result := true;
+              exit;
+            end;
+        end;
       end;
+    finally
+      freeAndNil(midPoint);
     end;
-    //all less-poly bound points are on greater-poly bound
-    //check "middle" point of less-poly
-    i := less.count div 2;
-    p := TGTPoint.create();
-    p.lat := (less.fPoints[0].lat + less.fPoints[i].lat) / 2;
-    p.lon := (less.fPoints[0].lon + less.fPoints[i].lon) / 2;
-    result := greater.isIn(p) > 0;
-    freeAndNil(p);
+    assert(false,'{2F825152-F046-4E07-973B-FF03C209ECA6}');
   end;
 
 var
@@ -2858,6 +3017,23 @@ begin
   for i := 0 to high(polyList) do
     result := result + polyList[i].area;
   fArea := result;
+end;
+
+class function TMultiPoly.triangleTest(pt1,pt2,pt3,workingPoint:TGTPoint;LessTest,GreaterTest:TIsInTestProc):integer;
+//result is:
+//0 - center point inside A but outside B => A outside B
+//1 - can`t determine A and B layout => we should continue checking
+//2 - center point inside A and inside B => A inside B
+  function avg3(i,j,k:integer):integer;
+  begin
+    result:=i div 3 + j div 3 + k div 3;
+  end;
+begin
+  result:=1;
+  workingPoint.x:=avg3(pt1.x,pt2.x,pt3.x);
+  workingPoint.y:=avg3(pt1.y,pt2.y,pt3.y);
+  if LessTest(workingPoint)=2 then
+    result:=GreaterTest(workingPoint);
 end;
 
 initialization

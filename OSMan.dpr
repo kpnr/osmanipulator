@@ -4,6 +4,7 @@ library OSMan;
 
 uses
   FastMM4 in '..\..\..\Delphi\FastMM\FastMM4.pas',
+  //MemCheck,
   FastMove,
   ComServ,
   OSMan_TLB in 'OSMan_TLB.pas',
@@ -27,7 +28,8 @@ uses
   SQLite3 in 'db\SQLite3.pas',
   DBF in 'db\DBF.PAS',
   uGeoTools in 'uGeoTools.pas',
-  uNetMap in 'uNetMap.pas';
+  uNetMap in 'uNetMap.pas',
+  uDataStructures in 'uDataStructures.pas';
 
 {$E omm}
 
@@ -42,4 +44,6 @@ exports
 {$R *.RES}
 
 begin
+//  MemChk();
+//  MemCheckLogFileName:=ParamStr(0)+'.leak';
 end.

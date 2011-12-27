@@ -1,7 +1,7 @@
 //settings begin
-var exportObject=['relation',60189];
+var exportObjects=[['relation',253256],['relation',76912],['relation',269701],['relation',108082],['relation',390879],['relation',916831]];
 var srcMapName='f:\\db\\osm\\sql\\rf.db3';
-var dstMapName='f:\\db\\osm\\sql\\rf_boundary.db3';
+var dstMapName='f:\\db\\osm\\sql\\test.db3';
 //settings end
 
 var man=WScript.createObject('OSMan.Application');
@@ -67,7 +67,7 @@ function exportRecurcive(srcMap,dstMap,objRefArray){
 
 var src=openMap(srcMapName);
 var dst=openMap(dstMapName);
-exportRecurcive(src,dst,[exportObject]);
+exportRecurcive(src,dst,exportObjects);
 closeMap(dst);
 closeMap(src);
 man=0;

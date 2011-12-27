@@ -1,6 +1,6 @@
 //settings
-var testOSMOutFile='F:\\db\\osm\\testdata\\testOut.osm';
-var testMapFile='F:\\db\\osm\\testdata\\test.db3';
+var testOSMOutFile='F:\\db\\osm\\sql\\testOut.osm';
+var testMapFile='F:\\db\\osm\\sql\\test.db3';
 //settings end
 var re=/wscript/i;
 if (WScript.FullName.search(re)>=0){

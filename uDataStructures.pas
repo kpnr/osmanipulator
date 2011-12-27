@@ -299,12 +299,17 @@ var
 begin
   new(p);
   p.data := aData;
-  if not assigned(fRoot) then
+  if not assigned(fRoot) then begin
+    //empty ring - new item become root
     fRoot := p;
-  if not assigned(fCur) then begin
-    fCur := p;
-    p.next := p;
+    p.next:=p;
+    p.prev:=p;
   end;
+  if not assigned(fCur) then begin
+    //no current item - root become current
+    fCur := fRoot;
+  end;
+  //insert new between current and next. Current item not changed.
   p.prev := fCur;
   p.next := fCur.next;
   p.next.prev := p;
@@ -342,10 +347,11 @@ begin
   end;
   if not assigned(fCur) then
     fCur := p;
-  p.next := fRoot.next;
+  p.next := fRoot;
   p.prev := fRoot.prev;
   p.next.prev := p;
   p.prev.next := p;
+  fRoot:=p;
 end;
 
 procedure TDualLinkedRing.insertLast(aData: pointer);

@@ -18,7 +18,7 @@ MapHelper members:
 		Returns array of not found nodes ids. If all nodes found in 'bigMap' then empty array returned
 	completeRelationNodes(bigMap) - import from 'bigMap' nodes which used in 'map' relations.
 		Returns array of not found nodes ids. If all nodes found in 'bigMap' then empty array returned
-	completeRelationWays=function(bigMap) - import from 'bigMap' ways which used in 'map' relations.
+	completeRelationWays - import from 'bigMap' ways which used in 'map' relations.
 		Returns array of not found ways ids. If all ways found in 'bigMap' then empty array returned
 	completeRelationRelations(bigMap) - import from 'bigMap' relations which used in 'map' relations.
 		Returns array of not found relations ids. If all relations found in 'bigMap' then empty array returned
@@ -26,6 +26,11 @@ MapHelper members:
 	getNextNodeId() - get next available node id. result<0.
 	getNextWayId() - get next available way id. result<0.
 	getNextRelationId() - get next available relation id. result<0.
+	getObject(strObj) - get object from map. If no object found return false.
+		strObj - string of Type and Id delimited by ':'. Example:
+			'node:123' - get Node with Id=123
+			'way:456' - get Way with Id=456
+			'relation:789' - get Relation with Id=789
 	exec(sqlStr) - execute sql statement
 	map - OSMan object
 */
@@ -99,13 +104,17 @@ MapHelper.prototype.exportXML=function(dstFileName,exportFilter){
 
 MapHelper.prototype.exportDB=function(dstMap,exportFilter){
 	var m=this.map;
+	//var ncnt=0,wcnt=0,rcnt=0;
 	var ss=m.getObjects(exportFilter?(exportFilter):(''));
 	while(!ss.eos){
 		var obj=ss.read(1000).toArray();
 		for(var i=0;i<obj.length;i++){
 			dstMap.putObject(obj[i]);
+			//(obj[i].getClassName()=='Node')?(ncnt++):((obj[i].getClassName=='Way')?(wcnt++):(rcnt++));
 		};
+		//this.h.echo('n='+ncnt+' w='+wcnt+' r='+rcnt,true);
 	};
+	//this.h.echo('');
 };
 
 MapHelper.prototype.completeWayNodes=function(bigMap){
@@ -167,6 +176,30 @@ MapHelper.prototype.completeRelationRelations=function(bigMap){
 MapHelper.prototype.wayToNodeArray=function(wayOrWayId){
 	var t=this;
 	return t.h.gt.wayToNodeArray(t.map,wayOrWayId);
+};
+
+MapHelper.prototype.getObject=function(strObj){
+	var funcName='helpers.MapHelper.getObject: ';
+	var t=this;
+	if(!t.map)throw funcName+'no map opened';
+	strObj=strObj.split(':');
+	if((strObj.length!=2))throw funcName+'invalid object specifier='+strObj;
+	var objId=parseFloat(strObj[1]);
+	if(isNaN(objId))throw funcName+'invalid object id='+strObj[1];
+	switch(strObj[0]){
+	case 'node':
+		return t.map.getNode(objId);
+		break;
+	case 'way':
+		return t.map.getWay(objId);
+		break;
+	case 'relation':
+		return t.map.getRelation(objId);
+		break;
+	default:
+		throw funcName+'invalid object type='+strObj[0];
+		break;
+	};
 };
 
 MapHelper.prototype.exec=function(sqlStr){

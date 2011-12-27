@@ -106,7 +106,7 @@ type
   //List of references to objects. Used in IRelation.members
   IRefList = interface(IOSManAll)
     //idx - index in list. If idx out of bounds exception raised
-    //refType  - type of referenced object. One of 'Node','Way','Relation'
+    //refType  - type of referenced object. One of 'node','way','relation'
     //refID - OSM ID of referenced object
     //refRrole - role in relation
     procedure getByIdx(idx: integer; out refType: WideString; out refId: Int64; out refRole:
@@ -360,7 +360,12 @@ type
   //read function maxBufSize argument is number of rows to read
   //returns SafeArray of variants in form (r1c1,r1c2,r1c3,...,r99c8,r99c9,r99c10)
   IQueryResult = interface(IInputStream)
-    //returns SafeArray of string variants
+    //read(n) redefienes read method of IInputStream
+    //  returns one-dimentional zero-based array up to n*k Variants.
+    //  where k - number of columns returned by query. First element in array is
+    //  first column of first result row value, second is second column value, etc.:
+    //  [col1_row1,col2_row1,...colk_row1,col1_row2,...colk_row2,....col1_rown,...colk_rown]
+    //returns SafeArray of string variants containing query columns names
     function getColNames(): OleVariant;
   end;
 
