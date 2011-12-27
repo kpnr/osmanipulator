@@ -31,7 +31,6 @@ function clipMap(cfg){
 	var startTime=new Date();
 	var chunkSize=1000,netChunkSize=100;
 	var clipPoly=h.gt.createPoly();
-	var clipPoly=h.gt.createPoly();
 	var srcMapFileName=cfg.data['destDBName'];
 	var src=openMap(srcMapFileName);
 	try{

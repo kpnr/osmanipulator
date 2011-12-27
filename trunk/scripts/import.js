@@ -1,7 +1,7 @@
 //settings begin
-var destDBName='F:\\db\\osm\\sql\\rf.db3';
+var destDBName='F:\\db\\osm\\sql\\italy.db3';
 var srcOSMName=[
-'F:\\db\\osm\\100805rus.osm'
+'F:\\db\\osm\\dl\\italy.osm.bz2'
 ];
 var bpolyRelationId=false;//60189;//set to false if no bpoly needed
 //settings end
