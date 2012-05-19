@@ -1,6 +1,6 @@
 //settings
-var testOSMOutFile='F:\\db\\osm\\sql\\testOut.osm';
-var testMapFile='F:\\db\\osm\\sql\\test.db3';
+var testOSMOutFile='f:\\db\\osm\\rf_regions\\route\\Дальневосточный.osm';
+var testMapFile='f:\\db\\osm\\rf_regions\\route\\Дальневосточный.db3';
 //settings end
 var re=/wscript/i;
 if (WScript.FullName.search(re)>=0){
@@ -18,7 +18,7 @@ function testFileWriter(){
 	var fw=man.createObject('FileWriter');
 	echo('FileWriter='+fw.toString());
 	fw.open(testOSMOutFile);
-	var ow=man.createObject('OSMWriter');
+	var ow=man.createObject('FastOSMWriter');
 	echo('OSMWriter='+ow.toString());
 	ow.setOutputStream(fw);
 	var map=man.createObject('Map');

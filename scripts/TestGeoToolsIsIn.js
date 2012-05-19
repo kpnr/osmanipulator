@@ -1,9 +1,8 @@
 //settings start
 var testFileDir='F:\\db\\osm\\sql';
-var testFileName='rf.db3';
-//Relation[60189] - RF boundary
-//Relation[140337] - Архангельская область
+var testFileName='test.db3';
 var testRelationId=60189;
+var cIntToDeg=1e-7,cDegToInt=1e7;
 //settings end
 var re=/wscript/i;
 if (WScript.FullName.search(re)>=0){
@@ -18,7 +17,8 @@ function echo(s){
 };
 
 function testIsIn(map,stg,mpoly){
-	var q=stg.sqlPrepare('select lat,lon from nodes limit 10000');
+	var bbox=mpoly.getBBox().toArray();
+	var q=stg.sqlPrepare('select lat*'+cIntToDeg+',lon*'+cIntToDeg+' from nodes where lat between '+(bbox[2]*cDegToInt)+' and '+(bbox[0]*cDegToInt)+' and lon between '+(bbox[3]*cDegToInt)+' and '+(bbox[1]*cDegToInt)+' and id=295925009 limit 800000');
 	var r=stg.sqlExec(q,'','');
 	var inc=0,exc=0;
 	var d=new Date();
@@ -42,6 +42,7 @@ function testGeoTools(){
 	echo('Map='+map.toString());
 	var stg=man.createObject('Storage');
 	echo('Storage='+stg.toString());
+	stg.readOnly=true;
 	stg.dbName=fso.buildPath(testFileDir,testFileName);
 	map.storage=stg;
 	var gtls=man.createObject('GeoTools');
@@ -83,12 +84,7 @@ fso=WScript.CreateObject('Scripting.FileSystemObject');
 try{
 	man=WScript.CreateObject("OSMan.Application");
 	echo("App="+man.toString());
-	man.logger=
-		{
-			log:function(msg){
-				WScript.Echo(msg);
-			}
-		};
+	//man.logger={log:function(msg){WScript.Echo(msg);}};
 	testGeoTools();echo('');
 	}catch(e){
 	echo('Unexpected exception '+e.description+' '+e.number);

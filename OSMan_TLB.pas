@@ -12,7 +12,7 @@ unit OSMan_TLB;
 // ************************************************************************ //
 
 // PASTLWTR : 1.2
-// File generated on 22.12.2011 9:38:22 from Type Library described below.
+// File generated on 29.04.2012 0:29:32 from Type Library described below.
 
 // ************************************************************************  //
 // Type Lib: C:\work\osm2russa\OSMan\OSMan.tlb (1)
@@ -78,6 +78,7 @@ type
     function Get_logger: OleVariant; safecall;
     procedure Set_logger(Value: OleVariant); safecall;
     procedure log(const msg: WideString); safecall;
+    procedure onModuleUnload(const iModSelfPtr: IUnknown); safecall;
     property logger: OleVariant read Get_logger write Set_logger;
   end;
 
@@ -95,6 +96,7 @@ type
     function getClassName: WideString; dispid 202;
     property logger: OleVariant dispid 203;
     procedure log(const msg: WideString); dispid 204;
+    procedure onModuleUnload(const iModSelfPtr: IUnknown); dispid 205;
   end;
 
 // *********************************************************************//

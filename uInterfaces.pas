@@ -281,8 +281,8 @@ type
     function isIn(const id: Int64): boolean;
     //add `id` into list. If `id` already in list do nothing.
     procedure add(const id: Int64);
-    //deletes `id from list. If `id` not in list do nothing.
-    procedure delete(const id: Int64);
+    //removes `id from list. If `id` not in list do nothing.
+    procedure remove(const id: Int64);
     //read-only temporary table name. Use it in SQL-queries.
     property tableName: WideString read get_tableName;
   end;
@@ -372,8 +372,12 @@ type
   IGeoTools = interface(IOSManAll)
     //returns multipolygon Object
     function createPoly(): OleVariant;
-    //returns distance in meters
-    function distance(const node1, node2: OleVariant): Double;
+    //returns distance in meters from node to nodeOrNodes
+    //if nodeOrNodes is single node then distance between this nodes returned
+    //if nodeOrNodes is array of nodes then distance between node and
+    //  polyline(polygon boundary) returned. This distance can be less then minimum
+    //  distace between nodes! Example: distance(n(1,1),[n(0,0),n(2,0)]) is 1, not 1.41
+    function distance(const node, nodeOrNodes: OleVariant): Double;
     //returns node rounded to certain bit level.
     //aBitLevel should be between 2 and 31.
     //Suitable for mp-format convertion

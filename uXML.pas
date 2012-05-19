@@ -30,7 +30,6 @@ type
     procedure setOutputMap(const outMap: OleVariant);
   end;
 
-
 implementation
 
 uses Math, ConvUtils;
@@ -38,6 +37,7 @@ uses Math, ConvUtils;
 const
   osmReaderClassGUID: TGUID = '{1028B33B-C674-47F7-B032-4ADDF4B695D4}';
   osmWriterClassGUID: TGUID = '{8DB21D39-DC59-49B8-B22B-43CBC064271F}';
+  osmFastWriterClassGUID: TGUID = '{73D595DA-2EDB-4A6F-8370-30E0834E2D63}';
 
 type
   TBaseHandler = class(TDefaultHandler)
@@ -75,7 +75,8 @@ type
 
   TDeleteHandler = class(TBaseHandler)
   protected
-    procedure startElement(const uri, localName, qName: SAXString; const atts: IAttributes);override;
+    procedure startElement(const uri, localName, qName: SAXString; const atts: IAttributes);
+      override;
   end;
 
   TMapObjHandler = class(TBaseHandler)
@@ -134,40 +135,76 @@ type
       IAttributes; onDone: TNotifyEvent = nil); override;
   end;
 
-  TOSMWriter=class(TOSManObject,ITransformOutputStream,IMapReader)
+  TUTF8Writer = class(TOSManObject, ITransformOutputStream)
+  private
+    //transfrom UTF16 strings into UFT8 byteArray variant stream
   protected
-    inMap,oStream:OleVariant;
-    fEOS,fShouldWriteHeader:boolean;
-    fBuf:array [Word] of byte;
-    fNextAvail:integer;
+    oStream: OleVariant;
+    fBuf: array[Word] of byte;
+    fNextAvail: integer;
+    fEOS: boolean;
+    constructor create(); override;
+    destructor destroy(); override;
+    function quote(const ws: WideString): WideString;
     procedure flush();
-    function getObjAtts(const mapObject:OleVariant):WideString;
-    function quote(const ws:WideString):WideString;
-    procedure writeLine(const ws:WideString;const indent:integer=0);
+    procedure CRLF();
+    procedure writeUTF8(pc:PAnsiChar;l:integer);overload;
+    procedure writeUTF8(const s:UTF8String);overload;
+    procedure writeUTF16(pc:PWideChar);overload;
+    procedure writeUTF16(const w: WideString);overload;
+    procedure writeLineUTF16(const w: WideString);
+    procedure writeLineUTF8(const s: UTF8String; const indent: integer = 0);
+  published
+    //aBuf - unicode string variant
+    procedure write(const aBuf: OleVariant);
+    procedure set_eos(const aEOS: WordBool);virtual;
+    function get_eos: WordBool;
+    //set pipelined output stream
+    procedure setOutputStream(const outStream: OleVariant);
+    //write "true" if all data stored and stream should release system resources
+    //once set to "true" no write oprerations allowed on stream
+    property eos: WordBool read get_eos write set_eos;
+  end;
+
+  TOSMWriter = class(TUTF8Writer, IMapReader)
+  protected
+    inMap: Variant;
+    fShouldWriteHeader: boolean;
+    function getObjAtts(const mapObject: OleVariant): UTF8String;
     procedure writeHeader();
     procedure writeFooter();
-    procedure writeNode(const node:OleVariant);
-    procedure writeWay(const way:OleVariant);
-    procedure writeRelation(const relation:OleVariant);
-    procedure writeTags(const tagsArray:OleVariant);
+    procedure writeNode(const node: OleVariant);
+    procedure writeWay(const way: OleVariant);
+    procedure writeRelation(const relation: OleVariant);
+    procedure writeTags(const tagsArray: OleVariant);
   public
-    constructor Create();override;
+    constructor create(); override;
   published
     //Map for storing results
     procedure setInputMap(const inputMap: OleVariant);
 
-    //output IOutputStream for transformed data
-    procedure setOutputStream(const outStream: OleVariant);
-
     //Write data from map to outStream in OSM-XML format
     //aBuf can hold exporting options. List of available options see in Map.getObjects
-    procedure write(const exportOptions:OleVariant);
-    procedure set_eos(const aEOS:WordBool);
-    function get_eos:WordBool;
-    //write "true" if all data stored and stream should to release system resources
-    //once set to "true" no write oprerations allowed on stream
-    property eos: WordBool read get_eos write set_eos;
+    procedure write(const exportOptions: OleVariant);
+    procedure set_eos(const aEOS: WordBool);override;
+  end;
 
+  TFastOSMWriter = class(TUTF8Writer, IMapReader)
+  protected
+    inMap,inStg: Variant;
+    procedure writeHeader();
+    procedure writeNodes();
+    procedure writeWays();
+    procedure writeRelations();
+    procedure writeFooter();
+  published
+    //Map for storing results
+    procedure setInputMap(const inputMap: OleVariant);
+
+    //Write data from map to outStream in OSM-XML format
+    //no filtering supported
+    procedure write(const dummy: OleVariant);
+    procedure set_eos(const aEOS: WordBool);override;
   end;
 
   { TOSMReader }
@@ -219,7 +256,7 @@ end;
 
 procedure TOSMReader.setOutputMap(const outMap: OleVariant);
 begin
-  if VarIsType(oMap,varDispatch) then
+  if VarIsType(oMap, varDispatch) then
     raise EInOutError.create(toString() + ': output map already assigned');
   oMap := outMap;
 end;
@@ -257,7 +294,7 @@ begin
       doOnDone();
     finally
       fReader.fSAXReader.setContentHandler(fParent);
-      fParent.endElement(uri,localName,qName);
+      fParent.endElement(uri, localName, qName);
     end;
   end;
 end;
@@ -304,10 +341,10 @@ begin
   inherited;
   if qName = 'osm' then
     TOSMHandler.create(fReader, uri, localName, qName, atts)
-  else if qName= 'osmChange' then
-    TOSCHandler.create(fReader,uri,localName,qName,atts)
+  else if qName = 'osmChange' then
+    TOSCHandler.create(fReader, uri, localName, qName, atts)
   else
-    raiseError('TDocHandler.startElement: unexpected element <'+qName+'>');
+    raiseError('TDocHandler.startElement: unexpected element <' + qName + '>');
 end;
 
 { TOSMHandler }
@@ -476,7 +513,7 @@ procedure TOSCHandler.startElement(const uri, localName, qName: SAXString;
   const atts: IAttributes);
 begin
   inherited;
-  if (qName ='modify') or (qName= 'create') then
+  if (qName = 'modify') or (qName = 'create') then
     TOSMHandler.create(fReader, uri, localName, qName, atts)
   else if qName = 'delete' then
     TDeleteHandler.create(fReader, uri, localName, qName, atts)
@@ -489,18 +526,18 @@ end;
 procedure TDeleteHandler.startElement(const uri, localName,
   qName: SAXString; const atts: IAttributes);
 var
-  id:int64;
+  id: int64;
 begin
   inherited;
-  if fNestedCount>2 then
+  if fNestedCount > 2 then
     //ignore tags,references,members
     exit;
-  id:=WideStrToInt64(atts.getValue('id'));
-  if qName='node' then
+  id := WideStrToInt64(atts.getValue('id'));
+  if qName = 'node' then
     fReader.oMap.deleteNode(id)
-  else if qName='way' then
+  else if qName = 'way' then
     fReader.oMap.deleteWay(id)
-  else if qName='relation' then
+  else if qName = 'relation' then
     fReader.oMap.deleteRelation(id)
   else
     raiseInvalidTag(qName);
@@ -508,300 +545,191 @@ end;
 
 { TOSMWriter }
 
-constructor TOSMWriter.Create;
+constructor TOSMWriter.create;
 begin
   inherited;
-  fShouldWriteHeader:=true;
+  fShouldWriteHeader := true;
 end;
 
-procedure TOSMWriter.flush;
-var
-  v:OleVariant;
-  p:PByte;
+function TOSMWriter.getObjAtts(const mapObject: OleVariant): UTF8String;
 begin
-  if not varIsType(oStream,varDispatch) then
-    raise EInOutError.Create(toString()+'.flush: out stream not assigned');
-  v:=varArrayCreate([0,fNextAvail-1],varByte);
-  p:=varArrayLock(v);
-  try
-    move(fBuf,p^,fNextAvail);
-  finally
-    varArrayUnlock(v);
-  end;
-  oStream.write(v);
-  fNextAvail:=0;
-end;
-
-function TOSMWriter.getObjAtts(const mapObject: OleVariant): WideString;
-begin
-  result:=WideString('id="')+IntToStr(MapObject.id)+'" version="'+inttostr(MapObject.version)+
-    '" timestamp="'+MapObject.timestamp+'" uid="'+inttostr(MapObject.userId)+
-    '" user="'+quote(MapObject.userName)+'" changeset="'+inttostr(MapObject.changeset)+'"';
-end;
-
-function TOSMWriter.get_eos: WordBool;
-begin
-  result:=fEOS;
-end;
-
-function TOSMWriter.quote(const ws: WideString): WideString;
-//As stated in http://www.w3.org/TR/2008/REC-xml-20081126/#syntax
-// & < > ' " should be quoted
-const
-  amp:WideString='&amp;';
-  lt:WideString='&lt;';
-  gt:WideString='&gt;';
-  apos:WideString='&apos;';
-  quot:WideString='&quot;';
-var
-  ol,nl,i:integer;
-  pwc,pwc1:PWideChar;
-begin
-  result:='';
-  ol:=length(ws);
-  if ol=0 then
-    exit;
-  nl:=ol;
-  pwc:=PWideChar(ws);
-  for i:=1 to ol do begin
-    case pwc^ of
-    '&':inc(nl,length(amp)-1);
-    '<':inc(nl,length(lt)-1);
-    '>':inc(nl,length(gt)-1);
-    '''':inc(nl,length(apos)-1);
-    '"':inc(nl,length(quot)-1);
-    end;
-    inc(pwc);
-  end;
-  if nl=ol then begin
-    result:=ws;
-    exit;
-  end;
-  setLength(result,nl);
-  pwc:=PWideChar(ws);
-  pwc1:=PWideChar(result);
-  for i:=1 to ol do begin
-    case pwc^ of
-    '&':begin
-        move(amp[1],pwc1^,length(amp)*sizeof(WideChar));
-        inc(pwc1,length(amp)-1);
-      end;
-    '<':begin
-        move(lt[1],pwc1^,length(lt)*sizeof(WideChar));
-        inc(pwc1,length(lt)-1);
-      end;
-    '>':begin
-        move(gt[1],pwc1^,length(gt)*sizeof(WideChar));
-        inc(pwc1,length(gt)-1);
-      end;
-    '''':begin
-        move(apos[1],pwc1^,length(apos)*sizeof(WideChar));
-        inc(pwc1,length(apos)-1);
-      end;
-    '"':begin
-        move(quot[1],pwc1^,length(quot)*sizeof(WideChar));
-        inc(pwc1,length(quot)-1);
-      end;
-    else
-      pwc1^:=pwc^;
-    end;
-    inc(pwc);
-    inc(pwc1);
-  end;
+  result := 'id="' + IntToStr(mapObject.id) + '" version="' + IntToStr(mapObject.version) +
+    '" timestamp="' + mapObject.timestamp + '" uid="' + IntToStr(mapObject.userId) +
+    '" user="' + UTF8Encode(quote(mapObject.userName)) + '" changeset="' +
+    IntToStr(mapObject.changeset) + '"';
 end;
 
 procedure TOSMWriter.setInputMap(const inputMap: OleVariant);
 begin
-  inMap:=inputMap;
-end;
-
-procedure TOSMWriter.setOutputStream(const outStream: OleVariant);
-begin
-  if VarIsType(oStream,varDispatch) then
-    flush();
-  oStream:=outStream;
+  varCopyNoInd(inMap, inputMap);
 end;
 
 procedure TOSMWriter.set_eos(const aEOS: WordBool);
 begin
   if (not eos) and aEOS then begin
     writeFooter();
-    flush();
   end;
-  fEOS:=eos or aEOS;
-  if VarIsType(oStream,varDispatch) then
-    oStream.eos:=fEOS;
+  inherited set_eos(aEOS);
 end;
 
 procedure TOSMWriter.write(const exportOptions: OleVariant);
 var
   //IQueryResult
-  allObjects:OleVariant;
+  allObjects: OleVariant;
   //IMapObject
-  mo:OleVariant;
-  s:WideString;
+  mo: OleVariant;
+  pv: POleVariant;
+  s: WideString;
+  l: integer;
 begin
-  if not varIsType(oStream,varDispatch) then
-    raise EInOutError.Create(toString()+'.write: out stream not assigned');
-  if not varIsType(inMap,varDispatch) then
-    raise EInOutError.Create(toString()+'.write: input map not assigned');
+  if not VarIsType(oStream, varDispatch) then
+    raise EInOutError.create(toString() + '.write: out stream not assigned');
+  if not VarIsType(inMap, varDispatch) then
+    raise EInOutError.create(toString() + '.write: input map not assigned');
   if fShouldWriteHeader then
     writeHeader();
-  fShouldWriteHeader:=false;
-  allObjects:=inMap.getObjects(exportOptions);
+  fShouldWriteHeader := false;
+  allObjects := inMap.getObjects(exportOptions);
   while not allObjects.eos do begin
-    mo:=allObjects.read(1);
-    if not VarIsType(mo,varDispatch) then begin
-      if not allObjects.eos then
-        raise  EInOutError.Create(toString()+'.write: unexpected result of Map.getObjects.Read')
-      else begin
-        eos:=true;
-        break;
+    mo := allObjects.read(1000);
+    if not VarIsArray(mo) or (VarArrayDimCount(mo) <> 1) then
+      raise EInOutError.create(toString() + '.write: result of Map.getObjects.Read is not array');
+    l := varArrayLength(mo);
+    pv := VarArrayLock(mo);
+    try
+      while (l > 0) do begin
+        if not VarIsType(pv^, varDispatch) then begin
+          if not allObjects.eos then
+            raise EInOutError.create(toString() +
+              '.write: unexpected result of Map.getObjects.Read')
+          else begin
+            eos := true;
+            break;
+          end;
+        end;
+        s := pv^.getClassName;
+        if s = 'Node' then
+          writeNode(pv^)
+        else if s = 'Way' then
+          writeWay(pv^)
+        else if s = 'Relation' then
+          writeRelation(pv^)
+        else
+          raise EInOutError.create(toString() + '.write: illegal object type <' + s + '>');
+        inc(pv);
+        dec(l);
       end;
+    finally
+      VarArrayUnlock(mo);
     end;
-    s:=mo.getClassName;
-    if s='Node' then
-      writeNode(mo)
-    else if s='Way' then
-      writeWay(mo)
-    else if s='Relation' then
-      writeRelation(mo)
-    else
-      raise EInOutError.Create(toString()+'.write: illegal object type <'+s+'>');
   end;
-  eos:=true;
+  eos := true;
 end;
 
 procedure TOSMWriter.writeFooter;
 begin
-  writeLine('</osm>');
+  writeLineUTF8('</osm>');
 end;
 
 procedure TOSMWriter.writeHeader;
 begin
-  writeLine('<?xml version="1.0" encoding="UTF-8" ?>');
-  writeLine('<osm version="0.6" generator="Osman '+getClassName()+'">');
-end;
-
-procedure TOSMWriter.writeLine(const ws: WideString;
-  const indent: integer);
-var
-  u8s:Utf8String;
-  i,l:integer;
-  pb,pc:PByte;
-begin
-  u8s:=UTF8Encode(ws)+#13#10;
-  pb:=@fBuf[fNextAvail];
-  for i:=1 to indent*2 do begin
-    pb^:=ord(' ');
-    inc(pb);
-    inc(fNextAvail);
-    if fNextAvail=SizeOf(fBuf) then begin
-      flush();
-      pb:=@fBuf[0];
-    end;
-  end;
-  l:=length(u8s);
-  pc:=@u8s[1];
-  for i:=1 to l do begin
-    pb^:=pc^;
-    inc(pb);
-    inc(pc);
-    inc(fNextAvail);
-    if fNextAvail=SizeOf(fBuf) then begin
-      flush();
-      pb:=@fBuf[0];
-    end;
-  end;
+  writeLineUTF8('<?xml version="1.0" encoding="UTF-8" ?>');
+  writeLineUTF8('<osm version="0.6" generator="Osman ' + getClassName() + '">');
 end;
 
 procedure TOSMWriter.writeNode(const node: OleVariant);
 var
-  s:WideString;
-  v:OleVariant;
+  s: UTF8String;
+  v: OleVariant;
 begin
-  s:=WideString('<node ')+getObjAtts(node)+' lat="'+degToStr(node.lat)+
-    '" lon="'+degToStr(node.lon)+'"';
-  v:=node.tags.getAll;
-  if (VarArrayDimCount(v)=1)and (VarArrayHighBound(v,1)-VarArrayLowBound(v,1)>=0) then begin
-  //object has tags
-    writeLine(s+'>',1);
+  s := '<node '+getObjAtts(node)+' lat="' + degToStr(node.lat) +
+    '" lon="' + degToStr(node.lon) + '"';
+  v := node.tags.getAll;
+  if (VarArrayDimCount(v) = 1) and (varArrayLength(v) > 0) then begin
+    //object has tags
+    writeLineUTF8(s + '>', 1);
     writeTags(v);
-    writeLine('</node>',1);
+    writeLineUTF8('</node>', 1);
   end
   else begin
-    writeLine(s+'/>',1);
+    writeLineUTF8(s + '/>', 1);
   end;
 end;
 
 procedure TOSMWriter.writeRelation(const relation: OleVariant);
 var
-  s:WideString;
-  t,m:OleVariant;
-  pv,pv1,pv2:PVarData;
-  emptyRelation:boolean;
-  i:integer;
-  i64:int64;
+  s: UTF8String;
+  t, m: OleVariant;
+  pv, pv1, pv2: PVarData;
+  emptyRelation: boolean;
+  i: integer;
+  i64: int64;
 begin
-  s:=WideString('<relation ')+getObjAtts(relation);
-  t:=relation.tags.getAll;
-  m:=relation.members.getAll;
-  emptyRelation:=true;
-  if not VarIsType(m,varArray or varVariant) then
-    raise EInOutError.Create(toString()+'.writeRelation: invalid member ref');
-  if (VarArrayDimCount(m)=1)and (VarArrayHighBound(m,1)-VarArrayLowBound(m,1)>=0) then begin
-    //write members
-    i:=VarArrayHighBound(m,1)-VarArrayLowBound(m,1)+1;
-    if (i mod 3)<>0 then
-      raise EInOutError.Create(toString()+'.writeRelation: invalid member count');
-    emptyRelation:=false;
-    writeLine(s+'>',1);
-    pv:=VarArrayLock(m);
-    try
-      pv1:=pv;
-      inc(pv1);
-      pv2:=pv;
-      inc(pv2,2);
-    while i>0 do begin
-      i64:=PVariant(pv1)^;
-      writeLine(WideString('<member type="')+PVariant(pv)^+'" ref="'+inttostr(i64)+'" role="'+quote(PVariant(pv2)^)+'"/>',2);
-      inc(pv,3);
-      inc(pv1,3);
-      inc(pv2,3);
-      dec(i,3);
+  s := '<relation ' + getObjAtts(relation);
+  t := relation.tags.getAll;
+  m := relation.members.getAll;
+  emptyRelation := true;
+  if not VarIsType(m, varArray or varVariant) then
+    raise EInOutError.create(toString() + '.writeRelation: invalid member ref');
+  if (VarArrayDimCount(t) = 1) and (varArrayLength(t) > 0) then begin
+    //object has tags
+    if emptyRelation then begin
+      writeLineUTF8(s + '>', 1);
+      emptyRelation := false;
     end;
+    writeTags(t);
+  end;
+  if (VarArrayDimCount(m) = 1) and (VarArrayLength(m)> 0) then
+    begin
+    //write members
+    i := VarArrayLength(m);
+    if (i mod 3) <> 0 then
+      raise EInOutError.create(toString() + '.writeRelation: invalid member count');
+    if emptyRelation then begin
+      emptyRelation := false;
+      writeLineUTF8(s + '>', 1);
+    end;
+    pv := VarArrayLock(m);
+    try
+      pv1 := pv;
+      inc(pv1);
+      pv2 := pv;
+      inc(pv2, 2);
+      while i > 0 do begin
+        i64 := PVariant(pv1)^;
+        writeLineUTF8('<member type="' + PVariant(pv)^ + '" ref="' + IntToStr(i64) + '" role="' +
+          UTF8Encode(quote(PVariant(pv2)^)) + '"/>', 2);
+        inc(pv, 3);
+        inc(pv1, 3);
+        inc(pv2, 3);
+        dec(i, 3);
+      end;
     finally
       VarArrayUnlock(m);
     end;
   end;
-  if (VarArrayDimCount(t)=1)and (VarArrayHighBound(t,1)-VarArrayLowBound(t,1)>=0) then begin
-  //object has tags
-    if emptyRelation then
-      writeLine(s+'>',1);
-    writeTags(t);
-    emptyRelation:=false;
-  end;
   if emptyRelation then
-    writeLine(s+'/>')
+    writeLineUTF8(s + '/>')
   else
-    writeLine('</relation>',1);
+    writeLineUTF8('</relation>', 1);
 end;
 
 procedure TOSMWriter.writeTags(const tagsArray: OleVariant);
 var
-  pv,pk:PVariant;
-  n:integer;
+  pv, pk: PVariant;
+  n: integer;
 begin
-  n:=(VarArrayHighBound(tagsArray,1)-VarArrayLowBound(tagsArray,1)+1)div 2;
-  pk:=VarArrayLock(tagsArray);
-  pv:=pk;
+  n := VarArrayLength(tagsArray) div 2;
+  pk := VarArrayLock(tagsArray);
+  pv := pk;
   inc(pv);
   try
-    while n>0 do begin
-      writeLine(WideString('<tag k="')+quote(pk^)+'" v="'+quote(pv^)+'"/>',2);
+    while n > 0 do begin
+      writeLineUTF8('<tag k="' + UTF8Encode(quote(pk^)) + '" v="' + UTF8Encode(quote(pv^)) + '"/>',
+        2);
       dec(n);
-      inc(pk,2);
-      inc(pv,2);
+      inc(pk, 2);
+      inc(pv, 2);
     end;
   finally
     VarArrayUnlock(tagsArray);
@@ -810,50 +738,598 @@ end;
 
 procedure TOSMWriter.writeWay(const way: OleVariant);
 var
-  s:WideString;
-  t,n:OleVariant;
-  pv:PVarData;
-  emptyWay:boolean;
-  i:integer;
-  i64:int64;
+  s: UTF8String;
+  t, n: OleVariant;
+  pv: PVarData;
+  emptyWay: boolean;
+  i: integer;
+  i64: int64;
 begin
-  s:=WideString('<way ')+getObjAtts(way);
-  t:=way.tags.getAll;
-  n:=way.nodes;
-  emptyWay:=true;
-  if not VarIsType(n,varArray or varVariant) then
-    raise EInOutError.Create(toString()+'.writeWay: invalid node ref');
-  if (VarArrayDimCount(n)=1)and (VarArrayHighBound(n,1)-VarArrayLowBound(n,1)>=0) then begin
+  s := '<way ' + getObjAtts(way);
+  t := way.tags.getAll;
+  n := way.nodes;
+  emptyWay := true;
+  if not VarIsType(n, varArray or varVariant) then
+    raise EInOutError.create(toString() + '.writeWay: invalid node ref');
+  if (VarArrayDimCount(t) = 1) and (varArrayLength(t) > 0) then begin
+    //object has tags
     emptyWay:=false;
-    writeLine(s+'>',1);
-    i:=VarArrayHighBound(n,1)-VarArrayLowBound(n,1)+1;
-    pv:=VarArrayLock(n);
-    try
-    while i>0 do begin
-      i64:=pVariant(pv)^;
-      writeLine('<nd ref="'+inttostr(i64)+'"/>',2);
-      inc(pv);
-      dec(i);
-    end;
-    finally
-    VarArrayUnlock(n);
-    end;
-  end;
-  if (VarArrayDimCount(t)=1)and (VarArrayHighBound(t,1)-VarArrayLowBound(t,1)>=0) then begin
-  //object has tags
-    if emptyWay then
-      writeLine(s+'>',1);
+    writeLineUTF8(s + '>', 1);
     writeTags(t);
-    emptyWay:=false;
+  end;
+  if (VarArrayDimCount(n) = 1) and (varArrayLength(n) > 0) then begin
+    if emptyWay then begin
+      emptyWay := false;
+      writeLineUTF8(s + '>', 1);
+    end;
+    i := varArrayLength(n);
+    pv := VarArrayLock(n);
+    try
+      while i > 0 do begin
+        i64 := PVariant(pv)^;
+        writeLineUTF8('<nd ref="' + IntToStr(i64) + '"/>', 2);
+        inc(pv);
+        dec(i);
+      end;
+    finally
+      VarArrayUnlock(n);
+    end;
   end;
   if emptyWay then
-    writeLine(s+'/>')
+    writeLineUTF8(s + '/>')
   else
-    writeLine('</way>',1);
+    writeLineUTF8('</way>', 1);
+end;
+
+{ TUTF8Writer }
+
+constructor TUTF8Writer.create;
+begin
+  inherited;
+  fEOS := true;
+end;
+
+destructor TUTF8Writer.destroy;
+begin
+  eos := true;
+  inherited;
+end;
+
+procedure TUTF8Writer.flush;
+var
+  v: OleVariant;
+  p: PByte;
+begin
+  if not VarIsType(oStream, varDispatch) then
+    raise EInOutError.create(toString() + '.flush: out stream not assigned');
+  v := VarArrayCreate([0, fNextAvail - 1], varByte);
+  p := VarArrayLock(v);
+  try
+    move(fBuf, p^, fNextAvail);
+  finally
+    VarArrayUnlock(v);
+  end;
+  oStream.write(v);
+  fNextAvail := 0;
+end;
+
+function TUTF8Writer.get_eos: WordBool;
+begin
+  result := fEOS;
+end;
+
+procedure TUTF8Writer.set_eos(const aEOS: WordBool);
+begin
+  if (not eos) and aEOS then begin
+    flush();
+  end;
+  fEOS := eos or aEOS;
+  if VarIsType(oStream, varDispatch) then
+    oStream.eos := fEOS;
+end;
+
+procedure TUTF8Writer.setOutputStream(const outStream: OleVariant);
+begin
+  if VarIsType(oStream, varDispatch) then
+    flush();
+  oStream := outStream;
+  fEOS := outStream.eos;
+end;
+
+procedure TUTF8Writer.write(const aBuf: OleVariant);
+var
+  p: PVarData;
+begin
+  p := @aBuf;
+  while (p.VType and varByRef) <> 0 do p := p.VPointer;
+  if (p.VType = varOleStr) then begin
+    writeLineUTF16(p.VOleStr);
+  end
+  else begin
+    writeLineUTF16(aBuf);
+  end;
+end;
+
+procedure TUTF8Writer.writeLineUTF16(const w: WideString);
+begin
+  writeUTF16(w);
+  CRLF();
+end;
+
+procedure TUTF8Writer.writeLineUTF8(const s: UTF8String;
+  const indent: integer);
+var
+  pb: PByte;
+  i, l: integer;
+begin
+  pb := @fBuf[fNextAvail];
+  l := indent * 2;
+  while l > 0 do begin
+    i := sizeof(fBuf) - fNextAvail;
+    if (i > l) then
+      i := l;
+    fillchar(pb^, i, ' ');
+    inc(fNextAvail, i);
+    inc(pb, i);
+    dec(l, i);
+    if (fNextAvail = sizeof(fBuf)) then begin
+      flush();
+      pb := @fBuf[0];
+    end;
+  end;
+  writeUTF8(PAnsiChar(s), length(s));
+  CRLF();
+end;
+
+procedure TUTF8Writer.CRLF();
+begin
+  if((fNextAvail+2)>sizeOf(fBuf)) then
+    flush();
+  fBuf[fNextAvail] := 13;
+  inc(fNextAvail);
+  fBuf[fNextAvail] := 10;
+  inc(fNextAvail);
+  if (fNextAvail >= sizeof(fBuf)) then flush();
+end;
+
+procedure TUTF8Writer.writeUTF8(pc: PAnsiChar; l: integer);
+var
+  i: integer;
+  pb: PByte;
+begin
+  pb:=@fBuf[fNextAvail];
+  while l > 0 do begin
+    i := sizeof(fBuf) - fNextAvail;
+    if (i > l) then
+      i := l;
+    move(pc^, pb^, i);
+    inc(fNextAvail, i);
+    inc(pc, i);
+    inc(pb, i);
+    dec(l, i);
+    if (fNextAvail = sizeof(fBuf)) then begin
+      flush();
+      pb := @fBuf[0];
+    end;
+  end;
+end;
+
+procedure TUTF8Writer.writeUTF16(pc: PWideChar);
+var
+  cnt: integer;
+begin
+  if(fNextAvail*2>=sizeOf(fBuf)) then
+    flush();
+  cnt := UnicodeToUtf8(@fBuf[fNextAvail], pc,sizeof(fBuf) - fNextAvail);
+  if (cnt + fNextAvail) >= sizeof(fBuf) then begin
+    flush();
+    cnt := UnicodeToUtf8(@fBuf[fNextAvail], pc, sizeof(fBuf) - fNextAvail);
+    if (cnt + fNextAvail) >= sizeof(fBuf) then
+      raise EConvertError.create(toString() + '.writeUTF16: too long string');
+  end;
+  inc(fNextAvail, cnt - 1);
+end;
+
+procedure TUTF8Writer.writeUTF8(const s: UTF8String);
+begin
+  writeUTF8(pAnsiChar(s),length(s));
+end;
+
+procedure TUTF8Writer.writeUTF16(const w: WideString);
+begin
+  writeUTF16(pWideChar(w));
+end;
+
+function TUTF8Writer.quote(const ws: WideString): WideString;
+//As stated in http://www.w3.org/TR/2008/REC-xml-20081126/#syntax
+// & < > ' " should be quoted
+const
+  amp: WideString = '&amp;';
+  lt: WideString = '&lt;';
+  gt: WideString = '&gt;';
+  apos: WideString = '&apos;';
+  quot: WideString = '&quot;';
+var
+  ol, nl, i: integer;
+  pwc, pwc1: PWideChar;
+begin
+  result := '';
+  ol := length(ws);
+  if ol = 0 then
+    exit;
+  nl := ol;
+  pwc := PWideChar(ws);
+  for i := 1 to ol do begin
+    case pwc^ of
+      '&': inc(nl, length(amp) - 1);
+      '<': inc(nl, length(lt) - 1);
+      '>': inc(nl, length(gt) - 1);
+      '''': inc(nl, length(apos) - 1);
+      '"': inc(nl, length(quot) - 1);
+    end;
+    inc(pwc);
+  end;
+  if nl = ol then begin
+    result := ws;
+    exit;
+  end;
+  setLength(result, nl);
+  pwc := PWideChar(ws);
+  pwc1 := PWideChar(result);
+  for i := 1 to ol do begin
+    case pwc^ of
+      '&': begin
+          move(amp[1], pwc1^, length(amp) * sizeof(WideChar));
+          inc(pwc1, length(amp) - 1);
+        end;
+      '<': begin
+          move(lt[1], pwc1^, length(lt) * sizeof(WideChar));
+          inc(pwc1, length(lt) - 1);
+        end;
+      '>': begin
+          move(gt[1], pwc1^, length(gt) * sizeof(WideChar));
+          inc(pwc1, length(gt) - 1);
+        end;
+      '''': begin
+          move(apos[1], pwc1^, length(apos) * sizeof(WideChar));
+          inc(pwc1, length(apos) - 1);
+        end;
+      '"': begin
+          move(quot[1], pwc1^, length(quot) * sizeof(WideChar));
+          inc(pwc1, length(quot) - 1);
+        end;
+    else
+      pwc1^ := pwc^;
+    end;
+    inc(pwc);
+    inc(pwc1);
+  end;
+end;
+
+{ TFastOSMWriter }
+
+procedure TFastOSMWriter.set_eos(const aEOS: WordBool);
+begin
+  inherited;
+
+end;
+
+procedure TFastOSMWriter.setInputMap(const inputMap: OleVariant);
+begin
+  if(varIsType(inputMap,varDispatch)) then begin
+    varCopyNoInd(inMap,inputMap);
+  end
+  else
+    inMap:=0;
+end;
+
+procedure TFastOSMWriter.write(const dummy: OleVariant);
+begin
+  if not VarIsType(oStream, varDispatch) then
+    raise EInOutError.create(toString() + '.write: out stream not assigned');
+  if not VarIsType(inMap, varDispatch) or not VarIsType(inMap.storage, varDispatch) then
+    raise EInOutError.create(toString() + '.write: input map not assigned');
+  inStg:=inMap.storage;
+  try
+    writeHeader();
+    writeNodes();
+    writeWays();
+    writeRelations();
+    writeFooter();
+  finally
+    inStg:=0;
+  end;
+end;
+
+procedure TFastOSMWriter.writeHeader;
+begin
+  writeLineUTF8('<?xml version="1.0" encoding="UTF-8" ?>');
+  writeUTF8('<osm version="0.6" generator="Osman ');
+  writeUTF16( getClassName());
+  writeLineUTF8('">');
+end;
+
+procedure TFastOSMWriter.writeNodes;
+var
+  qAtt,qTgs,sAtt,sTgs,aAtt,aTgs:Variant;
+  pV,pVt:PVariant;
+  n,l:integer;
+  i64:int64;
+  su8:UTF8String;
+  hasTags:boolean;
+begin
+  qAtt:=inStg.sqlPrepare('SELECT nodes.id,version,timestamp,userid,users.name,changeset,lat,lon FROM nodes,users WHERE nodes.userid=users.id');
+  qTgs:=inStg.sqlPrepare('SELECT tagname,tagvalue FROM objtags,tags WHERE :id*4+0=objid AND tagid=tags.id');
+  sAtt:=inStg.sqlExec(qAtt,0,0);
+  while not sAtt.eos do begin
+    aAtt:=sAtt.read(100);
+    if (not varIsArray(aAtt))or(VarArrayDimCount(aAtt)<>1) then
+      raise EConvertError.Create(toString()+'.writeNodes: unexpected attribute array');
+    n:=varArrayLength(aAtt) div 8;
+    pV:=VarArrayLock(aAtt);
+    pVt:=nil;
+    try
+      while(n>0)do begin
+        dec(n);
+        writeUTF8('  <node id="');
+        i64:=pV^;
+        writeUTF8(inttostr(i64)+'" version="');
+        inc(pV);
+        writeUTF8(inttostr(pV^)+'" timestamp="');
+        inc(pV);
+        writeUTF16(pWideChar(wideString(pV^)));
+        inc(pV);
+        writeUTF8('" uid="'+inttostr(pV^)+'" user="');
+        inc(pV);
+        writeUTF16(quote(pV^));
+        inc(pV);
+        writeUTF8('" changeset="'+inttostr(pV^)+'" lat="');
+        inc(pV);su8:=inttostr(pV^);l:=length(su8);
+        writeUTF8(copy(su8,1,l-7)+'.'+copy(su8,l-7+1,7)+'" lon="');
+        inc(pV);su8:=inttostr(pV^);l:=length(su8);
+        writeUTF8(copy(su8,1,l-7)+'.'+copy(su8,l-7+1,7)+'"');
+        inc(pV);
+        hasTags:=false;
+        sTgs:=inStg.sqlExec(qTgs,':id',i64);
+        while not sTgs.eos do begin
+          aTgs:=sTgs.read(30);
+          if (not varIsArray(aTgs))or(VarArrayDimCount(aTgs)<>1) then
+            raise EConvertError.Create(toString()+'.writeNodes: unexpected tags array');
+          l:=varArrayLength(aTgs) div 2;
+          if(not hasTags) then begin
+            hasTags:=true;
+            writeLineUTF8('>');
+          end;
+          pVt:=varArrayLock(aTgs);
+          while(l>0)do begin
+            dec(l);
+            writeUTF8('    <tag k="');
+            writeUTF16(quote(pVt^));
+            inc(pVt);
+            writeUTF8('" v="');
+            writeUTF16(quote(pVt^));
+            inc(pVt);
+            writeLineUTF8('"/>');
+          end;
+          varArrayUnlock(aTgs);
+          pVt:=nil;
+        end;
+        if(hasTags)then
+          writeLineUTF8('  </node>')
+        else
+          writeLineUTF8('/>');
+      end;
+    finally
+      if assigned(pVt) then varArrayUnlock(aTgs);
+      varArrayUnlock(aAtt);
+    end;
+  end;
+end;
+
+procedure TFastOSMWriter.writeRelations;
+var
+  qAtt,qTgs,qMembers,sAtt,sTgs,aAtt,aTgs:Variant;
+  pV,pVt:PVariant;
+  n,l:integer;
+  i64:int64;
+  hasTags:boolean;
+begin
+  qAtt:=inStg.sqlPrepare('SELECT relations.id,version,timestamp,userid,users.name,changeset FROM relations,users WHERE relations.userid=users.id');
+  qTgs:=inStg.sqlPrepare('SELECT tagname,tagvalue FROM objtags,tags WHERE :id*4+2=objid AND tagid=tags.id');
+  qMembers:=inStg.sqlPrepare('SELECT memberidxtype & 3,memberid, memberrole FROM relationmembers WHERE relationid=:id ORDER BY memberidxtype');
+  sAtt:=inStg.sqlExec(qAtt,0,0);
+  while not sAtt.eos do begin
+    aAtt:=sAtt.read(100);
+    if (not varIsArray(aAtt))or(VarArrayDimCount(aAtt)<>1) then
+      raise EConvertError.Create(toString()+'.writeRelations: unexpected attribute array');
+    n:=varArrayLength(aAtt) div 6;
+    pV:=VarArrayLock(aAtt);
+    pVt:=nil;
+    try
+      while(n>0)do begin
+        dec(n);
+        writeUTF8('  <relation id="');
+        i64:=pV^;
+        writeUTF8(inttostr(i64)+'" version="');
+        inc(pV);
+        writeUTF8(inttostr(pV^)+'" timestamp="');
+        inc(pV);
+        writeUTF16(pWideChar(wideString(pV^)));
+        inc(pV);
+        writeUTF8('" uid="'+inttostr(pV^)+'" user="');
+        inc(pV);
+        writeUTF16(quote(pV^));
+        inc(pV);
+        writeUTF8('" changeset="'+inttostr(pV^)+'"');
+        inc(pV);
+        hasTags:=false;
+        sTgs:=inStg.sqlExec(qTgs,':id',i64);
+        while not sTgs.eos do begin
+          aTgs:=sTgs.read(30);
+          if (not varIsArray(aTgs))or(VarArrayDimCount(aTgs)<>1) then
+            raise EConvertError.Create(toString()+'.writeRelations: unexpected tags array');
+          l:=varArrayLength(aTgs) div 2;
+          if(not hasTags) then begin
+            hasTags:=true;
+            writeLineUTF8('>');
+          end;
+          pVt:=varArrayLock(aTgs);
+          while(l>0)do begin
+            dec(l);
+            writeUTF8('    <tag k="');
+            writeUTF16(quote(pVt^));
+            inc(pVt);
+            writeUTF8('" v="');
+            writeUTF16(quote(pVt^));
+            inc(pVt);
+            writeLineUTF8('"/>');
+          end;
+          varArrayUnlock(aTgs);
+          pVt:=nil;
+        end;
+        sTgs:=inStg.sqlExec(qMembers,':id',i64);
+        while not sTgs.eos do begin
+          aTgs:=sTgs.read(30);
+          if (not varIsArray(aTgs))or(VarArrayDimCount(aTgs)<>1) then
+            raise EConvertError.Create(toString()+'.writeRelations: unexpected members array');
+          l:=varArrayLength(aTgs) div 3;
+          if(not hasTags) then begin
+            hasTags:=true;
+            writeLineUTF8('>');
+          end;
+          pVt:=varArrayLock(aTgs);
+          while(l>0)do begin
+            dec(l);
+            i64:=pVt^;
+            case i64 of
+              0:writeUTF8('    <member type="node" ref="');
+              1:writeUTF8('    <member type="way" ref="');
+              2:writeUTF8('    <member type="relation" ref="');
+            end;
+            inc(pVt);
+            i64:=pVt^;
+            writeUTF8(inttostr(i64)+'" role="');
+            inc(pVt);
+            writeUTF16(quote(pVt^));
+            writeLineUTF8('"/>');
+            inc(pVt);
+          end;
+          varArrayUnlock(aTgs);
+          pVt:=nil;
+        end;
+        if(hasTags)then
+          writeLineUTF8('  </relation>')
+        else
+          writeLineUTF8('/>');
+      end;
+    finally
+      if assigned(pVt) then varArrayUnlock(aTgs);
+      varArrayUnlock(aAtt);
+    end;
+  end;
+end;
+
+procedure TFastOSMWriter.writeWays;
+var
+  qAtt,qTgs,qNodes,sAtt,sTgs,aAtt,aTgs:Variant;
+  pV,pVt:PVariant;
+  n,l:integer;
+  i64:int64;
+  hasTags:boolean;
+begin
+  qAtt:=inStg.sqlPrepare('SELECT ways.id,version,timestamp,userid,users.name,changeset FROM ways,users WHERE ways.userid=users.id');
+  qTgs:=inStg.sqlPrepare('SELECT tagname,tagvalue FROM objtags,tags WHERE :id*4+1=objid AND tagid=tags.id');
+  qNodes:=inStg.sqlPrepare('SELECT nodeid FROM waynodes WHERE wayid=:id ORDER BY nodeidx');
+  sAtt:=inStg.sqlExec(qAtt,0,0);
+  while not sAtt.eos do begin
+    aAtt:=sAtt.read(100);
+    if (not varIsArray(aAtt))or(VarArrayDimCount(aAtt)<>1) then
+      raise EConvertError.Create(toString()+'.writeWays: unexpected attribute array');
+    n:=varArrayLength(aAtt) div 6;
+    pV:=VarArrayLock(aAtt);
+    pVt:=nil;
+    try
+      while(n>0)do begin
+        dec(n);
+        writeUTF8('  <way id="');
+        i64:=pV^;
+        writeUTF8(inttostr(i64)+'" version="');
+        inc(pV);
+        writeUTF8(inttostr(pV^)+'" timestamp="');
+        inc(pV);
+        writeUTF16(pWideChar(wideString(pV^)));
+        inc(pV);
+        writeUTF8('" uid="'+inttostr(pV^)+'" user="');
+        inc(pV);
+        writeUTF16(quote(pV^));
+        inc(pV);
+        writeUTF8('" changeset="'+inttostr(pV^)+'"');
+        inc(pV);
+        hasTags:=false;
+        sTgs:=inStg.sqlExec(qTgs,':id',i64);
+        while not sTgs.eos do begin
+          aTgs:=sTgs.read(30);
+          if (not varIsArray(aTgs))or(VarArrayDimCount(aTgs)<>1) then
+            raise EConvertError.Create(toString()+'.writeWays: unexpected tags array');
+          l:=varArrayLength(aTgs) div 2;
+          if(not hasTags) then begin
+            hasTags:=true;
+            writeLineUTF8('>');
+          end;
+          pVt:=varArrayLock(aTgs);
+          while(l>0)do begin
+            dec(l);
+            writeUTF8('    <tag k="');
+            writeUTF16(quote(pVt^));
+            inc(pVt);
+            writeUTF8('" v="');
+            writeUTF16(quote(pVt^));
+            inc(pVt);
+            writeLineUTF8('"/>');
+          end;
+          varArrayUnlock(aTgs);
+          pVt:=nil;
+        end;
+        sTgs:=inStg.sqlExec(qNodes,':id',i64);
+        while not sTgs.eos do begin
+          aTgs:=sTgs.read(30);
+          if (not varIsArray(aTgs))or(VarArrayDimCount(aTgs)<>1) then
+            raise EConvertError.Create(toString()+'.writeWays: unexpected nodes array');
+          l:=varArrayLength(aTgs);
+          if(not hasTags) then begin
+            hasTags:=true;
+            writeLineUTF8('>');
+          end;
+          pVt:=varArrayLock(aTgs);
+          while(l>0)do begin
+            dec(l);
+            i64:=pVt^;
+            writeLineUTF8('    <nd ref="'+inttostr(i64)+'"/>');
+            inc(pVt);
+          end;
+          varArrayUnlock(aTgs);
+          pVt:=nil;
+        end;
+        if(hasTags)then
+          writeLineUTF8('  </way>')
+        else
+          writeLineUTF8('/>');
+      end;
+    finally
+      if assigned(pVt) then varArrayUnlock(aTgs);
+      varArrayUnlock(aAtt);
+    end;
+  end;
+end;
+
+procedure TFastOSMWriter.writeFooter;
+begin
+  writeLineUTF8('</osm>');
 end;
 
 initialization
   uModule.OSManRegister(TOSMReader, osmReaderClassGUID);
   uModule.OSManRegister(TOSMWriter, osmWriterClassGUID);
+  uModule.OSManRegister(TFastOSMWriter,osmFastWriterClassGUID);
 end.
 

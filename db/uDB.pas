@@ -56,7 +56,7 @@ type
   published
     function isIn(const id: int64): boolean;
     procedure add(const id: int64);
-    procedure delete(const id: int64);
+    procedure remove(const id: int64);
     property tableName: WideString read get_tableName;
   end;
 
@@ -212,7 +212,7 @@ begin
     'id INTEGER PRIMARY KEY AUTOINCREMENT,' +
     'version INTEGER DEFAULT 1 NOT NULL,' +
     'timestamp VARCHAR(20),' +
-    'userId INTEGER DEFAULT 0,' +
+    'userid INTEGER DEFAULT 0,' +
     'changeset BIGINT)');
 
   exec('DROP TABLE IF EXISTS nodes_latlon');
@@ -222,21 +222,21 @@ begin
   exec('CREATE VIEW IF NOT EXISTS nodes AS SELECT nodes_latlon.id as id,' +
     'nodes_latlon.minlat as lat, nodes_latlon.minlon as lon,' +
     'nodes_attr.version as version, nodes_attr.timestamp as timestamp,' +
-    'nodes_attr.userId as userId, nodes_attr.changeset as changeset ' +
+    'nodes_attr.userid as userid, nodes_attr.changeset as changeset ' +
     'FROM nodes_attr, nodes_latlon WHERE nodes_attr.id=nodes_latlon.id');
 
   exec('DROP TRIGGER IF EXISTS nodes_ii');
   exec('CREATE TRIGGER IF NOT EXISTS nodes_ii INSTEAD OF INSERT ON nodes BEGIN ' +
-    'INSERT INTO nodes_attr (id, version, timestamp, userId, changeset) ' +
-    'VALUES (NEW.id,NEW.version, NEW.timestamp, NEW.userId, NEW.changeset);' +
+    'INSERT INTO nodes_attr (id, version, timestamp, userid, changeset) ' +
+    'VALUES (NEW.id,NEW.version, NEW.timestamp, NEW.userid, NEW.changeset);' +
     'INSERT INTO nodes_latlon(id,minlat,maxlat,minlon,maxlon)' +
     'VALUES (NEW.id, NEW.lat, NEW.lat, NEW.lon, NEW.lon);' +
     'END;');
 
   exec('DROP TRIGGER IF EXISTS nodes_iu');
   exec('CREATE TRIGGER IF NOT EXISTS nodes_iu INSTEAD OF UPDATE ON nodes BEGIN ' +
-    'UPDATE nodes_attr SET id=NEW.id, version=NEW.version, timestamp=NEW.timestamp, userId=NEW.userID, changeset=NEW.changeset WHERE id=OLD.id;' +
-    'UPDATE nodes_latlon SET id=NEW.id,minlat=NEW.lat,maxlat=NEW.lat,minlon=NEW.lon,maxlon=NEW.lon WHERE id=NEW.id;' +
+    'UPDATE nodes_attr SET id=NEW.id, version=NEW.version, timestamp=NEW.timestamp, userid=NEW.userid, changeset=NEW.changeset WHERE id=OLD.id;' +
+    'UPDATE nodes_latlon SET id=NEW.id,minlat=NEW.lat,maxlat=NEW.lat,minlon=NEW.lon,maxlon=NEW.lon WHERE id=OLD.id;' +
     'UPDATE objtags SET objid=NEW.id*4 WHERE objid=4*OLD.id;' +
     'END;');
 
@@ -250,15 +250,15 @@ begin
   exec('DROP VIEW IF EXISTS strnodes');
   exec('CREATE VIEW IF NOT EXISTS strnodes AS ' +
     'SELECT nodes_attr.id AS id, minlat AS lat, minlon AS lon, version AS version, ' +
-    'timestamp AS timestamp, userId as userId, users.name AS userName, changeset as changeset ' +
+    'timestamp AS timestamp, userid as userid, users.name AS username, changeset as changeset ' +
     'FROM nodes_attr,nodes_latlon,users ' +
-    'WHERE nodes_attr.id=nodes_latlon.id AND nodes_attr.userId=users.id');
+    'WHERE nodes_attr.id=nodes_latlon.id AND nodes_attr.userid=users.id');
   exec('CREATE TRIGGER IF NOT EXISTS strnodes_ii INSTEAD OF INSERT ON strnodes BEGIN ' +
     'DELETE FROM nodes_latlon WHERE id=NEW.id;' +
     'DELETE FROM objtags WHERE objid=0+NEW.id*4;' +
-    'INSERT OR IGNORE INTO users (id, name) VALUES (NEW.userID, NEW.userName);' +
-    'INSERT OR REPLACE INTO nodes_attr (id,version,timestamp,userId,changeset) ' +
-    'VALUES (NEW.id,NEW.version,NEW.timestamp,NEW.userId,NEW.changeset);' +
+    'INSERT OR IGNORE INTO users (id, name) VALUES (NEW.userid, NEW.username);' +
+    'INSERT OR REPLACE INTO nodes_attr (id,version,timestamp,userid,changeset) ' +
+    'VALUES (NEW.id,NEW.version,NEW.timestamp,NEW.userid,NEW.changeset);' +
     'INSERT INTO nodes_latlon(id,minlat,maxlat,minlon,maxlon)' +
     'VALUES (NEW.id,NEW.lat,NEW.lat,NEW.lon,NEW.lon);' +
     'END;');
@@ -304,7 +304,7 @@ begin
     'id INTEGER PRIMARY KEY AUTOINCREMENT,' +
     'version INTEGER DEFAULT 1 NOT NULL,' +
     'timestamp VARCHAR(20),' +
-    'userId INTEGER DEFAULT 0,' +
+    'userid INTEGER DEFAULT 0,' +
     'changeset BIGINT)');
   exec('CREATE TRIGGER IF NOT EXISTS ways_bu BEFORE UPDATE ON ways BEGIN ' +
     'UPDATE objtags SET objid=1+4*NEW.id WHERE objid=1+4*OLD.id;' +
@@ -318,14 +318,14 @@ begin
   exec('DROP VIEW IF EXISTS strways');
   exec('CREATE VIEW IF NOT EXISTS strways AS ' +
     'SELECT ways.id AS id, version AS version, ' +
-    'timestamp AS timestamp, userId as userId, users.name AS userName, changeset as changeset ' +
-    'FROM ways,users WHERE ways.userId=users.id');
+    'timestamp AS timestamp, userid as userid, users.name AS username, changeset as changeset ' +
+    'FROM ways,users WHERE ways.userid=users.id');
   exec('CREATE TRIGGER IF NOT EXISTS strways_ii INSTEAD OF INSERT ON strways BEGIN ' +
     'DELETE FROM objtags WHERE objid=1+NEW.id*4;' +
     'DELETE FROM waynodes WHERE wayid=NEW.id;' +
-    'INSERT OR IGNORE INTO users (id, name) VALUES (NEW.userId, NEW.userName);' +
-    'INSERT OR REPLACE INTO ways (id,version,timestamp,userId,changeset) ' +
-    'VALUES(NEW.id,NEW.version,NEW.timestamp,NEW.userId,NEW.changeset);' +
+    'INSERT OR IGNORE INTO users (id, name) VALUES (NEW.userid, NEW.username);' +
+    'INSERT OR REPLACE INTO ways (id,version,timestamp,userid,changeset) ' +
+    'VALUES(NEW.id,NEW.version,NEW.timestamp,NEW.userid,NEW.changeset);' +
     'END;');
 
   exec('DROP TABLE IF EXISTS relationmembers');
@@ -359,7 +359,7 @@ begin
     'id INTEGER PRIMARY KEY AUTOINCREMENT,' +
     'version INTEGER DEFAULT 1 NOT NULL,' +
     'timestamp VARCHAR(20),' +
-    'userId INTEGER DEFAULT 0,' +
+    'userid INTEGER DEFAULT 0,' +
     'changeset BIGINT)');
   exec('CREATE TRIGGER IF NOT EXISTS relations_bu BEFORE UPDATE ON relations BEGIN ' +
     'UPDATE objtags SET objid=2+4*NEW.id WHERE objid=2+4*OLD.id;' +
@@ -373,14 +373,14 @@ begin
   exec('DROP VIEW IF EXISTS strrelations');
   exec('CREATE VIEW IF NOT EXISTS strrelations AS ' +
     'SELECT relations.id AS id, version AS version, ' +
-    'timestamp AS timestamp, userId as userId, users.name AS userName, changeset as changeset ' +
-    'FROM relations,users WHERE relations.userId=users.id');
+    'timestamp AS timestamp, userid as userid, users.name AS username, changeset as changeset ' +
+    'FROM relations,users WHERE relations.userid=users.id');
   exec('CREATE TRIGGER IF NOT EXISTS strrelations_ii INSTEAD OF INSERT ON strrelations BEGIN ' +
     'DELETE FROM objtags WHERE objid=2+NEW.id*4;' +
     'DELETE FROM relationmembers WHERE relationid=NEW.id;' +
-    'INSERT OR IGNORE INTO users (id, name) VALUES (NEW.userId, NEW.userName);' +
-    'INSERT OR REPLACE INTO relations (id,version,timestamp,userId,changeset) ' +
-    'VALUES(NEW.id,NEW.version,NEW.timestamp,NEW.userId,NEW.changeset);' +
+    'INSERT OR IGNORE INTO users (id, name) VALUES (NEW.userid, NEW.username);' +
+    'INSERT OR REPLACE INTO relations (id,version,timestamp,userid,changeset) ' +
+    'VALUES(NEW.id,NEW.version,NEW.timestamp,NEW.userid,NEW.changeset);' +
     'END;');
 end;
 
@@ -534,7 +534,7 @@ begin
       nl := length(n);
       vl := length(v);
       if not ((nl = vl) or //same size or empty
-        ((nl > 0) and ((vl mod nl) = 0)) //not empty and vl=k*nl
+        ((nl > 0)and (vl > nl) and ((vl mod nl) = 0)) //not empty and vl=k*nl
         ) then
         raise ERangeError.Create(toString() + '.sqlExecInt: invalid arrays lengths');
       if nl = vl then begin
@@ -695,7 +695,7 @@ begin
   fTableCreated := true;
 end;
 
-procedure TStoredIdList.delete(const id: int64);
+procedure TStoredIdList.remove(const id: int64);
 begin
   dbOpenCheck();
   if VarIsEmpty(fQryDelete) then begin
@@ -713,8 +713,13 @@ begin
   if not fTableCreated then exit;
   fTableCreated := false;
   dbOpenCheck();
-  q := fStorage.sqlPrepare('DROP TABLE ' + tableName);
-  fStorage.sqlExec(q, 0, 0);
+  try
+    q := fStorage.sqlPrepare('DELETE FROM ' + tableName);
+    fStorage.sqlExec(q, 0, 0);
+    q := fStorage.sqlPrepare('DROP TABLE ' + tableName);
+    fStorage.sqlExec(q, 0, 0);
+  except
+  end;
 end;
 
 destructor TStoredIdList.destroy;
