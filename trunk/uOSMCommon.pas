@@ -156,22 +156,39 @@ end;
 function varFromJsObject(const jsObj: OleVariant): OleVariant;
 var
   l: integer;
-  arrCopy: OleVariant;
   pv: POleVariant;
+
+  disp:IDispatchEx;
+  DispParams: TDispParams;
+  sItem:WideString;
+  ExcepInfo: TExcepInfo;
+  itemiid:TDispID;
 begin
   if VarIsType(jsObj, varDispatch) then begin
     if isDispNameExists(jsObj, 'pop') then begin
       //array object
-      arrCopy := jsObj.slice(0);
-      l := arrCopy.length;
-      result := VarArrayCreate([0, l - 1], varVariant);
+      disp:=IDispatch(jsObj) as IDispatchEx;
+      DispParams.cArgs:=0;
+      DispParams.rgvarg:=nil;
+      DispParams.cNamedArgs:=0;
+      DispParams.rgdispidNamedArgs:=nil;
+      //end;}
+      l := jsObj.length-1;
+      result := VarArrayCreate([0, l], varVariant);
       pv := varArrayLock(result);
       try
-        inc(pv, l - 1);
-        while (l > 0) do begin
-          pv^ := varFromJsObject(arrCopy.pop());
-          dec(pv);
-          dec(l);
+        inc(pv, l);
+        while (l >= 0) do begin
+          sItem:=inttostr(l);
+          if succeeded(disp.GetIDsOfNames(GUID_NULL,@sItem,1,0,@itemiid))and
+            succeeded(disp.Invoke(itemiid,GUID_NULL,0,DISPATCH_PROPERTYGET,DispParams,pv,@ExcepInfo,nil)) then begin
+            pv^ := varFromJsObject(pv^);
+            dec(pv);
+            dec(l);
+          end
+          else begin
+            raise EConvertError.Create('varFromJsObject : can`t get element '+inttostr(l));
+          end;
         end;
       finally
         varArrayUnlock(result);
@@ -195,9 +212,11 @@ begin
 end;
 
 function isDispNameExists(const disp: IDispatch; const aName: WideString): boolean;
+var
+  did:integer;
 begin
   result := succeeded(disp.GetIDsOfNames(GUID_NULL, @aName, 1, 0
-    {SORT_DEFAULT,LANG_NEUTRAL,SUBLANG_NEUTRAL}, @result));
+    {SORT_DEFAULT,LANG_NEUTRAL,SUBLANG_NEUTRAL}, @did));
 end;
 
 function getUID: int64;
@@ -322,6 +341,7 @@ function VarArrayLockVarRec(const VarArray: OleVariant): TVarRecArray;
 var
   pVar, pLockedVariantArray: PVarData;
   pVR: PVarRec;
+  vType: TVarType;
   nItems, i, nDim: integer;
 begin
   nDim := VarArrayDimCount(VarArray);
@@ -338,9 +358,14 @@ begin
   pVR := @result[0];
   while nItems > 0 do begin
     pVar := pLockedVariantArray;
-    while (pVar.VType and varByRef) <> 0 do
+    while (pVar.VType = varByRef or varVariant) do
       pVar := pVar.VPointer;
-    case pVar.VType of
+    vType:=pVar.VType and varTypeMask;
+    if(pVar.VType and varByRef<>0) then begin
+      pVar:=pVar.VPointer;
+      dec(pByte(pVar),cardinal(@pVar.VPointer)-cardinal(pVar));
+    end;
+    case vType of
       varSmallInt: begin
           pVR.VType := vtInteger;
           pVR.VInteger := pVar.VSmallInt;

@@ -6,7 +6,7 @@ interface
 
 uses
   StrUtils, uModule, TntClasses, TntSysUtils, Windows, ComServ, ComObj, ActiveX, OSMan_TLB,
-  SysUtils, StdVcl, Variants;
+  SysUtils, StdVcl, Variants, uOSMCommon;
 
 implementation
 type
@@ -33,6 +33,7 @@ type
     function getModules: OleVariant; safecall;
     function toString: WideString; safecall;
     function getClassName: WideString; safecall;
+    procedure onModuleUnload(const iModSelfPtr: IUnknown); safecall;
     function Get_logger: OleVariant; safecall;
     procedure Set_logger(Value: OleVariant); safecall;
     procedure log(const msg: WideString); safecall;
@@ -250,23 +251,18 @@ end;
 procedure TApplication.log(const msg: WideString);
 begin
   if not VarIsType(fLogger,varDispatch) then
-    exit;
-  fLogger.log(msg);
+    debugPrint(msg)
+  else
+    try
+      fLogger.log(msg);
+    except
+      logger:=0;
+    end;
 end;
 
 procedure TApplication.Set_logger(Value: OleVariant);
-var
-  clist:TModuleClassList;
-  i:integer;
 begin
   fLogger:=Value;
-  if assigned(moduleList) then begin
-    for i:=0 to moduleList.Count-1 do begin
-      clist:=moduleList.Objects[i] as TModuleClassList;
-      if assigned(clist) then
-        clist.iModule.set_logger(Value);
-    end;
-  end;
 end;
 
 function TApplication.ObjRelease: Integer;
@@ -278,6 +274,24 @@ begin
   end
   else
     result:=inherited ObjRelease();
+end;
+
+procedure TApplication.onModuleUnload(const iModSelfPtr: IUnknown);
+var
+  i:integer;
+  clist:TModuleClassList;
+  intf:IOSManModule;
+begin
+  for i:=0 to moduleList.Count-1 do begin
+    clist:=moduleList.Objects[i] as TModuleClassList;
+    intf:=iModSelfPtr as IOSManModule;
+    if(clist.iModule=intf) then begin
+      moduleList.Objects[i]:=nil;
+      clist.Free();
+      moduleList.Delete(i);
+      break;
+    end;
+  end;
 end;
 
 initialization

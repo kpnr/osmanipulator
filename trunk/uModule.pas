@@ -14,10 +14,7 @@ type
     function createObjectByCLSID(ClassGUID: TGUID; out rslt: IDispatch): HResult; stdcall;
     function Get_appRef: IDispatch; stdcall;
     procedure Set_appRef(Value: IDispatch); stdcall;
-    function Get_logger: OleVariant; safecall;
-    procedure Set_logger(Value: OleVariant); safecall;
     property appRef: IDispatch read Get_appRef write Set_appRef;
-    property logger: OleVariant read Get_logger write Set_logger;
   end;
 
   {$TYPEINFO ON}
@@ -57,16 +54,14 @@ implementation
 type
   TOSManModule = class(TInterfacedObject, IOSManModule)
   protected
-    function _AddRef: Integer; stdcall;
-    function _Release: Integer; stdcall;
+    function _AddRef: Integer;stdcall;
+    function _Release: Integer;stdcall;
+    procedure OnUnload();
     function getClasses(out ClassNames: OleVariant; out ClassGUIDS: OleVariant): HResult; stdcall;
     function createObjectByCLSID(ClassGUID: TGUID; out rslt: IDispatch): HResult; stdcall;
     function Get_appRef: IDispatch; stdcall;
     procedure Set_appRef(Value: IDispatch); stdcall;
-    function Get_logger: OleVariant; safecall;
-    procedure Set_logger(Value: OleVariant); safecall;
     property appRef: IDispatch read Get_appRef write Set_appRef;
-    property logger: OleVariant read Get_logger write Set_logger;
   public
     destructor Destroy; override;
   end;
@@ -79,8 +74,8 @@ type
 
 var
   regInfo: array of TOSManRegInfo;
-  fLogger: OleVariant;
   gAppRef:IDispatch;
+  gModRef:TOSManModule;
   AppRefCount:integer;
 
 
@@ -100,9 +95,7 @@ end;
 
 procedure OSManLog(const msg: WideString);
 begin
-  if not varIsType(fLogger, varDispatch) then
-    exit;
-  fLogger.log(msg);
+  if Assigned(gAppRef) then Variant(gAppRef).log(msg);
 end;
 
 function OSManModule(const osmanApp:IDispatch;const IID: TGUID; out Module: IUnknown): HResult;
@@ -110,7 +103,11 @@ begin
   result := E_NOINTERFACE;
   if IsEqualGUID(IID, IID_IOSManModule) then begin
     try
-      Module := TOSManModule.Create();
+      if assigned(gModRef) then
+        OSManLog('OSManModule: module already assigned')
+      else
+        gModRef:=TOSManModule.Create();
+      Module := gModRef;
       (Module as IOSManModule).appRef:=osmanApp;
       result := S_OK;
     except
@@ -155,7 +152,7 @@ end;
 
 destructor TOSManModule.Destroy;
 begin
-  fLogger := unassigned;
+  onUnload();
   inherited;
 end;
 
@@ -178,19 +175,20 @@ begin
   result:=gAppRef;
 end;
 
-function TOSManModule.Get_logger: OleVariant;
+procedure TOSManModule.OnUnload;
+var
+  v:Variant;
 begin
-  result := fLogger;
+  gModRef:=nil;
+  if assigned(gAppRef) then begin
+    v:=gAppRef;
+    v.onModuleUnload(self as IUnknown);
+  end;
 end;
 
 procedure TOSManModule.Set_appRef(Value: IDispatch);
 begin
   gAppRef:=Value;
-end;
-
-procedure TOSManModule.Set_logger(Value: OleVariant);
-begin
-  fLogger := Value;
 end;
 
 function TOSManModule._AddRef: Integer;
@@ -246,5 +244,11 @@ end;
 initialization
   DecimalSeparator := '.';
   AppRefCount:=0;
+  if(GetStdHandle(STD_ERROR_HANDLE)<>INVALID_HANDLE_VALUE) then
+    IsConsole:=true;
+finalization
+  if assigned(gModRef) then begin
+    gModRef.OnUnload();
+  end;
 end.
 

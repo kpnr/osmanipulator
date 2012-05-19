@@ -16,6 +16,7 @@ type
   TSQLiteStmt = class(TObject)
   protected
     hStmt: SQLite3.TSQLiteStmt;
+    fDB: SQLite3.TSQLiteDB;
     EOF: boolean;
     fColCount: integer;
     function GetHasNext(): boolean;
@@ -23,7 +24,7 @@ type
     function getColName(i:integer):WideString;
     procedure CheckColCount();
   public
-    constructor Create();
+    constructor Create(hDB:SQLite3.TSQLiteDB);
     destructor Destroy; override;
     procedure Bind(ParIds, ParValues: array of const);
     procedure Exec;
@@ -82,11 +83,11 @@ begin
   r := SQLite3_Prepare16_v2(hDB, pWideChar(SQL), length(SQL) * sizeof(SQL[1]),
     hStmt, pWC);
   if (r <> SQLITE_OK) then begin
-    raise ESQLite.Create('TSQLiteDB.CreateStmt: Prepare failed', r);
+    raise ESQLite.Create('TSQLiteDB.CreateStmt: Prepare failed '+SQLite3_ErrMsg(hDB) , r);
   end;
   if assigned(pWC) and (pWC^<>#0) then
     raise ESQLite.Create('TSQLiteDB.CreateStmt: Multi-statement SQL not supported',SQLITE_TOOBIG);
-  result := TSQLiteStmt.Create();
+  result := TSQLiteStmt.Create(hDB);
   result.hStmt := hStmt;
 end;
 
@@ -153,6 +154,7 @@ end;
 procedure TSQLiteStmt.Bind(ParIds, ParValues: array of const);
 var
   len, i, idx: integer;
+  pV:pVarData;
 begin
   len := length(ParIds);
   if (len <> length(ParValues)) then
@@ -186,6 +188,25 @@ begin
       vtWideString: sqlite3_bind_text16(hStmt, idx, ParValues[i].VWideString,
           length(WideString(ParValues[i].VWideString)) * sizeof(WideChar),
           SQLITE_TRANSIENT);
+      vtVariant: begin
+          pv:=PVarData(ParValues[i].VVariant);
+          while (pV^.VType and varByRef)<>0 do pV:=pV.VPointer;
+          case pV^.VType of
+          varInteger:
+            sqlite3_bind_int(hStmt, idx, pV.VInteger);
+          varInt64:
+            sqlite3_bind_int64(hStmt, idx, pV.VInt64);
+          varDouble:
+            sqlite3_bind_double(hStmt, idx, pV.VDouble);
+          varOleStr:
+            sqlite3_bind_text16(hStmt, idx, pV.VOleStr,
+              length(WideString(pV.VOleStr)) * sizeof(WideChar),
+              SQLITE_TRANSIENT);
+          else
+            raise ESQLite.Create('TSQLiteStmt.Bind: Value has invalid type',
+              SQLITE_ERROR);
+          end;
+        end;
     else
       raise ESQLite.Create('TSQLiteStmt.Bind: Value has invalid type',
         SQLITE_ERROR);
@@ -198,9 +219,10 @@ begin
   fColCount := SQLite3_ColumnCount(hStmt);
 end;
 
-constructor TSQLiteStmt.Create();
+constructor TSQLiteStmt.Create(hDB:SQLite3.TSQLiteDB);
 begin
-  inherited;
+  inherited Create();
+  fDB:=hDB;
   hStmt := nil;
   EOF := true;
   fColCount := 0;
@@ -210,6 +232,7 @@ destructor TSQLiteStmt.Destroy;
 begin
   if assigned(hStmt) then
     SQLite3_Finalize(hStmt);
+  fDB:=nil;
   hStmt := nil;
   inherited Destroy;
 end;
@@ -231,7 +254,7 @@ begin
       CheckColCount();
     end;
   else
-    raise ESQLite.Create('TSQLiteStmt.Exec', r);
+    raise ESQLite.Create('TSQLiteStmt.Exec:'+SQLite3_ErrMsg(fDB),r);
   end;
 end;
 

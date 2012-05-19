@@ -181,6 +181,7 @@ function clipMap(cfg){
 	};
 	echo('');
 
+	echo(curTime()+'  Exporting relations...');
 	qobj=src.exec('SELECT id FROM '+relList.tableName);
 	objCnt=0;qryCnt=0;notFoundObj=[];
 	while(!qobj.eos){

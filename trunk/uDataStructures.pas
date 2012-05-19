@@ -65,6 +65,7 @@ type
     //List A after appending cleared and freed.
     procedure appendBefore(var a:TDualLinkedRing);
     procedure clear();
+    procedure insert(aData: pointer);
     procedure insertAfter(aData: pointer);
     procedure insertBefore(aData: pointer);
     procedure insertFirst(aData: pointer);
@@ -76,7 +77,48 @@ type
     property bookmark: pointer read getBookmark write setBookmark;
   end;
 
+type
+  TCompareProc=function(i,j:integer):integer of object;
+  TSwapProc=procedure(i,j:integer) of object;
+
+procedure Sort(min,max:integer; cmp:TCompareProc; swp:TSwapProc);
+
 implementation
+
+procedure Sort(min,max:integer; cmp:TCompareProc;swp:TSwapProc);
+  procedure qSort(L,R:integer);
+  var
+    I, J, P: Integer;
+  begin
+    repeat
+      I := L;
+      J := R;
+      P := (L + R)div 2;
+      repeat
+        while cmp(I, P) < 0 do
+          Inc(I);
+        while cmp(P, J) < 0 do
+          Dec(J);
+        if I <= J then
+        begin
+          swp(I,J);
+          if(I=P)then
+            P:=J
+          else if(P=J)then
+            P:=I;
+          Inc(I);
+          Dec(J);
+        end;
+      until I > J;
+      if L < J then
+        qSort(L, J);
+      L := I;
+    until I >= R;
+  end;
+begin
+  if(min<max)then
+    qSort(min,max);
+end;
 
 { TSingleLinkedList }
 
@@ -352,6 +394,7 @@ begin
   p.next.prev := p;
   p.prev.next := p;
   fRoot:=p;
+  fCur:=p;
 end;
 
 procedure TDualLinkedRing.insertLast(aData: pointer);
@@ -424,6 +467,12 @@ begin
   end;
   a.free;
   a:=nil;
+end;
+
+procedure TDualLinkedRing.insert(aData: pointer);
+begin
+  insertAfter(aData);
+  fCur:=fCur.next;
 end;
 
 end.

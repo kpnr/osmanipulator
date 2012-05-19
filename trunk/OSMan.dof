@@ -100,18 +100,18 @@ Conditionals=
 DebugSourceDirs=
 UsePackages=0
 [Parameters]
-RunParams=c:\work\osm2russa\OSMan\scripts\areaCut.js
+RunParams=areaCut.js /src:F:\db\osm\sql\test.db3 /dst:F:\db\osm\sql\szfo.db3 /xml:F:\db\osm\sql\szfo.osm /bound:relation:1216601
 HostApplication=D:\WINDOWS\system32\cscript.exe
 Launcher=
 UseLauncher=0
-DebugCWD=c:\work\osm2russa\OSMan
+DebugCWD=c:\work\osm2russa\OSMan\scripts
 [Version Info]
 IncludeVerInfo=1
 AutoIncBuild=1
 MajorVer=0
 MinorVer=0
 Release=0
-Build=85
+Build=99
 Debug=0
 PreRelease=0
 Special=0
@@ -122,7 +122,7 @@ CodePage=1252
 [Version Info Keys]
 CompanyName=hkm
 FileDescription=OSM manipulator
-FileVersion=0.0.0.85
+FileVersion=0.0.0.99
 InternalName=OSMan
 LegalCopyright=BSD licence
 LegalTrademarks=
