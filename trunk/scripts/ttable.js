@@ -24,8 +24,8 @@ while(!q.eos){
 	cnt++;
 	var ss=ttf(s);
 	if(ss!=s){
-		f.writeLine(s+'=>'+ss);
-		f.writeLine(toCharCode(s)+'\r\n');
+	//	f.writeLine(s+'=>'+ss);
+	//	f.writeLine(toCharCode(s)+'\r\n');
 	};
 	if(ss.indexOf('_[')>=0){
 		echo('#'+cnt+' '+s+' => '+ss);

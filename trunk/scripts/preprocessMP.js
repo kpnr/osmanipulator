@@ -1,6 +1,7 @@
 //settings begin
-var dstMapName='f:\\db\\osm\\sql\\route.db3';
+var dstMapName='';
 var noAddr=false;
+var noTTable=false;
 var bitLevel=0;
 var intToDeg=1e-7,degToInt=1/intToDeg;
 //settings end
@@ -22,7 +23,8 @@ function checkArgs(){
     /dst:"dest_file_name.db3"\n\
     /bitlevel:nn round all coordinates up to nn bit level. nn must be\n\
       between 8 and 32 inclusive.\n\
-    /noaddr remove address info');
+    /noaddr remove address info\n\
+    /nottable do not translate tag values from UTF8');
 	};
 	var ar=WScript.arguments;
 	ar=ar.named;
@@ -32,14 +34,20 @@ function checkArgs(){
 	};
 	if(ar.exists('dst'))dstMapName=ar.item('dst')||dstMapName;
 	if(ar.exists('noaddr'))noAddr=true;
+	if(ar.exists('nottable'))noTTable=true;
 	if(ar.exists('bitlevel')){
 		bitLevel=parseInt(ar.item('bitlevel'));
 		if((!bitLevel)||(isNaN(bitLevel))||!((8<=bitLevel)&&(bitLevel<=32)))bitLevel=0;
 	};
-	echo('Use config:\ndst='+dstMapName);
-	echo('bitLevel='+(bitLevel||'none'));
-	echo('noaddr='+noAddr);
-	return true;
+	if(dstMapName){
+		echo('Use config:\ndst='+dstMapName);
+		echo('bitLevel='+(bitLevel||'none'));
+		echo('noaddr='+noAddr);
+		echo('nottable='+noTTable);
+		return true;
+	}
+	help();
+	return false;
 };
 
 function mergeDupNodes(hMap){
@@ -47,31 +55,40 @@ function mergeDupNodes(hMap){
 	var dupIdList=stg.createIdList();
 	hMap.exec('INSERT OR IGNORE INTO '+dupIdList.tableName+'(id) SELECT n1.id FROM nodes_latlon AS n1,nodes_latlon AS n2 WHERE n1.minlat=n2.minlat AND n1.minlon=n2.minlon AND n1.id<n2.id');
 	var qcoord=stg.sqlPrepare('SELECT minlat,minlon FROM nodes_latlon WHERE id=:id');
-	var qdn=hMap.exec('SELECT id FROM '+dupIdList.tableName);
 	var qdup=stg.sqlPrepare('SELECT id FROM nodes_latlon WHERE minlat=:lat AND minlon=:lon');
-	while(!qdn.eos){
-		var nid=qdn.read(1).toArray();
-		var nc=stg.sqlExec(qcoord,':id',nid).read(1).toArray();
-		if(!nc.length)continue;
-		var qnids=stg.sqlExec(qdup,[':lat',':lon'],nc),nds=[];
-		while(!qnids.eos)nds=nds.concat(qnids.read(1000).toArray());
-		if(nds.length<2)continue;
-		for(var i=nds.length-1;i>=0;i--){
-			nds[i]=hMap.map.getNode(nds[i]);
-			if(!nds[i])nds.splice(i,1);
-		};
-		if(nds.length<2)continue;
-		var tags=nds[0].tags;
-		for(var i=nds.length-1;i>0;i--){
-			var tags2=nds[i];
-			for(var j=tags2.count-1;j>=0;j--){
-				tags.setByKey(tags2.getKey(j),tags2.getValue(j));
+	var dupListIsEmpty;
+	do{
+		dupListIsEmpty=true;
+		var qdn=hMap.exec('SELECT id FROM '+dupIdList.tableName);
+		while(!qdn.eos){
+			var nid=qdn.read(1).toArray();
+			if(typeof(nid[0])!='number'){
+				echo('warning: unexpected type of node id: '+typeof(nid[0]));continue;
 			};
-			hMap.replaceObject(nds[i],[nds[0]]);
-			echo(' '+nds[i].id,true,true);
+			dupIdList.remove(nid[0]);
+			var nc=stg.sqlExec(qcoord,':id',nid).read(1).toArray();
+			if(!nc.length)continue;
+			dupListIsEmpty=false;
+			var qnids=stg.sqlExec(qdup,[':lat',':lon'],nc),nds=[];
+			while(!qnids.eos)nds=nds.concat(qnids.read(1000).toArray());
+			if(nds.length<2)continue;
+			for(var i=nds.length-1;i>=0;i--){
+				dupIdList.remove(nds[i]);
+				nds[i]=hMap.map.getNode(nds[i]);
+				if(!nds[i])nds.splice(i,1);
+			};
+			if(nds.length<2)continue;
+			var tags=nds[0].tags;
+			echo('['+nds.length+'] => '+nds[0].id+'   ',true);
+			for(var i=nds.length-1;i>0;i--){
+				var tags2=nds[i];
+				for(var j=tags2.count-1;j>=0;j--){
+					tags.setByKey(tags2.getKey(j),tags2.getValue(j));
+				};
+				hMap.replaceObject(nds[i],[nds[0]]);
+			};
 		};
-		echo(' => '+nds[0].id+'   ',true);
-	};
+	}while (!dupListIsEmpty)
 	echo('');
 };
 
@@ -127,20 +144,27 @@ function bitRound(hMap,bl){
 	var qNIds=hMap.exec('SELECT id FROM nodes_attr'),stg=hMap.map.storage;
 	var qGetCoord=stg.sqlPrepare('SELECT minlat*'+intToDeg+',minlon*'+intToDeg+' FROM nodes_latlon WHERE id=:id');
 	var qSetCoord=stg.sqlPrepare('UPDATE nodes_latlon SET minlat=round(:lat*'+degToInt+'), minlon=round(:lon*'+degToInt+'), maxlat=round(:lat*'+degToInt+'), maxlon=round(:lon*'+degToInt+') WHERE id=:id');
-	var cnt=0;
+	var cnt=0,tot=0;
 	while(!qNIds.eos){
 		var aNIds=qNIds.read(1000);
-		cnt+=1000;
 		aNIds=aNIds.toArray();
 		var aNewCoords=[],testNode={lat:0,lon:0};
 		for(var i=aNIds.length-1;i>=0;i--){
 			var aCoords=stg.sqlExec(qGetCoord,':id',aNIds[i]).read(1).toArray();
 			testNode.lat=aCoords[0];testNode.lon=aCoords[1];
 			h.gt.bitRound(testNode,bl);
-			aNewCoords.push(aNIds[i],testNode.lat,testNode.lon);
+			tot++;
+			aCoords[0]=Math.abs(aCoords[0]-testNode.lat);
+			aCoords[1]=Math.abs(aCoords[1]-testNode.lon);
+			if((aCoords[0]>5e-8)||(aCoords[1]>5e-8)){
+				aNewCoords.push(aNIds[i],testNode.lat,testNode.lon);
+				cnt++;
+			}
 		};
-		stg.sqlExec(qSetCoord,[':id',':lat',':lon'],aNewCoords);
-		echo(''+cnt,true);
+		if(aNewCoords.length>0){
+			stg.sqlExec(qSetCoord,[':id',':lat',':lon'],aNewCoords);
+		}
+		echo(''+cnt+'/'+tot,true);
 	};
 	echo('');
 };
@@ -155,10 +179,21 @@ function removeWayNodeDup(hMap){
 		for(var i=wIds.length-1;i>=0;i--){
 			var way=hMap.map.getWay(wIds[i]);
 			var wn=way.nodes.toArray(),oldl=wn.length;
-			for(var j=oldl-1;j>0;j--){
-				if(wn[j]==wn[j-1])wn.splice(j,1);
+			for(var j=oldl-1;j>0;){
+				if(wn[j]==wn[j-1]){
+					wn.splice(j,1)
+					j=(j>=wn.length)?(wn.length-1):(j);
+				}else if((j>1)&&(wn[j]==wn[j-2])){
+					wn.splice(j-1,2);
+					j=(j>=wn.length)?(wn.length-1):(j);
+				}else{
+					j--;
+				};
 			};
-			if(wn.length!=oldl){
+			if(wn.length<2){
+				hMap.replaceObject(way,[]);
+				echo(way.id+'-  ',true);
+			}else if(wn.length!=oldl){
 				way.nodes=wn;
 				hMap.map.putWay(way);
 				echo(way.id+'   ',true);
@@ -166,6 +201,18 @@ function removeWayNodeDup(hMap){
 		};
 	};
 	echo('');
+};
+
+function removeNotUsedNodes(hMap){
+	var unl=hMap.map.storage.createIdList();
+	echot('	adding ways nodes');
+	hMap.exec('INSERT OR IGNORE INTO '+unl.tableName+' (id) SELECT nodeid FROM waynodes');
+	echot('	adding relation nodes');
+	hMap.exec('INSERT OR IGNORE INTO '+unl.tableName+' (id) SELECT memberid FROM relationmembers WHERE memberidxtype&3=0');
+	echot('	adding tagged nodes');
+	hMap.exec('INSERT OR IGNORE INTO '+unl.tableName+' (id) SELECT objid>>2 FROM objtags WHERE objid&3=0');
+	echot('	removing nodes');
+	hMap.exec('DELETE FROM nodes WHERE id NOT IN (SELECT id FROM '+unl.tableName+')');
 };
 
 function main(){
@@ -184,15 +231,28 @@ function main(){
 		echot('Deleting address info');
 		deleteAddrInfo(dst);
 	};
-	echot('Translating tag values from UTF to ANSI');
-	ttable(dst);
+	if(!noTTable){
+		echot('Translating tag values from UTF to ANSI');
+		ttable(dst);
+	};
 	echot('Remove duplicated nodes from ways');
 	removeWayNodeDup(dst);
+	echot('Remove not used nodes');
+	removeNotUsedNodes(dst);
+	echot('Fix incomplete ways');
+	dst.fixIncompleteWays();
+	echot('Fix incomplete relations');
+	dst.fixIncompleteRelations();
 	echot('Closing map');
 	dst.close();
 	echot('All done.');
 }
 
+try{
 main();
-//echo('press Enter');
-//WScript.stdIn.readLine();
+}catch(e){
+	echo('Exception name='+e.name+' message='+e.message+' description='+e.description+' number='+e.number);
+	echo('press Enter');
+	WScript.stdIn.readLine();
+	WScript.quit(1);
+};

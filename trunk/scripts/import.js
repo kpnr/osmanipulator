@@ -1,7 +1,7 @@
 //settings begin
-var destDBName='F:\\db\\osm\\sql\\italy.db3';
+var destDBName='f:\\db\\osm\\testdata\\polyclip.db3';
 var srcOSMName=[
-'F:\\db\\osm\\dl\\italy.osm.bz2'
+'f:\\db\\osm\\testdata\\polyclipped.osm'
 ];
 var bpolyRelationId=false;//60189;//set to false if no bpoly needed
 //settings end
@@ -28,13 +28,21 @@ function importFile(fileName,destMap){
 	}else{
 		ds=fs;
 	};
+	/*var c=0;var fw=man.createObject('FileWriter');
+	fw.open(destDBName);
+	while(!ds.eos){
+		var q=ds.read(1024*1024);
+		WScript.StdOut.write((c++)%9);
+		fw.write(q);
+	};
+	fw.open('');*/
 	var osmr=man.createObject('OSMReader');
 	osmr.setInputStream(ds);
 	osmr.setOutputMap(destMap);
 	osmr.read(0);
 	fs.open('');
 	fs=ds=osmr=0;
-	WScript.Echo(''+(new Date())+'import done');
+	WScript.Echo(''+(new Date())+' import done');
 };
 
 function openMap(storageName){

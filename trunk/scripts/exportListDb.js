@@ -2,6 +2,7 @@
 var regionListFileName='regionlist.cfg';
 var srcMapName='F:\\db\\osm\\sql\\route.db3';
 var dstDir='F:\\db\\osm\\rf_regions\\route';
+var boundBackupDir='';
 var cDegToInt=1e7;
 //end settings
 
@@ -20,6 +21,37 @@ function echot(s,l,r){
 	function f(t){return (t>9)?(t):('0'+t)};
 	echo(''+f(d.getYear()%100)+'.'+f(d.getMonth() + 1)+'.'+f(d.getDate())+' '+f(d.getHours())+':'+f(d.getMinutes())+':'+f(d.getSeconds())+' '+s,l,r);
 }
+
+function checkArgs(){
+	function help(){
+	echo('Command line options:\n\
+ /src:"source_file_name.db3"\n\
+ /dst:"dest_directory"\n\
+ /bbakdir:"boundary_backup_directory". This argument is optional.\n\
+ /lst:"list_file_name.js" - should be in json format');
+	};
+	var ar=WScript.arguments;
+	if(!ar.length){
+		help();
+		return false;
+	};
+	ar=ar.named;
+	if(ar.exists('help')||ar.exists('?')||ar.exists('h')){
+		help();
+		return false;
+	};
+	if(ar.exists('src'))srcMapName=ar.item('src')||'';
+	if(ar.exists('dst'))dstDir=ar.item('dst')||'';
+	if(ar.exists('lst'))regionListFileName=ar.item('lst')||'';
+	if(ar.exists('bbakdir'))boundBackupDir=ar.item('bbakdir')||'';
+	echo('Use config:\nsrc='+srcMapName+'\ndst='+dstDir+'\nlst='+regionListFileName+'\nbbakdir='+boundBackupDir);
+	if(!(srcMapName && dstDir && regionListFileName)){
+		help();
+		echo('\nInvalid arguments. Exiting');
+		return false;
+	};
+	return true;
+};
 
 function exportMaps(hMap,bounds){
 	function deactivateRegion(r){
@@ -71,9 +103,15 @@ function exportMaps(hMap,bounds){
 		hMap.exec('COMMIT');
 		hMap.exec('DETACH smalldb');
 		hMap.exec('BEGIN');
-		echot('exporting boundary...');
+		echot('	exporting boundary...');
 		r.hMap.open(h.fso.buildPath(dstDir, r.name+'.db3'));
-		hMap.exportRecurcive(r.hMap.map,r.ref);
+		if(boundBackupDir){
+			var bbhm=h.mapHelper();
+			bbhm.open(h.fso.buildPath(boundBackupDir,r.name+'.db3'),false,true);
+			bbhm.exportMultiPoly(r.hMap.map,r.ref);
+			bbhm.close();
+		};
+		hMap.exportMultiPoly(r.hMap.map,r.ref);
 		delete r.silNodes;
 		delete r.silWays;
 		delete r.silRelations;
@@ -107,9 +145,6 @@ function exportMaps(hMap,bounds){
 					echot('Deactivating region '+r.name);
 					deactivateRegion(r);
 					actRgn.splice(i,1);
-					var sh=WScript.createObject('WScript.Shell');
-					//sh.run('%ComSpec% /K '+h.fso.buildPath(h.fso.getParentFolderName(WScript.ScriptFullName),'areaCut.js  /src:"'+srcMapName+'" /dst:"'+tgtBase+'.db3" /xml:"'+tgtBase+'.osm" /bound:"'+b.ref+'" /alreadyimported'),7,false);
-					echot('Area Cut Is Next!');
 					break;
 				};
 			};
@@ -166,6 +201,11 @@ function exportMaps(hMap,bounds){
 };
 
 function main(){
+	if(!checkArgs()){
+		echo('hit enter');
+		WScript.stdIn.read(1);
+		return;
+	};
 	echot('opening src map '+srcMapName);
 	var srcMap=h.mapHelper();
 	srcMap.open(srcMapName);
@@ -180,23 +220,18 @@ function main(){
 		var bounds=[];
 		for(var i=0;i<boundsCollection.length;i++){
 			var bs=boundsCollection[i],bo=[];
-			for(var j=0;j<bs.ref.length;j++){
-				var o=srcMap.getObject(bs.ref[j]);
-				if(!o){
-					bo=[];
-					echo('	'+bs.name+'['+i+','+j+'] element '+bs.ref[j]+' not found. Skipped');
-					break;
-				};
-				bo.push(o);
-			};
-			if(!bo.length)continue;
-			var bpoly=h.gt.createPoly();
-			for(var j=0;j<bo.length;j++)bpoly.addObject(bo[j]);
-			if(!bpoly.resolve(srcMap.map)){
+			var bbkMap=h.mapHelper();
+			if (boundBackupDir) bbkMap.open(h.fso.buildPath(boundBackupDir,bs.name+'.db3'));
+			if(typeof(bs.ref)=='string')bs.ref=bs.ref.split(',');
+			var mpr=h.getMultiPoly(bs.ref,srcMap.map,(boundBackupDir)?(bbkMap.map):(false));
+			if(boundBackupDir)bbkMap.close();
+			if(!mpr.poly){
 				echo('	'+bs.name+' boundary not resolved. Skipped.');
+				continue;
 			};
-			bs.bpoly=bpoly;
-			bs.bbox=bpoly.getBBox().toArray();
+			echo('	'+bs.name+' boundary resolved from '+mpr.usedMap.storage.dbName);
+			bs.bpoly=mpr.poly;
+			bs.bbox=mpr.poly.getBBox().toArray();
 			bounds.push(bs);
 		};
 		exportMaps(srcMap,bounds);
@@ -205,4 +240,11 @@ function main(){
 	}
 };
 
-main();
+try{
+	main();
+}catch(e){
+	echo('Exception name='+e.name+' message='+e.message+' description='+e.description+' number='+e.number);
+	echo('press Enter');
+	WScript.stdIn.readLine();
+	WScript.quit(1);
+};

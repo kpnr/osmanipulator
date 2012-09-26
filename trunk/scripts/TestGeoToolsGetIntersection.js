@@ -33,7 +33,7 @@ function testGetIntersectionComplexPoly(hMap,mpoly){
 						return [];
 					};
 					rs.push(way);
-				}else if((rm[i]=='relation')&&(rm[i+2]!='subarea')){
+				}else if((rm[i]=='relation')&&(h.indexOf(['','outer','inner','enclave','exclave'],rm[i+2])>=0)){
 					//process subrelations
 					var sr=map.getRelation(rm[i+1]);
 					if(!sr){

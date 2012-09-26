@@ -451,10 +451,17 @@ begin
     end;
     case Check(BZ2_bzDecompress(FStrm),
       [BZ_OK, BZ_STREAM_END, BZ_DATA_ERROR, BZ_DATA_ERROR_MAGIC]) of
-      BZ_STREAM_END: begin
-        FReachedEnd := True;
-        break;
-      end;
+      //hkm fix begin
+      BZ_STREAM_END:
+        if (FStrm.avail_in=0) and (FSrcStream.Position=FSrcStream.Size) then begin
+          FReachedEnd := True;
+          break;
+        end
+        else begin
+          Check(BZ2_bzDecompressEnd(FStrm),[BZ_OK]);
+          Check(BZ2_bzDecompressInit(FStrm, 0, 0), [BZ_OK]);
+        end;
+      //hkm fix end
       BZ_DATA_ERROR, BZ_DATA_ERROR_MAGIC:
         raise Exception.Create(SBzlibDataError);
     end;

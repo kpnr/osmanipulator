@@ -110,7 +110,7 @@ type
     destructor destroy; override;
     function clone(): TGTShape; override;
     function isIn(const pt: TGTPoint): integer; override;
-    //returns unsigned area of polygon in square meters
+    //returns signed area of polygon in square meters
     function getArea(): double;
     procedure addNode(const aNode: OleVariant);
     procedure updateBoundRect(const pt: TGTPoint); override;
@@ -132,6 +132,8 @@ type
 
   TIsInTestProc = function(const pt: TGTPoint): integer of object;
 
+  TPolyOrientation = (poUnknown, poMixed, poCW, poCCW);
+
   TMultiPoly = class(TOSManObject, IMultiPoly)
   protected
     srcList, //parentIdx ignored
@@ -142,13 +144,15 @@ type
     simplePolyList: array of TGTPoly;
     fNotResolved, fNotClosed: TRefList;
     fArea: double;
+    fOrientation: TPolyOrientation;
 
     class function getSegmentIntersection(const pt1, pt2, ptA, ptB: TGTPoint): TGTPoint;
+    class function includes(greater, less: TGTPoly): boolean;
     class function triangleTest(pt1, pt2, pt3, workingPoint: TGTPoint; LessTest, GreaterTest:
       TIsInTestProc): integer;
 
-    function cmpWayList(i,j:integer):integer;
-    procedure swpWayList(i,j:integer);
+    function cmpWayList(i, j: integer): integer;
+    procedure swpWayList(i, j: integer);
 
     function isAllResolved(): boolean;
 
@@ -177,12 +181,17 @@ type
     function getNotResolved(): OleVariant;
     //IRefList of not closed nodes.
     function getNotClosed(): OleVariant;
+    function getPolygons(): OleVariant;
     function getIntersection(const aMap, anObj: OleVariant; newNodeId: int64): OleVariant;
     //returns true if node is in poly (including border)
     function isIn(const aNode: OleVariant): boolean;
     //returns multipoly area in square meters
     //if poly not resolved then exception raised
     function getArea(): double;
+    //returns polygon orientation
+    //0 - for mixed orientation, 1 - clockwise, 2 - contraclockwise
+    //if poly not resolved then exception raised
+    function getOrientation(): integer;
     //returns bounding box for poly. Returns SafeArray of four double variants
     // for N,E,S and W bounds respectively. If poly is not resolved then
     // exception raised.
@@ -625,7 +634,6 @@ asm
   fmul cInt2ToM2_sgl   //S1
   pop esi
   pop ebx
-  fabs                 //|S1|
 end;
 
 function TGTPoly.clone: TGTShape;
@@ -795,7 +803,7 @@ end;
 
 function TGTPoly.isIn(const pt: TGTPoint): integer;
 
-function intersects(const a, e1, e2: TGTPoint): integer;
+  function intersects(const a, e1, e2: TGTPoint): integer;
     //precondition: (a.x between e1.x and e2.x) & (a.y between e1.y and e2.y)
   var
     k: double;
@@ -978,6 +986,7 @@ begin
   end;
   setLength(simplePolyList, 0);
   fArea := -1;
+  fOrientation := poUnknown;
 end;
 
 procedure TMultiPoly.createNotClosed;
@@ -1092,18 +1101,27 @@ function TMultiPoly.resolve(const srcMap: OleVariant): boolean;
 
   procedure removeWayDups();
   var
-    i:integer;
+    i: integer;
   begin
-    sort(0,wayList.count-1,cmpWayList,swpWayList);
-    i:=wayList.count-1;
-    while i>0 do begin
+    //sort way list (1,5,3,2,4)=>(1,2,3,4,5)
+    Sort(0, wayList.count - 1, cmpWayList, swpWayList);
+    //start from tail to head
+    i := wayList.count - 1;
+    while i > 0 do begin
       //$$$dbg OSManLog(inttostr(wayList.items[i].obj.id));
-      if(wayList.items[i].obj.id=wayList.items[i-1].obj.id) then begin
+      //duplicate found
+      if (wayList.items[i].obj.id = wayList.items[i - 1].obj.id) then begin
+        //move ways from tail to middle and replace dups
+        //only even number of dups deleted, so (1,2,2,2,3,3,4)=>(1,2,4)
+        //which is compatible to isIn test and other polygon operations
         dec(wayList.count);
-        wayList.items[i]:=wayList.items[wayList.count];
+        wayList.items[i] := wayList.items[wayList.count];
         dec(wayList.count);
         dec(i);
-        wayList.items[i]:=wayList.items[wayList.count];
+        wayList.items[i] := wayList.items[wayList.count];
+        //(1,2,3,_3_,4,5,6,7)=>(1,2,_6_,7,4,5)
+        //all ids before Current is less then Current and all after, so
+        //all duplicates should be detected.
       end;
       dec(i);
     end;
@@ -1159,8 +1177,9 @@ function TMultiPoly.resolve(const srcMap: OleVariant): boolean;
             role := pv^;
             inc(pv);
             dec(mlen, 3);
-            //skip subareas
-            if (role = 'subarea') then continue;
+            //skip invalid roles
+            if not ((role = '') or (role = 'inner') or (role = 'outer') or (role = 'enclave') or
+              (role = 'exclave')) then continue;
             if (s = 'relation') then begin
               varCopyNoInd(newObj, srcMap.getRelation(id));
               if VarIsType(newObj, varDispatch) then
@@ -1263,6 +1282,7 @@ var
         pNode0, pNode1: PMultiPolyListItem;
         nodeTemp: array[0..sizeof(pNode0^) - 1] of byte;
       begin
+        fOrientation := poMixed;
         //swap id0 & id1
         id := pwd.id0;
         pwd.id0 := pwd.id1;
@@ -1570,6 +1590,15 @@ var
     end;
   end;
 
+  function makeNewNode(pt: TGTPoint): OleVariant;
+  begin
+    result := aMap.createNode();
+    result.lat := pt.lat;
+    result.lon := pt.lon;
+    result.id := newNodeId;
+    dec(newNodeId);
+  end;
+
   function makeResult(): OleVariant;
   var
     i, j: integer;
@@ -1588,16 +1617,7 @@ var
       pv := VarArrayLock(ws);
       try
         while j > 0 do begin
-          if VarIsEmpty(pWND1.node) then begin
-            pv^ := aMap.createNode();
-            pv^.lat := pWND1.point.lat;
-            pv^.lon := pWND1.point.lon;
-            pv^.id := newNodeId;
-            dec(newNodeId);
-          end
-          else begin
-            pv^ := pWND1.node;
-          end;
+          pv^ := pWND1.node;
           if (pWND1.isIn = 1) and (
             (pWND1 = pWND) {last segment node} or
             (pWND1 = pWND.pNextNode) {first segment node}
@@ -1622,7 +1642,7 @@ var
 
 var
   prevIsIn: Shortint;
-  simplePolyIdx, polySegmentIdx, i, nWayNodes: integer;
+  simplePolyIdx, polySegmentIdx, i, nWayNodes, nodeListIdx: integer;
   p1, p2, i0: TGTPoint;
   polyPoints: TGTPointArray;
   wayPoints, pWND, pWND2: PWayNodeDesc;
@@ -1665,7 +1685,9 @@ begin
           bRect.updateBoundRect(point);
         end;
     end;
+    nodeListIdx := 0;
     for simplePolyIdx := 0 to high(simplePolyList) do begin
+      if simplePolyIdx > 0 then inc(nodeListIdx, simplePolyList[simplePolyIdx - 1].count);
       if not wayBRect.canIntersects(simplePolyList[simplePolyIdx]) or
         (simplePolyList[simplePolyIdx].count < 3) then
         continue;
@@ -1702,7 +1724,11 @@ begin
               fillchar(pWND2.pNextNode^, sizeof(pWND^), 0);
               with pWND2.pNextNode^ do begin
                 pNextNode := pWND;
-                node := Unassigned;
+                node := makeNewNode(i0);
+                node.tags.setByKey('osman:node1', nodeList.items
+                  [nodeListIdx + polySegmentIdx - 1].obj.id);
+                node.tags.setByKey('osman:node2', nodeList.items
+                  [nodeListIdx + polySegmentIdx].obj.id);
                 point := i0;
                 i0 := nil;
                 bRect := TGTRect.create();
@@ -1822,7 +1848,7 @@ end;
 function TMultiPoly.getPolyIntersection(const aMap,
   aNodeArray: OleVariant; newNodeId: int64): OleVariant;
 
-procedure freeAndNilSeg(var pSeg: PSegDesc);
+  procedure freeAndNilSeg(var pSeg: PSegDesc);
   begin
     freeSeg(pSeg);
     pSeg := nil;
@@ -2436,7 +2462,7 @@ var
   end;
 
   function buildExtremeIntersection(slA: TDualLinkedRing; TestA, TestB: TIsInTestProc):
-    TDualLinkedRing;
+      TDualLinkedRing;
     //build intersection in extreme case - A fully in/out of B, so intersection
     // is empty or same as A
 
@@ -2488,7 +2514,6 @@ var
         freeAndNilSeg(pSeg); //pSeg is valid in any case
         if not r.isEmpty() then begin
           r.prev();
-          OSManLog('not debugged. {8C9CA01A-BE54-4ED7-B9C7-BCEA3D987D83}');
         end;
       end;
     var
@@ -2614,7 +2639,7 @@ var
       end;
       if not result.isEmpty() then
         result.next();
-          //move to segment, next after last inserted. It should be first segment of first poly
+      //move to segment, next after last inserted. It should be first segment of first poly
     finally
       freeAndNil(midPoint);
     end;
@@ -2786,47 +2811,11 @@ type
   end;
   TList = array of TListItem;
 
-  function includes(greater, less: TGTPoly): boolean;
-  var
-    i: integer;
-    midPoint: TGTPoint;
-  begin
-    result := false;
-    midPoint := TGTPoint.create();
-    try
-      for i := 0 to less.count - 1 do begin
-        case greater.isIn(less.fPoints[i]) of
-          0: begin
-              exit;
-            end;
-          1: if i > 1 then begin
-              case triangleTest(less.fPoints[i - 2], less.fPoints[i - 1], less.fPoints[i],
-                midPoint, less.isIn, greater.isIn) of
-                0: begin
-                    exit;
-                  end;
-                2: begin
-                    result := true;
-                    exit;
-                  end;
-              end;
-            end;
-          2: begin
-              result := true;
-              exit;
-            end;
-        end;
-      end;
-    finally
-      freeAndNil(midPoint);
-    end;
-    assert(false, '{2F825152-F046-4E07-973B-FF03C209ECA6}');
-  end;
-
 var
   polyList: TList;
   li: TListItem;
   i, j: integer;
+  d: double;
 begin
   if not isAllResolved() then
     raise EConvertError.create(toString() +
@@ -2839,7 +2828,22 @@ begin
   //fill polyList in area descending order
   for i := 0 to high(simplePolyList) do begin
     polyList[i].poly := simplePolyList[i];
-    polyList[i].area := simplePolyList[i].getArea();
+    d := simplePolyList[i].getArea();
+    if (fOrientation <> poMixed) then begin
+      if (d > 0) then begin
+        if (fOrientation <> poCCW) then
+          fOrientation := poCW
+        else
+          fOrientation := poMixed;
+      end
+      else if (d < 0) then begin
+        if (fOrientation <> poCW) then
+          fOrientation := poCCW
+        else
+          fOrientation := poMixed;
+      end;
+    end;
+    polyList[i].area := abs(d);
     j := i;
     while (j > 0) and (polyList[j - 1].area < polyList[j].area) do begin
       li := polyList[j - 1];
@@ -2866,6 +2870,8 @@ begin
   for i := 0 to high(polyList) do
     result := result + polyList[i].area;
   fArea := result;
+  if (fOrientation = poUnknown) then
+    fOrientation := poMixed;
 end;
 
 class function TMultiPoly.triangleTest(pt1, pt2, pt3, workingPoint: TGTPoint; LessTest,
@@ -2875,7 +2881,7 @@ class function TMultiPoly.triangleTest(pt1, pt2, pt3, workingPoint: TGTPoint; Le
 //1 - can`t determine A and B layout => we should continue checking
 //2 - center point inside A and inside B => A inside B
 
-function getP(pt1, pt2, pt3: TGTPoint): double;
+  function getP(pt1, pt2, pt3: TGTPoint): double;
   asm
     //P=|x1-x2|+|y1-y2|+|x1-x3|+|y1-y3|+|x2-x3|+|y2-y3|;
     fild TGTPoint(eax).fx  //x1
@@ -2959,20 +2965,120 @@ end;
 
 function TMultiPoly.cmpWayList(i, j: integer): integer;
 var
-  iid,jid:int64;
+  iid, jid: int64;
 begin
-  iid:=wayList.items[i].obj.id;
-  jid:=wayList.items[j].obj.id;
-  if(iid<jid)then result:=-1 else if(jid<iid)then result:=1 else result:=0;
+  iid := wayList.items[i].obj.id;
+  jid := wayList.items[j].obj.id;
+  if (iid < jid) then result := -1 else if (jid < iid) then result := 1 else result := 0;
 end;
 
 procedure TMultiPoly.swpWayList(i, j: integer);
 var
-  T:TMultiPolyListItem;
+  t: TMultiPolyListItem;
 begin
-  T:=wayList.items[i];
-  wayList.items[i]:=wayList.items[j];
-  wayList.items[j]:=T;
+  t := wayList.items[i];
+  wayList.items[i] := wayList.items[j];
+  wayList.items[j] := t;
+end;
+
+function TMultiPoly.getPolygons: OleVariant;
+var
+  ni: integer;
+
+  function copyPoly(pidx: integer): OleVariant;
+  var
+    i: integer;
+  begin
+    result := VarArrayCreate([0, simplePolyList[pidx].count - 1], varVariant);
+    for i := 0 to simplePolyList[pidx].count - 1 do begin
+      result[i] := nodeList.items[ni].obj;
+      inc(ni);
+    end;
+  end;
+var
+  ioTag: array of integer;
+  i, j, o: integer;
+  oa, ia: OleVariant;
+begin
+  if not isAllResolved() then
+    raise EConvertError.create(toString() + '.getPolygons: polygon must be resolved');
+  result := VarArrayCreate([0, 1], varVariant);
+  setLength(ioTag, length(simplePolyList));
+  for i := 0 to high(ioTag) do ioTag[i] := 0;
+  for i := 0 to high(ioTag) - 1 do begin
+    for j := i + 1 to high(ioTag) do begin
+      if includes(simplePolyList[i], simplePolyList[j]) then inc(ioTag[j])
+      else if includes(simplePolyList[j], simplePolyList[i]) then inc(ioTag[i])
+    end;
+  end;
+  i := 0;
+  o := 0;
+  for j := 0 to high(ioTag) do
+    if (odd(ioTag[j])) then inc(i) else inc(o);
+  oa := VarArrayCreate([0, o - 1], varVariant);
+  ia := VarArrayCreate([0, i - 1], varVariant);
+  i := 0;
+  o := 0;
+  ni := 0;
+  for j := 0 to high(ioTag) do begin
+    if (odd(ioTag[j])) then begin
+      ia[i] := copyPoly(j);
+      inc(i);
+    end
+    else begin
+      oa[o] := copyPoly(j);
+      inc(o);
+    end;
+  end;
+  result[0] := oa;
+  result[1] := ia;
+end;
+
+class function TMultiPoly.includes(greater, less: TGTPoly): boolean;
+var
+  i: integer;
+  midPoint: TGTPoint;
+begin
+  result := false;
+  midPoint := TGTPoint.create();
+  try
+    for i := 0 to less.count - 1 do begin
+      case greater.isIn(less.fPoints[i]) of
+        0: begin
+            exit;
+          end;
+        1: if i = 2 then
+            case triangleTest(less.fPoints[i - 2], less.fPoints[i - 1], less.fPoints[i],
+              midPoint, less.isIn, greater.isIn) of
+              0: begin
+                  exit;
+                end;
+              2: begin
+                  result := true;
+                  exit;
+                end;
+            end;
+        2: begin
+            result := true;
+            exit;
+          end;
+      end;
+    end;
+  finally
+    freeAndNil(midPoint);
+  end;
+  assert(false, '{2F825152-F046-4E07-973B-FF03C209ECA6}');
+end;
+
+function TMultiPoly.getOrientation: integer;
+begin
+  if (fOrientation = poUnknown) then getArea();
+  case fOrientation of
+    poCW: result := 1;
+    poCCW: result := 2;
+  else
+    result := 0;
+  end;
 end;
 
 { TPolyBuilder }

@@ -56,22 +56,19 @@ type
     procedure raiseError(const msg: WideString);
     procedure raiseInvalidTag(const tag: WideString);
   public
-    constructor create(reader: TOSMReader; const uri, localName, qName: SAXString; const atts:
-      IAttributes; onDone: TNotifyEvent = nil); reintroduce; virtual;
+    constructor create(reader: TOSMReader); reintroduce; virtual;
     destructor destroy; override;
+    procedure init(const uri, localName, qName: SAXString; const atts:
+      IAttributes; onDone: TNotifyEvent = nil);virtual;
   end;
 
   TDocHandler = class(TBaseHandler)
   protected
     procedure startElement(const uri, localName, qName: SAXString; const atts: IAttributes);
       override;
+    procedure endElement(const uri, localName, qName: SAXString); override;
   end;
 
-  TOSCHandler = class(TBaseHandler)
-  protected
-    procedure startElement(const uri, localName, qName: SAXString; const atts: IAttributes);
-      override;
-  end;
 
   TDeleteHandler = class(TBaseHandler)
   protected
@@ -88,26 +85,39 @@ type
     procedure startElement(const uri, localName, qName: SAXString; const atts: IAttributes);
       override;
 
-    procedure readObjAttributes(atts: IAttributes); virtual;
+    function readObjAttributes(atts: IAttributes):boolean; virtual;
   public
-    constructor create(reader: TOSMReader; const uri, localName, qName: SAXString; const atts:
-      IAttributes; onDone: TNotifyEvent = nil); override;
+    constructor create(reader: TOSMReader); override;
+    procedure init(const uri, localName, qName: SAXString; const atts:
+      IAttributes; onDone: TNotifyEvent = nil);override;
   end;
 
-  TOSMHandler = class(TBaseHandler)
+  TOSCHandler = class(TBaseHandler)
   protected
-    //TMapObjHandler.onDone event handler
-    procedure onDoneAdd(sender: TObject);
     procedure startElement(const uri, localName, qName: SAXString; const atts: IAttributes);
       override;
   end;
 
+  TOSMHandler = class(TBaseHandler)
+  protected
+    fNodeHandler,fWayHandler,fRelationHandler:TMapObjHandler;
+    procedure freeHandlers();
+    //TMapObjHandler.onDone event handler
+    procedure onDoneAdd(sender: TObject);
+    procedure startElement(const uri, localName, qName: SAXString; const atts: IAttributes);
+      override;
+    procedure endElement(const uri, localName, qName: SAXString); override;
+  public
+    constructor create(reader: TOSMReader); override;
+    destructor destroy();override;
+  end;
+
   TNodeHandler = class(TMapObjHandler)
   protected
-    procedure readObjAttributes(atts: IAttributes); override;
+    function readObjAttributes(atts: IAttributes):boolean; override;
   public
-    constructor create(reader: TOSMReader; const uri, localName, qName: SAXString; const atts:
-      IAttributes; onDone: TNotifyEvent = nil); override;
+    procedure init(const uri, localName, qName: SAXString; const atts:
+      IAttributes; onDone: TNotifyEvent = nil);override;
   end;
 
   TWayHandler = class(TMapObjHandler)
@@ -120,8 +130,8 @@ type
 
     procedure grow();
   public
-    constructor create(reader: TOSMReader; const uri, localName, qName: SAXString; const atts:
-      IAttributes; onDone: TNotifyEvent = nil); override;
+    procedure init(const uri, localName, qName: SAXString; const atts:
+      IAttributes; onDone: TNotifyEvent = nil);override;
   end;
 
   TRelationHandler = class(TMapObjHandler)
@@ -131,8 +141,8 @@ type
     procedure startElement(const uri, localName, qName: SAXString; const atts: IAttributes);
       override;
   public
-    constructor create(reader: TOSMReader; const uri, localName, qName: SAXString; const atts:
-      IAttributes; onDone: TNotifyEvent = nil); override;
+    procedure init(const uri, localName, qName: SAXString; const atts:
+      IAttributes; onDone: TNotifyEvent = nil);override;
   end;
 
   TUTF8Writer = class(TOSManObject, ITransformOutputStream)
@@ -229,7 +239,7 @@ begin
   try
     try
       fSAXReader := TMyXMLReader.create();
-      fSAXReader.setContentHandler(TDocHandler.create(self, '', '', '', nil));
+      fSAXReader.setContentHandler(TDocHandler.create(self));
       fSAXReader.ParseInput(TStreamInputSource.create(inStreamAdaptor, soReference));
     finally
       if assigned(fSAXReader) then
@@ -263,14 +273,9 @@ end;
 
 { TBaseHandler }
 
-constructor TBaseHandler.create(reader: TOSMReader; const uri, localName, qName: SAXString; const
-  atts: IAttributes; onDone: TNotifyEvent = nil);
+constructor TBaseHandler.create(reader: TOSMReader);
 begin
   fReader := reader;
-  fParent := reader.fSAXReader.getContentHandler();
-  fNestedCount := 1;
-  fOnDone := onDone;
-  reader.fSAXReader.setContentHandler(self);
 end;
 
 destructor TBaseHandler.destroy;
@@ -304,6 +309,15 @@ begin
   fReader.fSAXError := e.getMessage();
 end;
 
+procedure TBaseHandler.init(const uri, localName, qName: SAXString;
+  const atts: IAttributes; onDone: TNotifyEvent);
+begin
+  fParent := fReader.fSAXReader.getContentHandler();
+  fNestedCount := 1;
+  fOnDone := onDone;
+  fReader.fSAXReader.setContentHandler(self);
+end;
+
 procedure TBaseHandler.raiseError(const msg: WideString);
 begin
   fReader.fSAXError := msg;
@@ -335,26 +349,66 @@ end;
 
 { TDocHandler }
 
+procedure TDocHandler.endElement(const uri, localName, qName: SAXString);
+begin
+  //block parent ContextHandler
+end;
+
 procedure TDocHandler.startElement(const uri, localName, qName: SAXString;
   const atts: IAttributes);
 begin
   inherited;
   if qName = 'osm' then
-    TOSMHandler.create(fReader, uri, localName, qName, atts)
+    TOSMHandler.create(fReader).init(uri, localName, qName, atts)
   else if qName = 'osmChange' then
-    TOSCHandler.create(fReader, uri, localName, qName, atts)
+    TOSCHandler.create(fReader).init(uri, localName, qName, atts)
   else
     raiseError('TDocHandler.startElement: unexpected element <' + qName + '>');
 end;
 
 { TOSMHandler }
 
+constructor TOSMHandler.create(reader: TOSMReader);
+begin
+  inherited;
+  fNodeHandler:=TNodeHandler.create(reader);
+  fWayHandler:=TWayHandler.create(reader);
+  fRelationHandler:=TRelationHandler.create(reader);
+  fNodeHandler._AddRef();
+  fWayHandler._AddRef();
+  fRelationHandler._AddRef();
+end;
+
+destructor TOSMHandler.destroy;
+begin
+  freeHandlers();
+  inherited;
+end;
+
+procedure TOSMHandler.endElement(const uri, localName, qName: SAXString);
+begin
+  inherited;
+  if(fNestedCount=0)then
+    freeHandlers();
+end;
+
+procedure TOSMHandler.freeHandlers;
+begin
+  if(assigned(fNodeHandler))then fNodeHandler._Release();
+  if(assigned(fWayHandler))then fWayHandler._Release();
+  if(assigned(fRelationHandler))then fRelationHandler._Release();
+  fNodeHandler:=nil;
+  fWayHandler:=nil;
+  fRelationHandler:=nil;
+end;
+
 procedure TOSMHandler.onDoneAdd(sender: TObject);
 var
   mo: TMapObjHandler;
 begin
   mo := sender as TMapObjHandler;
-  fReader.oMap.putObject(mo.mapObj);
+  if VarIsType(mo.mapObj,varDispatch)then
+    fReader.oMap.putObject(mo.mapObj);
 end;
 
 procedure TOSMHandler.startElement(const uri, localName, qName: SAXString;
@@ -362,27 +416,34 @@ procedure TOSMHandler.startElement(const uri, localName, qName: SAXString;
 begin
   inherited;
   if qName = 'node' then
-    TNodeHandler.create(fReader, uri, localName, qName, atts, onDoneAdd)
+    fNodeHandler.init(uri, localName, qName, atts, onDoneAdd)
   else if qName = 'way' then
-    TWayHandler.create(fReader, uri, localName, qName, atts, onDoneAdd)
+    fWayHandler.init(uri, localName, qName, atts, onDoneAdd)
   else if qName = 'relation' then
-    TRelationHandler.create(fReader, uri, localName, qName, atts, onDoneAdd)
-  else if (qName = 'bound') or (qName = 'bounds') then
-    TBaseHandler.create(fReader, uri, localName, qName, atts)
+    fRelationHandler.init(uri, localName, qName, atts, onDoneAdd)
+  else if (qName = 'bound') or (qName = 'bounds') then begin
+    TBaseHandler.create(fReader).init(uri, localName, qName, atts);
+  end
   else
     raiseInvalidTag(qName);
 end;
 
 { TMapObjHandler }
 
-constructor TMapObjHandler.create(reader: TOSMReader; const uri, localName,
-  qName: SAXString; const atts: IAttributes; onDone: TNotifyEvent);
+constructor TMapObjHandler.create(reader: TOSMReader);
+begin
+  inherited;
+end;
+
+procedure TMapObjHandler.init(const uri, localName, qName: SAXString; const atts:
+      IAttributes; onDone: TNotifyEvent = nil);
 begin
   inherited;
   objTags := Unassigned;
+  readObjAttributes(atts);
 end;
 
-procedure TMapObjHandler.readObjAttributes(atts: IAttributes);
+function TMapObjHandler.readObjAttributes(atts: IAttributes):boolean;
 
   function readDef(const aName, defVal: WideString): WideString;
   begin
@@ -393,6 +454,11 @@ procedure TMapObjHandler.readObjAttributes(atts: IAttributes);
   end;
 
 begin
+  result:=atts.getValue('visible')<>'false';
+  if not result then begin
+    mapObj:=Unassigned;
+    exit;
+  end;
   mapObj.id := WideStrToInt64(atts.getValue('id'));
   mapObj.version := WideStrToInt(readDef('version', '0'));
   mapObj.userId := WideStrToInt(readDef('uid', '0'));
@@ -414,32 +480,23 @@ end;
 
 { TNodeHandler }
 
-constructor TNodeHandler.create(reader: TOSMReader; const uri, localName,
-  qName: SAXString; const atts: IAttributes; onDone: TNotifyEvent);
+procedure TNodeHandler.init(const uri, localName, qName: SAXString;
+  const atts: IAttributes; onDone: TNotifyEvent);
 begin
+  mapObj := fReader.oMap.createNode();
   inherited;
-  mapObj := fReader.oMap.createNode;
-  readObjAttributes(atts);
 end;
 
-procedure TNodeHandler.readObjAttributes(atts: IAttributes);
+function TNodeHandler.readObjAttributes(atts: IAttributes):boolean;
 begin
-  inherited;
-  mapObj.lat := StrToFloat(atts.getValue('lat'));
-  mapObj.lon := StrToFloat(atts.getValue('lon'));
+  result:=inherited readObjAttributes(atts);
+  if result then begin
+    mapObj.lat := StrToFloat(atts.getValue('lat'));
+    mapObj.lon := StrToFloat(atts.getValue('lon'));
+  end;
 end;
 
 { TWayHandler }
-
-constructor TWayHandler.create(reader: TOSMReader; const uri, localName,
-  qName: SAXString; const atts: IAttributes; onDone: TNotifyEvent);
-begin
-  inherited;
-  mapObj := fReader.oMap.createWay;
-  readObjAttributes(atts);
-  ndCount := 0;
-  setLength(ndList, 14);
-end;
 
 procedure TWayHandler.endElement(const uri, localName, qName: SAXString);
 var
@@ -471,6 +528,15 @@ begin
   end;
 end;
 
+procedure TWayHandler.init(const uri, localName, qName: SAXString;
+  const atts: IAttributes; onDone: TNotifyEvent);
+begin
+  mapObj := fReader.oMap.createWay();
+  inherited;
+  ndCount := 0;
+  setLength(ndList, 14);
+end;
+
 procedure TWayHandler.startElement(const uri, localName, qName: SAXString;
   const atts: IAttributes);
 var
@@ -486,12 +552,11 @@ end;
 
 { TRelationHandler }
 
-constructor TRelationHandler.create(reader: TOSMReader; const uri,
-  localName, qName: SAXString; const atts: IAttributes;
-  onDone: TNotifyEvent);
+procedure TRelationHandler.init(const uri, localName, qName: SAXString;
+  const atts: IAttributes; onDone: TNotifyEvent);
 begin
+  mapObj := fReader.oMap.createRelation();
   inherited;
-  mapObj := fReader.oMap.createRelation;
   fRefList := Unassigned;
   readObjAttributes(atts);
 end;
@@ -514,9 +579,9 @@ procedure TOSCHandler.startElement(const uri, localName, qName: SAXString;
 begin
   inherited;
   if (qName = 'modify') or (qName = 'create') then
-    TOSMHandler.create(fReader, uri, localName, qName, atts)
+    TOSMHandler.create(fReader).init(uri, localName, qName, atts)
   else if qName = 'delete' then
-    TDeleteHandler.create(fReader, uri, localName, qName, atts)
+    TDeleteHandler.create(fReader).init(uri, localName, qName, atts)
   else
     raiseInvalidTag(qName);
 end;
@@ -1011,7 +1076,6 @@ end;
 procedure TFastOSMWriter.set_eos(const aEOS: WordBool);
 begin
   inherited;
-
 end;
 
 procedure TFastOSMWriter.setInputMap(const inputMap: OleVariant);
@@ -1038,6 +1102,7 @@ begin
     writeFooter();
   finally
     inStg:=0;
+    eos:=true;
   end;
 end;
 

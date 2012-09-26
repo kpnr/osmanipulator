@@ -30,32 +30,23 @@ function clipMap(cfg){
 	echo(curTime()+' Clipping map...');
 	var startTime=new Date();
 	var chunkSize=1000,netChunkSize=100;
-	var clipPoly=h.gt.createPoly();
 	var srcMapFileName=cfg.data['destDBName'];
 	var src=openMap(srcMapFileName);
+	var polyBak=openMap(cfg.data['mapClipPolyBackup']);
+	var prs;
 	try{
-		var clipStr=cfg.data['mapClipPoly'].split(':');
-		switch(clipStr[0]){
-			case 'relation':
-				clipObj=src.map.getRelation(clipStr[1]);
-				break;
-			case 'way':
-				clipObj=src.map.getWay(clipStr[1]);
-				break;
-			default:
-				return false;
-		};
-		if(!clipObj)return false;
-		clipPoly.addObject(clipObj);
 		echo(curTime()+' resolving boundary...');
-		if(!clipPoly.resolve(src.map)){
+		prs=h.getMultiPoly(cfg.data['mapClipPoly'].split(','),src.map,polyBak.map);
+		if(!prs.poly){
 			echo('	...failed');
 			return false;
 		};
-		echo('	...done');
+		echo('	...done. src='+prs.usedMap.storage.dbName);
 	}finally{
 		src.close();
+		polyBak.close();
 	};
+	var clipPoly=prs.poly;
 	echo('	copy old map...');
 	h.fso.copyFile(srcMapFileName,cfg.data['mapClipTempFile'],true);
 	h.fso.deleteFile(srcMapFileName);
@@ -128,8 +119,8 @@ function clipMap(cfg){
 	};
 	echo('');
 	
-	echo(curTime()+'  Getting nodes from net...');
-	objCnt=0;qryCnt=0;
+	echo(curTime()+'  Getting '+notFoundObj.length+' nodes from net...');
+	objCnt=0;
 	try{
 		while(notFoundObj.length>0){
 			objs=netMap.getNodes(notFoundObj.splice(0,netChunkSize)).toArray();
@@ -137,11 +128,10 @@ function clipMap(cfg){
 				dst.map.putObject(objs[i]);
 				objCnt++;
 			}
-			qryCnt+=netChunkSize;
-			echo(curTime()+' '+objCnt+' of '+qryCnt+' nodes exported',true);
+			echo(curTime()+' '+objCnt+' nodes exported',true);
 		};
 	}catch(e){
-		echo(curTime()+' Exception'+e.message);
+		echo('\n'+curTime()+' Exception '+e.message);
 	};
 	echo('');
 	
@@ -164,8 +154,8 @@ function clipMap(cfg){
 	};
 	echo('');
 
-	echo(curTime()+'  Getting ways from net...');
-	objCnt=0;qryCnt=0;
+	echo(curTime()+'  Getting '+notFoundObj.length+' ways from net...');
+	objCnt=0;
 	try{
 		while(notFoundObj.length>0){
 			objs=netMap.getWays(notFoundObj.splice(0,netChunkSize)).toArray();
@@ -173,11 +163,10 @@ function clipMap(cfg){
 				dst.map.putObject(objs[i]);
 				objCnt++;
 			}
-			qryCnt+=netChunkSize;
-			echo(curTime()+' '+objCnt+' of '+qryCnt+' ways exported',true);
+			echo(curTime()+' '+objCnt+' ways exported',true);
 		};
 	}catch(e){
-		echo(curTime()+' Exception'+e.message);
+		echo('\n'+curTime()+' Exception '+e.message);
 	};
 	echo('');
 
@@ -200,8 +189,8 @@ function clipMap(cfg){
 	};
 	echo('');
 
-	echo(curTime()+'  Getting relations from net...');
-	objCnt=0;qryCnt=0;
+	echo(curTime()+'  Getting '+notFoundObj.length+' relations from net...');
+	objCnt=0;
 	try{
 		while(notFoundObj.length>0){
 			objs=netMap.getRelations(notFoundObj.splice(0,netChunkSize)).toArray();
@@ -209,11 +198,10 @@ function clipMap(cfg){
 				dst.map.putObject(objs[i]);
 				objCnt++;
 			}
-			qryCnt+=netChunkSize;
-			echo(curTime()+' '+objCnt+' of '+qryCnt+' relations exported',true);
+			echo(curTime()+' '+objCnt+' relations exported',true);
 		};
 	}catch(e){
-		echo(curTime()+' Exception'+e.message);
+		echo('\n'+curTime()+' Exception '+e.message);
 	};
 	echo('');
 

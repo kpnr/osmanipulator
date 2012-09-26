@@ -369,6 +369,22 @@ type
     function getColNames(): OleVariant;
   end;
 
+  IAppExec = interface (IOSManAll)
+    //property funcs
+    function get_exitCode():integer;
+    function get_processId():integer;
+    function get_status():integer;
+    //interface definition
+    //terminate application
+    procedure terminate();
+    //Application exit code. If application not terminated zero returned
+    property exitCode:integer read get_exitCode;
+    //Application Windows ProcessId.
+    property processId:integer read get_processId;
+    //termination status of application. 0 - running, 1 - terminated
+    property status:integer read get_status;
+  end;
+
   IGeoTools = interface(IOSManAll)
     //returns multipolygon Object
     function createPoly(): OleVariant;
@@ -378,15 +394,17 @@ type
     //  polyline(polygon boundary) returned. This distance can be less then minimum
     //  distace between nodes! Example: distance(n(1,1),[n(0,0),n(2,0)]) is 1, not 1.41
     function distance(const node, nodeOrNodes: OleVariant): Double;
-    //returns node rounded to certain bit level.
-    //aBitLevel should be between 2 and 31.
-    //Suitable for mp-format convertion
-    procedure bitRound(aNode: OleVariant; aBitLevel: integer);
+    //returns IAppExec object. If error occures exception raised
+    function exec(const cmdLine:WideString):OleVariant;
     //returns array of Nodes of way.
     //if some objects not found in aMap then exception raised
     //aMap - source of Nodes and Way
     //aWayOrWayId - Way object or id of way.
     function wayToNodeArray(aMap, aWayOrWayId: OleVariant): OleVariant;
+    //returns node rounded to certain bit level.
+    //aBitLevel should be between 2 and 31.
+    //Suitable for mp-format convertion
+    procedure bitRound(aNode: OleVariant; aBitLevel: integer);
   end;
 
   IMultiPoly = interface(IOSManAll)
@@ -399,23 +417,33 @@ type
     function getNotResolved(): OleVariant;
     //IRefList of not closed nodes.
     function getNotClosed(): OleVariant;
+    //returns simple polygons of multipolygon. Result is two arrays of polygons
+    // [OuterPolyArray,InnerPolyArray]. InnerPolyArray can be empty (zero-length)
+    // PolyArray is array of polygons [Poly1,Poly2,Poly3...].
+    // Each Poly is array of Node objects. Poly1=[P1Node1,P1Node2,...P1NodeN,P1Node1].
+    function getPolygons():OleVariant;
     //returns intersection of Poly boundary and NodeArray.
     //Result is array of arrrays of Node`s. Tag 'osman:note' filled with
-    //'boundary' value for nodes layed on-bound.
+    //'boundary' value for nodes layed on-bound, tags 'osman:node1' and 'osman:node2'
+    //filled with bound nodes ids
     //If NodeArray and Poly has no intersection zero-length
     // array [] returned.
     //New Nodes in result has id=newNodeId,newNodeId-1,...,newNodeId-k
     //Example:
     // NodeArray=[n1(0,1) , n2(2,1) , n3(4,1)]
-    // poly=(1,0) - (3,0) - (3,2) - (1,2) - (1,0)
+    // poly=(1,0, id=1) - (3,0, id=2) - (3,2, id=3) - (1,2, id=4) - (1,0, id=1)
     // newNodeId=-11
-    // result=[nA(1,1, id=-11, osman:note=boundary), n2(2,1), nB(3,1, id=-12, osman:note=boundary)]
+    // result=[nA(1,1, id=-11, osman:note=boundary, osman:node1=4, osman:node2=1),
+    //   n2(2,1), nB(3,1, id=-12, osman:note=boundary, osman:node1=2, osman:node2=3)]
     function getIntersection(const aMap, aNodeArray: OleVariant; newNodeId: Int64): OleVariant;
     //returns true if node is in poly (including border)
     function isIn(const aNode: OleVariant): boolean;
     //returns multipoly area in square meters
     //if poly not resolved then exception raised
     function getArea(): Double;
+    //returns polygon orientation
+    //0 - for mixed orientation, 1 - clockwise, 2 - contraclockwise
+    function getOrientation(): integer;
     //returns bounding box for poly. Returns SafeArray of four double variants
     // for N,E,S and W bounds respectively. If poly not resolved then
     // exception raised.

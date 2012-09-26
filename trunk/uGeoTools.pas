@@ -1,7 +1,7 @@
 unit uGeoTools;
 
 interface
-uses Math, SysUtils, Variants, uInterfaces, uOSMCommon, uModule, uMultipoly;
+uses Math, SysUtils, Variants, uInterfaces, uOSMCommon, uModule, uMultipoly, ShellApi, Windows;
 
 implementation
 
@@ -20,10 +20,26 @@ type
   published
     function createPoly(): OleVariant;
     function distance(const node, nodeOrNodes: OleVariant): double;
-    procedure bitRound(aNode: OleVariant; aBitLevel: integer);
+    function exec(const cmdLine: WideString): OleVariant;
     function wayToNodeArray(aMap, aWayOrWayId: OleVariant): OleVariant;
+    procedure bitRound(aNode: OleVariant; aBitLevel: integer);
   end;
 
+  TAppExec = class(TOSManObject, IAppExec)
+  protected
+    hProcess: THandle;
+  public
+    constructor create(); override;
+    destructor destroy(); override;
+    function get_exitCode(): integer;
+    function get_processId(): integer;
+    function get_status(): integer;
+  published
+    procedure terminate();
+    property exitCode: integer read get_exitCode;
+    property processId: integer read get_processId;
+    property status: integer read get_status;
+  end;
   { TGeoTools }
 
 procedure TGeoTools.bitRound(aNode: OleVariant; aBitLevel: integer);
@@ -109,6 +125,46 @@ begin
   end;
 end;
 
+function TGeoTools.exec(const cmdLine: WideString): OleVariant;
+var
+  pei: TShellExecuteInfoW;
+  ae: TAppExec;
+  le: dword;
+  app, cmdl: WideString;
+  i, j: integer;
+begin
+  fillchar(pei, sizeof(pei), 0);
+  pei.cbSize := sizeof(pei);
+  pei.fMask := SEE_MASK_DOENVSUBST or SEE_MASK_FLAG_DDEWAIT or
+    SEE_MASK_FLAG_NO_UI or SEE_MASK_NOCLOSEPROCESS or SEE_MASK_UNICODE;
+  if (length(cmdLine) > 0) then begin
+    if (cmdLine[1] = '"') then begin
+      i := posEx('"', cmdLine, 2, high(integer));
+      app := copy(cmdLine, 2, i - 2);
+      cmdl := copy(cmdLine, i + 1, high(integer));
+    end
+    else begin
+      i := posEx(' ', cmdLine, 2, high(integer));
+      j := posEx('/', cmdLine, 2, high(integer));
+      if ((j > 0) and (j < i)) then i := j;
+      if (i < 1) then i := length(cmdLine) + 1;
+      app := copy(cmdLine, 1, i - 1);
+      cmdl := copy(cmdLine, i, high(integer));
+    end;
+  end;
+  pei.lpFile := pWideChar(app);
+  pei.lpParameters := pWideChar(cmdl);
+  pei.nShow := SW_SHOW;
+  if not ShellExecuteExW(@pei) then begin
+    le := GetLastError();
+    raise EInOutError.create(toString() + '.exec: ' + SysErrorMessage(le));
+  end;
+  ae := TAppExec.create();
+  if (pei.hProcess <> 0) then
+    ae.hProcess := pei.hProcess;
+  result := ae as IDispatch;
+end;
+
 function TGeoTools.wayToNodeArray(aMap,
   aWayOrWayId: OleVariant): OleVariant;
 var
@@ -144,8 +200,60 @@ begin
   end;
 end;
 
+{ TAppExec }
+
+constructor TAppExec.create;
+begin
+  inherited;
+  hProcess := INVALID_HANDLE_VALUE;
+end;
+
+destructor TAppExec.destroy;
+begin
+  if (hProcess <> INVALID_HANDLE_VALUE) then
+    closeHandle(hProcess);
+  inherited;
+end;
+
+function TAppExec.get_exitCode: integer;
+var
+  ec: dword;
+begin
+  if (hProcess = INVALID_HANDLE_VALUE) then
+    result := 0
+  else if (GetExitCodeProcess(hProcess, ec)) and (ec = STILL_ACTIVE) then begin
+    result := 0;
+  end
+  else begin
+    result := integer(ec);
+  end;
+end;
+
+function TAppExec.get_processId: integer;
+begin
+  result := hProcess;
+end;
+
+function TAppExec.get_status: integer;
+var
+  ec: dword;
+begin
+  if (hProcess = INVALID_HANDLE_VALUE) then
+    result := 1
+  else if (GetExitCodeProcess(hProcess, ec)) and (ec = STILL_ACTIVE) then begin
+    result := 0;
+  end
+  else begin
+    result := 1;
+  end;
+end;
+
+procedure TAppExec.terminate;
+begin
+  TerminateProcess(hProcess, dword(-1));
+end;
+
 initialization
   uModule.OSManRegister(TGeoTools, geoToolsClassGUID);
-  //  test();
 end.
 
