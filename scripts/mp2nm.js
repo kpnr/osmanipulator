@@ -1,7 +1,7 @@
 //settings begin
-var srcMapName='';
-var dstOSMName='';
-var intToDeg=1e-7,degToInt=1/intToDeg;
+var srcMpName='';
+var boundMpName='';
+var dstNMName='';
 //settings end
 function include(n){var w=WScript,h=w.createObject('WScript.Shell'),o=h.currentDirectory,s=w.createObject('Scripting.FileSystemObject'),f,t;h.currentDirectory=s.getParentFolderName(w.ScriptFullName);try{f=s.openTextFile(n,1,!1);try{t=f.ReadAll()}finally{f.close()}return eval(t)}catch(e){if(e instanceof Error)e.description+=' '+n;throw e}finally{h.currentDirectory=o}}
 
@@ -16,10 +16,11 @@ function echot(s,l,r){
 //end global variables
 function checkArgs(){
 	function help(){
-	echo('Fast map database export to OSM format. No filtering supported.\n\
+	echo('Polish mp-file to navitel nm2 format conversion via GPSMapEdit.\n\
   Command line options:\n\
-    /src:"src_file_name.db3"\n\
-    /dst:"dest_file_name.osm"');
+    /src:"src_file_name.mp"\n\
+    /bound:"boundary_file_name.mp\n\
+    /dst:"dest_file_name.nm2"');
 	};
 	var ar=WScript.arguments;
 	ar=ar.named;
@@ -27,12 +28,14 @@ function checkArgs(){
 		help();
 		return false;
 	};
-	if(ar.exists('src'))srcMapName=ar.item('src')||srcMapName;
-	if(ar.exists('dst'))dstOSMName=ar.item('dst')||dstOSMName;
-	if(srcMapName && dstOSMName){
+	if(ar.exists('src'))srcMpName=ar.item('src')||srcMpName;
+	if(ar.exists('bound'))boundMpName=ar.item('bound')||boundMpName;
+	if(ar.exists('dst'))dstNMName=ar.item('dst')||dstNMName;
+	if(srcMpName && dstNMName){
 		echo('Use config:\n');
-		echo('src='+srcMapName);
-		echo('dst='+dstOSMName);
+		echo('src='+srcMpName);
+		echo('bound='+boundMpName);
+		echo('dst='+dstNMName);
 		return true;
 	}
 	help();
@@ -42,13 +45,27 @@ function checkArgs(){
 
 function main(){
 	if(!checkArgs())return;
-	echot('Opening map');
-	var src=h.mapHelper();
-	src.open(srcMapName);
-	src.exec('PRAGMA cache_size=200000');
-	echot('Exporting...');
-	src.exportXML(dstOSMName);
-	src.close();
+	echot('Starting GPSMapEdit');
+	var gme=WScript.createObject('GPSMapEdit.Application');
+	echot('	ok. GME version '+gme.version+((gme.isRegistered)?(' full'):(' demo')));
+	//gme.visible=true;
+	echot('Opening mp...');
+	gme.open(srcMpName,false,true);
+	echo(gme.messageLog);
+	if(boundMpName){
+		echot('Loading boundary...');
+		gme.open(boundMpName,true,true);
+		echo(gme.messageLog);
+		echot('Saving mp...');
+		gme.saveAs(srcMpName,'polish');
+		echo(gme.messageLog);
+	};
+	echot('Saving nm2...');
+	gme.saveAs(dstNMName,'navitel-nm2');
+	echo(gme.messageLog);
+	//var edit=gme.edit;
+	//edit.GeneralizeNodesOfPolylinesAndPolygons();
+	gme.exit();
 	echot('All done.');
 }
 

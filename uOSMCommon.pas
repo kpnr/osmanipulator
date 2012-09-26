@@ -116,10 +116,34 @@ function degToStr(const deg: double): WideString;
 function degToInt(const deg: double): integer;
 function IntToDeg(const i: integer): double;
 
+//extended version of pos procedure
+function PosEx(const SubStr, Str: WideString; FromPos, ToPos: integer): integer;
+
 //emit message to debugger
 procedure debugPrint(const msg:WideString);
 
 implementation
+
+function PosEx(const SubStr, Str: WideString; FromPos, ToPos: integer): integer;
+var
+  StrLength: integer;
+begin
+  result := 0;
+  StrLength := length(Str);
+  if (FromPos > StrLength) or (SubStr = '') or (FromPos <= 0) or (ToPos <= 0)
+    then exit;
+  if ToPos > StrLength then ToPos := StrLength;
+  StrLength := length(SubStr);
+  dec(ToPos, StrLength - 1);
+  while FromPos <= ToPos do begin
+    if (Str[FromPos] = SubStr[1]) and
+      CompareMem(@SubStr[1], @Str[FromPos], StrLength*sizeof(Str[1])) then begin
+      result := FromPos;
+      exit;
+    end;
+    inc(FromPos);
+  end;
+end;
 
 procedure debugPrint(const msg:WideString);
 begin

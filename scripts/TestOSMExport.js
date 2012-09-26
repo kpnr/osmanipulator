@@ -1,6 +1,6 @@
 //settings
-var testOSMOutFile='f:\\db\\osm\\rf_regions\\route\\Дальневосточный.osm';
-var testMapFile='f:\\db\\osm\\rf_regions\\route\\Дальневосточный.db3';
+var testOSMOutFile='f:\\db\\osm\\sql\\rfbounds.osm';
+var testMapFile='f:\\db\\osm\\sql\\test.db3';
 //settings end
 var re=/wscript/i;
 if (WScript.FullName.search(re)>=0){

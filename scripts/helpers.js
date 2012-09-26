@@ -7,8 +7,22 @@ Hlp members:
 	defaultMap - default map class name ('Map');
 	dumpMapObject(mapObj) - returns array of string with all map object properties
 	echo(msg,noLF,noCR) - write msg to stdout. Without line feed and carriage return if needed.
-	indexOf=function(arr,elm) - returns index of element `elm` in array `arr`. If element not found then -1 returned.
+	indexOf(arr,elm) - returns index of element `elm` in array `arr`. If element not found then -1 returned.
 	mapHelper() - create MapHelper object
+	getMultiPoly(refs,srcMaps,backupMap) - get Multipoly from multiple sources or from backup. Updates backup if necessary.
+		returns object{poly,usedMap,notFoundRefs,notClosedRefs}
+			poly - MuliPoly object if refs is valid multipolygon, <false> if all sources and even backup failed
+			usedMap - map object used for multipolygon resolution. If all map failed to resolve then false returned.
+			notFoundRefs - array of strings with not found objects references. On success it is empty array. Example:
+				['node:12','way:11']
+			notClosedRefs - array of string with not-closed objects references. On success it is empty array. Example:
+				['node:1','node:10']
+		refs - string or array of strings with references to multipoly members. Example:
+			'relation:11'
+			['way:10','way:22']
+		srcMaps - map or array of maps used for multipolygon resolving.
+		backupMap - map used for multipolygon resolving if srcMaps failed. backupMap
+			updated with successfully resolved multipolygon objects.
 	polyIntersector(srcMapHelper,dstMapHelper,boundMultiPoly) - create PolyIntersector object
 
 MapHelper members:
@@ -22,6 +36,8 @@ MapHelper members:
 		dstMap - map for exporting objects
 		refs - array of object reference strings. Example:
 			['way:1','node:11','relation:111']
+	exportMultiPoly(dstMap,refs) - same as exportRecurcive, but skips all Node and subarea members of relations.
+		This function doesn`t check polygon consistency and integrity.
 	completeWayNodes(bigMap) - import from 'bigMap' nodes which used in 'map' ways.
 		Returns array of not found nodes ids. If all nodes found in 'bigMap' then empty array returned
 	completeRelationNodes(bigMap) - import from 'bigMap' nodes which used in 'map' relations.
@@ -39,6 +55,7 @@ MapHelper members:
 			1 - new tags replaced with old
 			2 - old tags replaced with new
 	fixIncompleteRelations() - remove from relations members all members, which are not in map. If in result relation has no members it removed from map too.
+	fixIncompleteWays() - remove from ways all nodes which are not in map. If in result way has less then two nodes it removed from map too.
 	getNextNodeId() - get next available node id. result<0.
 	getNextWayId() - get next available way id. result<0.
 	getNextRelationId() - get next available relation id. result<0.
@@ -183,6 +200,37 @@ MapHelper.prototype.exportDB=function(dstMap,exportFilter){
 	//this.h.echo('');
 };
 
+MapHelper.prototype.exportMultiPoly=function(dstMap,refs){
+	var t=this,h=t.h;
+	function buildList(dst,relref){
+		//convert Relation into one-dimension Relation object array.
+		//Subrelations recursively proccessed too.
+		//If some subrelation missed in map then empty array returned
+		var rs=[];
+		var r=t.getObject(relref);
+		if(!r)return rs;
+		if(r.getClassName=='Relation'){
+			if(h.indexOf(['boundary','multipolygon'],r.tags.getByKey('type'))<0) return rs;
+			var rm=r.members.getAll().toArray();
+			for(var i=0;i<rm.length;i+=3){
+				//skip nodes
+				if(rm[i]=='way'){
+					rs.push('way:'+rm[i+1]);
+				}else if((rm[i]=='relation')&&(h.indexOf(['','outer','inner','enclave','exclave'],rm[i+2])>=0)){
+					//process subrelations
+					var sr=buildList(dst,'relation:'+rm[i+1]);
+					rs=rs.concat(sr);
+				};
+			};
+		};
+		dst.putObject(r);
+		return rs;
+	};
+	for(var i=0;i<refs.length;i++){
+		t.exportRecurcive(dstMap,buildList(dstMap,refs[i]));
+	};
+};
+
 MapHelper.prototype.exportRecurcive=function(dstMap,refs){
 	var q=[],t=this;
 	for(var i=0;i<refs.length;i++){
@@ -313,29 +361,52 @@ MapHelper.prototype.fixIncompleteRelations=function(){
 	};
 };
 
+MapHelper.prototype.fixIncompleteWays=function(){
+	var t=this,m=t.map,sil=m.storage.createIdList();
+	t.exec('INSERT OR IGNORE INTO '+sil.tableName+'(id) SELECT wayid FROM waynodes WHERE nodeid NOT IN (SELECT id FROM nodes)');
+	t.exec('DELETE FROM waynodes WHERE nodeid IN (SELECT id FROM '+sil.tableName+')');
+
+	t.exec('DELETE FROM '+sil.tableName);
+	
+	t.exec('INSERT INTO '+sil.tableName+'(id) SELECT id FROM ways WHERE (SELECT (MAX(nodeidx)+1) FROM waynodes WHERE wayid=id)<>(SELECT COUNT(1) FROM waynodes WHERE wayid=id)');
+	var ril=t.exec('SELECT id FROM '+sil.tableName);
+	while(!ril.eos){
+		var ids=ril.read(1000).toArray();
+		for(var i=0;i<ids.length;i++){
+			var r=m.getWay(ids[i]);
+			if(!r)continue;
+			if(r.nodes.toArray().length>1){
+				m.putWay(r);
+			}else{
+				t.replaceObject(r,[]);
+			};
+		};
+	};
+};
+
 MapHelper.prototype.renumberNewObjects=function(){
 	var t=this,q=t.exec('SELECT max(id) FROM nodes');
 	function log(s){t.h.man.log(s)};
 	q=q.read(1).toArray()[0];
+	if(q<0)q=0;
 	var u=t.exec('SELECT min(id) FROM users');
 	u=u.read(1).toArray()[0];
 	//renumber nodes
-	t.exec('UPDATE nodes SET version=1,timestamp=\'2000-01-01T00:00:00Z\',userId='+u+',changeset=1,id='+q+'-id WHERE id<0');
-	t.exec('UPDATE waynodes SET nodeid='+q+'-nodeid WHERE nodeid<0');
-	t.exec('UPDATE relationmembers SET memberid='+q+'-memberid WHERE (memberid<0) AND (memberidxtype&3=0)');
+	t.exec('UPDATE nodes SET version=1,timestamp=\'2000-01-01T00:00:00Z\',userId='+u+',changeset=1,id='+q+'-id WHERE id<=0');
+	t.exec('UPDATE waynodes SET nodeid='+q+'-nodeid WHERE nodeid<=0');
+	t.exec('UPDATE relationmembers SET memberid='+q+'-memberid WHERE (memberid<=0) AND (memberidxtype&3=0)');
 	//renumber ways
 	var q=t.exec('SELECT max(id) FROM ways');
 	q=q.read(1).toArray()[0];
-	t.exec('UPDATE ways SET version=1,timestamp=\'2000-01-01T00:00:00Z\',userId='+u+',changeset=1,id='+q+'-id WHERE id<0');
-	t.exec('UPDATE relationmembers SET memberid='+q+'-memberid WHERE (memberid<0) AND (memberidxtype&3=1)');
+	if(q<0)q=0;
+	t.exec('UPDATE ways SET version=1,timestamp=\'2000-01-01T00:00:00Z\',userId='+u+',changeset=1,id='+q+'-id WHERE id<=0');
+	t.exec('UPDATE relationmembers SET memberid='+q+'-memberid WHERE (memberid<=0) AND (memberidxtype&3=1)');
 	//renumber relations
-	var stg=this.map.storage;
-	var qry=stg.sqlPrepare('SELECT max(id) FROM relations');
-	var q= stg.sqlExec(qry,'','');
-	//var q=t.exec('SELECT max(id) FROM relations');
+	q=t.exec('SELECT max(id) FROM relations');
 	q=q.read(1).toArray()[0];
-	t.exec('UPDATE relations SET version=1,timestamp=\'2000-01-01T00:00:00Z\',userId='+u+',changeset=1,id='+q+'-id WHERE id<0');
-	t.exec('UPDATE relationmembers SET memberid='+q+'-memberid WHERE (memberid<0) AND (memberidxtype&3=2)');
+	if(q<0)q=0;
+	t.exec('UPDATE relations SET version=1,timestamp=\'2000-01-01T00:00:00Z\',userId='+u+',changeset=1,id='+q+'-id WHERE id<=0');
+	t.exec('UPDATE relationmembers SET memberid='+q+'-memberid WHERE (memberid<=0) AND (memberidxtype&3=2)');
 };
 
 MapHelper.prototype.replaceObject=function(oldObject,newObjects){
@@ -554,7 +625,7 @@ PolyIntersector.prototype.buildWayList=function(relation){
 				};
 				way.tags.setByKey('osman:parent',r.id);
 				rs.push(way);
-			}else if((rm[i]=='relation')&&(rm[i+2]!='subarea')){
+			}else if((rm[i]=='relation')&&(t.h.indexOf(['','outer','inner','enclave','exclave'],rm[i+2])>=0)){
 				//process subrelations
 				var sr=map.getRelation(rm[i+1]);
 				if(!sr){
@@ -1196,6 +1267,59 @@ Hlp.prototype.dumpMapObject=function(mapObj){
 Hlp.prototype.indexOf=function(arr,elm){
 	for(var i=0;i<arr.length;i++)if(arr[i]==elm)return i;
 	return -1;
+};
+
+Hlp.prototype.getMultiPoly=function(refs,srcMaps,backupMap){
+	var t=this;
+	function updateBackup(src){
+		if((!backupMap)||(backupMap.storage.dbName==src.storage.dbName))return;
+		var hSrc=t.mapHelper();
+		hSrc.map=src;
+		hSrc.exportMultiPoly(backupMap,refs);
+	};
+	function refListToRefArray(iRefList){
+		var a=iRefList.getAll().toArray();
+		var r=[];
+		for(var i=0;i<a.length;i+=3){
+			r.push(a[i]+':'+a[i+1]);
+		};
+		return r;
+	};
+	if(!(srcMaps instanceof Array)){
+		srcMaps=[srcMaps]
+	};
+	if(!(refs instanceof Array))refs=[refs];
+	if(backupMap){
+		srcMaps.push(backupMap);
+	};
+	var rs={poly:false,usedMap:false,notFoundRefs:[],notClosedRefs:[]};
+	if((srcMaps.length<1)||!(refs.length>0))return rs;
+	for(var i=0;i<srcMaps.length;i++){
+		var mp=t.gt.createPoly();
+		var hMap=t.mapHelper();
+		hMap.map=srcMaps[i];
+		rs.notFoundRefs=[];
+		for(var j=0;j<refs.length;j++){
+			var mo=hMap.getObject(refs[j]);
+			if(!mo){
+				rs.notFoundRefs.push(refs[j]);
+			}else{
+				mp.addObject(mo);
+			};
+		};
+		if(rs.notFoundRefs.length>0)continue;
+		if(!mp.resolve(hMap.map)){
+			rs.notFoundRefs=refListToRefArray(mp.getNotResolved());
+			rs.notClosedRefs=refListToRefArray(mp.getNotClosed());
+		}else{
+			rs.notClosedRefs=[];
+			rs.poly=mp;
+			rs.usedMap=hMap.map;
+			updateBackup(hMap.map);
+			break;
+		};
+	};
+	return rs;
 };
 
 Hlp.prototype.mapHelper=function(){

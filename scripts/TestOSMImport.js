@@ -1,6 +1,6 @@
 //settings
-var srcOSMName='f:\\db\\osm\\sql\\test.db3.osm ';
-var destDBName='f:\\db\\osm\\sql\\route.db3';
+var srcOSMName='f:\\db\\osm\\regions\\sahalin.osm';
+var destDBName='f:\\db\\osm\\regions\\sahalin.db3';
 //settings end
 var re=/wscript/i;
 if (WScript.FullName.search(re)>=0){
@@ -14,6 +14,16 @@ function echo(s){
 
 var man=WScript.createObject('OSMan.Application');
 var fso=WScript.createObject('Scripting.FileSystemObject');
+
+var dummymap={
+	createNode:function(){return this.node},
+	createRelation:function(){return this.relation},
+	createWay:function(){return this.way},
+	putNode:function(node){},
+	putRelation:function(relation){},
+	putWay:function(way){},
+	putObject:function(obj){}
+};
 
 function importFile(fileName,destMap){
 	WScript.Echo(''+(new Date())+' importing '+fileName);
@@ -36,11 +46,14 @@ function importFile(fileName,destMap){
 	};
 	var osmr=man.createObject('OSMReader');
 	osmr.setInputStream(ds);
+	dummymap.node=destMap.createNode();
+	dummymap.way=destMap.createWay();
+	dummymap.relation=destMap.createRelation();
 	osmr.setOutputMap(destMap);
 	osmr.read(0);
 	fs.open('');
 	fs=ds=osmr=0;
-	WScript.Echo(''+(new Date())+'import done');
+	WScript.Echo(''+(new Date())+' import done');
 };
 
 function openMap(storageName){
@@ -57,5 +70,7 @@ function openMap(storageName){
 	return map;
 };
 
+//echo('hit enter');
+//WScript.stdIn.read(1);
 var map=openMap(destDBName);
 importFile(srcOSMName,map);

@@ -176,7 +176,7 @@ begin
   if (VarArrayDimCount(narr) <> 1) then
     raise EInOutError.create(toString() + '.getNodes: one dimension array expected');
   s := 'nodes='+idArrayToAnsiStr(narr);
-  result := fetchObjects('POST', '/api/0.6/nodes', s);
+  result := fetchObjects('GET', '/api/0.6/nodes?'+s,'');
   if not varIsArray(result) then begin
     if varIsType(result,varDispatch) then
       result:=varArrayOf([result])
@@ -201,7 +201,7 @@ begin
   if (VarArrayDimCount(narr) <> 1) then
     raise EInOutError.create(toString() + '.getRelations: one dimension array expected');
   s := 'relations='+idArrayToAnsiStr(narr);
-  result := fetchObjects('POST', '/api/0.6/relations', s);
+  result := fetchObjects('GET', '/api/0.6/relations?'+s,'');
   if not varIsArray(result) then begin
     if varIsType(result,varDispatch) then
       result:=varArrayOf([result])
@@ -226,7 +226,7 @@ begin
   if (VarArrayDimCount(narr) <> 1) then
     raise EInOutError.create(toString() + '.getWays: one dimension array expected');
   s := 'ways='+idArrayToAnsiStr(narr);
-  result := fetchObjects('POST', '/api/0.6/ways', s);
+  result := fetchObjects('GET', '/api/0.6/ways'+s,'');
   if not varIsArray(result) then begin
     if varIsType(result,varDispatch) then
       result:=varArrayOf([result])

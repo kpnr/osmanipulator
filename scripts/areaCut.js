@@ -1,15 +1,15 @@
 //settings start
-var bigMapFile='f:\\db\\osm\\sql\\test.db3';
-var smallMapFile='f:\\db\\osm\\sql\\cutted.db3';
-var exportFileName='f:\\db\\osm\\sql\\cutted.osm';
-var cutBound='relation:337422';
+var bigMapFile='';
+var smallMapFile='';
+var exportFileName='';
+var cutBound='';
 var noImport=true;
 
 var minPolyIntersetionArea=1;//in sq meters
 var minPolySideRatio=0.001;//ratio=Area/(Perimeter^2)*16. Ratios for different shapes are:
 	//sqare r=1
 	//circle r=1.27
-	//eq side triangle r=0.77
+	//equal side triangle r=0.77
 	//rectangle a=1m, b=2m r=0.89
 	//rectangle a=1m, b=1km r=0.004
 	//rectangle a=1m, b=4km r=0.001
@@ -58,6 +58,11 @@ function checkArgs(){
 	if(ar.exists('bound'))cutBound=ar.item('bound');
 	noImport=ar.exists('alreadyimported');
 	echo('Use config:\nsrc='+bigMapFile+'\ndst='+smallMapFile+'\nxml='+exportFileName+'\nbound='+cutBound+'\nalreadyimported='+noImport);
+	if(!(bigMapFile && smallMapFile && cutBound)){
+		help();
+		echo('\nInvalid arguments. Exiting');
+		return false;
+	};
 	return true;
 };
 
@@ -75,7 +80,7 @@ function removeChildPoly(icptRelList,hDstMap,hSrcMap){
 			var rmem=rel.members.getAll().toArray();
 			for(var rmemi=0;rmemi<rmem.length;rmemi+=3){
 				if(rmem[rmemi]!='relation')continue;//non-relation member can`t be a multipoly
-				if(rmem[rmemi+2]=='subarea')continue;//subarea is not geometry entity, but administrative
+				if(h.indexOf(['','outer','inner','enclave','exclave'],rmem[rmemi+2])<0)continue;//not geometry entity, skip it
 				rid=rmem[rmemi+1];
 				icptRelList.remove(rid);
 				rstack.push(rid);
@@ -110,7 +115,7 @@ function intersectMultipoly(rel,cutter,usedWayList,notUsedWayList,incompleteWayL
 		var rs=[],r=rel,rm=r.members.getAll().toArray(),map=hSmallMap.map;
 		for(var i=0;i<rm.length;i+=3){
 			//skip nodes and ways
-			if((rm[i]=='relation')&&(rm[i+2]!='subarea')){
+			if((rm[i]=='relation')&&(h.indexOf(['','outer','inner','enclave','exclave'],rm[i+2])>=0)){
 				//process subrelations
 				var sr=map.getRelation(rm[i+1]);
 				if(!sr){
@@ -455,6 +460,9 @@ function main(){
 	h.man.logger={log:function(s){echo('OSMan: '+s)}};
 	var funcName='areaCut.main: ';
 	if(!checkArgs())return;
+	cutBound=cutBound.split(',');
+	if(!cutBound.length)throw funcName+'empty bounds';
+	/*create/restore backup DB if map created elsewhere 
 	if(noImport){
 		if(h.fso.fileExists(smallMapFile+'.bak')){
 				echot('Copy file from backup');
@@ -463,12 +471,11 @@ function main(){
 				echot('Copy file to backup');
 				h.fso.copyFile(smallMapFile,smallMapFile+'.bak',true);
 		};
-	};
+	};*/
 	var hBigMap=h.mapHelper(),hSmallMap=h.mapHelper();
 	hBigMap.open(bigMapFile,false,true);//no recreation, read-only
-	cutBound=cutBound.split(',');
+	var mpr=h.getMultiPoly(cutBound,hBigMap.map);
 	var bPoly=h.gt.createPoly();
-	if(!cutBound.length)throw funcName+'empty bounds';
 	for(var i=0;i<cutBound.length;i++){
 		var bound=hBigMap.getObject(cutBound[i]);
 		if(!bound) throw funcName+'boundary object not found='+cutBound[i];
@@ -504,8 +511,8 @@ function main(){
 			usedWayList.add(bound.id)
 		}else{//bound is relation
 			var wl=(h.polyIntersector(hBigMap,hSmallMap,bPoly)).buildWayList(bound);
-			for(var i=0;i<wl.length;i++){
-				usedWayList.add(wl[i].id);
+			for(var j=0;j<wl.length;j++){
+				usedWayList.add(wl[j].id);
 			};
 		};
 	}
@@ -517,6 +524,7 @@ function main(){
 	var cutter=h.polyIntersector(hBigMap,hSmallMap,bPoly);
 	while(!rlist.eos){
 		var rid=rlist.read(1).toArray()[0],rel=hBigMap.map.getRelation(rid);
+		if(rid!=151234)continue;//$$$
 		if(!rel){
 			echo('	relation '+rid+' not found. Deleted.');
 			rel=hSmallMap.map.createRelation();
@@ -575,5 +583,11 @@ function main(){
 	h.man.logger=0;
 };
 
+try{
 main();
-//WScript.sleep(1e4);
+}catch(e){
+	echo('Exception name='+e.name+' message='+e.message+' description='+e.description+' number='+e.number);
+	echo('press Enter');
+	WScript.stdIn.readLine();
+	WScript.quit(1);
+};

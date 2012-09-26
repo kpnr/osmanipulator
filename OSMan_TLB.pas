@@ -12,7 +12,7 @@ unit OSMan_TLB;
 // ************************************************************************ //
 
 // PASTLWTR : 1.2
-// File generated on 29.04.2012 0:29:32 from Type Library described below.
+// File generated on 26.09.2012 22:12:57 from Type Library described below.
 
 // ************************************************************************  //
 // Type Lib: C:\work\osm2russa\OSMan\OSMan.tlb (1)

@@ -5,7 +5,7 @@ unit uOSManApplication;
 interface
 
 uses
-  StrUtils, uModule, TntClasses, TntSysUtils, Windows, ComServ, ComObj, ActiveX, OSMan_TLB,
+  uModule, TntClasses, TntSysUtils, Windows, ComServ, ComObj, ActiveX, OSMan_TLB,
   SysUtils, StdVcl, Variants, uOSMCommon;
 
 implementation
@@ -64,7 +64,7 @@ var
 begin
   result := nil;
   cl := nil;
-  i := posEx('.', ObjClassName, 2);
+  i := posEx('.', ObjClassName, 2,high(integer));
   if i > 0 then begin
     //full name 'module.class'
     ws := copy(ObjClassName, 1, i - 1);
