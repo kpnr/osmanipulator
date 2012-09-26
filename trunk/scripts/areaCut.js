@@ -524,7 +524,6 @@ function main(){
 	var cutter=h.polyIntersector(hBigMap,hSmallMap,bPoly);
 	while(!rlist.eos){
 		var rid=rlist.read(1).toArray()[0],rel=hBigMap.map.getRelation(rid);
-		if(rid!=151234)continue;//$$$
 		if(!rel){
 			echo('	relation '+rid+' not found. Deleted.');
 			rel=hSmallMap.map.createRelation();
