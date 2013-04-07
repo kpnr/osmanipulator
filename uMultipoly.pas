@@ -6,6 +6,7 @@ uses uInterfaces, uOSMCommon, uModule, Math, SysUtils, Classes, Variants, uDataS
 const
   //threshold for 'same node' detection in getIntersection routines.
   minPtDist = 0.1; //0.1 meter=10 cm
+  minPtDist2 = minPtDist * minPtDist;
 
 type
   TGTShape = class(TObject)
@@ -47,7 +48,9 @@ type
     //return true if pt is about DistM meters from this point
     function distTest(pt: TGTPoint; const DistM: single): boolean;
     function fastDistM(pt: TGTPoint): double; //returns sqrt(fastDistSqrM)
-    function fastDistSqrM(pt: TGTPoint): double; //returns dist^2.
+    function fastDistSqrM(pt: TGTPoint): double; overload; //returns dist^2.
+    function fastDistSqrM(pt2, pt3: TGTPoint): double; overload;
+      //returns distance to segment linear pt1,pt2.
     function hasSameCoords(pt: TGTPoint): boolean;
     procedure assignNode(aNode: OleVariant);
     procedure midPoint(pt: TGTPoint);
@@ -225,8 +228,15 @@ type
     //before: dst=((a,b),(b,c),[c,d]) src=((z,x),[d,e],(e,f))
     //after:  dst=((a,b),(b,c),(c,d),[d,e]) src=((z,x),[e,f]) result=true
     function addSeg(src: TDualLinkedRing): boolean;
+    //true if aSeg is [last,beforeLast] or [beforeLast,last]
+    function isBackStepSegment(const aSeg:TSegDesc):boolean;overload;
+    function isBackStepSegment(const id1,id2:int64):boolean;overload;
     function isClosedPoly(): boolean;
+    //delete segment till <last> node id become less or equal to <limit>
+    // or first segment reached. At least one segment deleted if polygon not empty
+    procedure deleteAllUpper(limit: int64);
     procedure deleteChain(); //delete all segments from last to first inclusive
+    procedure deleteLast(); //delete last segment
     property first: int64 read first1;
     property last: int64 read last2;
     property beforeLast: int64 read last1;
@@ -488,6 +498,86 @@ asm
   fiadd TGTPoint(edx).fx
   fmulp st(1),st(0)
   fistp TGTPoint(eax).fx
+end;
+
+function TGTPoint.fastDistSqrM(pt2, pt3: TGTPoint): double;
+const
+  intToM_sqr: single = cIntToM * cIntToM;
+var
+  d12_2, d13_2, d23_2, d2, d: double;
+begin
+  d12_2 := fastDistSqrM(pt2);
+  d13_2 := fastDistSqrM(pt3);
+  d23_2 := pt2.fastDistSqrM(pt3);
+  d2 := d13_2 - d12_2;
+  if (d23_2 <= d2) then
+    d := d12_2
+  else if (d23_2 <= -d2) then
+    d := d13_2
+  else if (d23_2 < 1E-4) then
+    d := d12_2
+  else begin
+    //bad algorithm for very long segment(2,3) and short(1,4)
+    //segment(1,4) is height of triangle 1,2,3 from point 1 to segment(2,3)
+    //distance from 1 to segment(2,3) is length of segment(1,4)
+    //   /1\
+    //  / | \
+    // /  |  \
+    //2---4---3
+    //1.d24^2==d12^2-d14^2
+    //2.d14^2==d13^2-(d23-d24)^2
+    //  d14^2==d13^2-(d23^2-2*d23*d24+d24^2)
+    //3.From 1 & 2:
+    //  d14^2==d13^2-(d23^2-2*d23*sqrt(d12^2-d14^2)+d12^2-d14^2)
+    //  d14^2==d13^2-d23^2+2*d23*sqrt(d12^2-d14^2)-d12^2+d14^2
+    //  0==d13^2-d23^2+2*d23*sqrt(d12^2-d14^2)-d12^2
+    //  2*d23*sqrt(d12^2-d14^2)==d23^2-(d13^2-d12^2)
+    //  sqrt(d12^2-d14^2)==(d23^2-(d13^2-d12^2))/(2*d23)
+    //d := (d23_2 - d2) / (2 * sqrt(d23_2));
+    //  substitute d for (d23^2-(d13^2-d12^2))/(2*d23)
+    //  sqrt(d12^2-d14^2)==d
+    //  d12^2-d14^2==d^2
+    //  d14^2==d12^2-d^2
+    //d := abs(d12_2 - d * d);
+
+    //more better algorithm
+    //d:=1.0*(pt2.x-x)*(pt2.y+y)+1.0*(pt3.x-pt2.x)*(pt3.y+pt2.y)+1.0*(x-pt3.x)*(y+pt3.y);
+    //d:=d*cos(y*cIntToRad)*cIntToM*cIntToM;
+    //d:=d*d/d23_2;
+    asm
+      mov eax,self
+      mov ecx,pt2
+      mov edx,pt3
+      fild TGTPoint(eax).fx     //x1
+      fild TGTPoint(ecx).fx      //x1 x2
+      fild TGTPoint(edx).fx      //x1 x2 x3
+      fld st(1)        //x1 x2 x3 x2
+      fsub st(0),st(3) //x1 x2 x3 dx21
+      fxch st(1)       //x1 x2 dx21 x3
+      fsub st(2),st(0) //x1 dx23 dx21 x3
+      fsubp st(3),st(0)//dx13 dx23 dx21
+      fild TGTPoint(eax).fy     //dx13 dx23 dx21 y1
+      fild TGTPoint(ecx).fy      //dx13 dx23 dx21 y1 y2
+      fild TGTPoint(edx).fy      //dx13 dx23 dx21 y1 y2 y3
+      fld st(2)        //dx13 dx23 dx21 y1 y2 y3 y1
+      fadd st(0),st(2) //dx13 dx23 dx21 y1 y2 y3 y12
+      fmulp st(4),st(0)//dx13 dx23 xy21 y1 y2 y3
+      fadd st(2),st(0) //dx13 dx23 xy21 y13 y2 y3
+      faddp st(1),st(0)//dx13 dx23 xy21 y13 y23
+      fmulp st(3),st(0)//dx13 -xy32 xy21 y13
+      fmulp st(3),st(0)//xy13 -xy32 xy21
+      fsubp st(1),st(0)//xy13 -xy32-xy21
+      fsubp st(1),st(0)//xy13+xy32+xy21. Note it as S.
+      fmul intToM_sqr  //S*(intToM^2)
+      fild TGTPoint(eax).fy     //S*(intToM^2) lat1
+      call _fastCosDegScaled
+      fmulp st(1),st(0)//S*(intToM^2)*cos(lat1) - something like an area
+      fmul st(0),st(0) //A^2
+      fdiv d23_2       //A^2 / dist(2,3)^2
+      fstp d           //store result
+    end;
+  end;
+  result := d;
 end;
 
 { TGTRect }
@@ -805,17 +895,25 @@ function TGTPoly.isIn(const pt: TGTPoint): integer;
 
   function intersects(const a, e1, e2: TGTPoint): integer;
     //precondition: (a.x between e1.x and e2.x) & (a.y between e1.y and e2.y)
+    //result=0 if line ((a.x,a.y),(+inf,a.y)) do not intersects edge (e1,e2)
+    //result=1 if a lais exactly on edge(e1,e2)
+    //result=2 if line ((a.x,a.y),(+inf,a.y)) intersects edge (e1,e2)
   var
     k: double;
     x: integer;
   begin
+    if (a.fastDistSqrM(e1, e2) <= minPtDist2) then begin
+      //report too close to bound nodes as `on-bound`
+      result := 1;
+      exit;
+    end;
     //line equation x=k*y+b
     //k=dx/dy
-    //b=x1-k*y1
     k := e1.fx;
     k := (k - e2.fx) / (e1.fy - e2.fy); //we can add/subtract fy
-    //b:=;
-    x := round(k * a.fy + e1.fx - k * e1.fy);
+    //b=x1-k*y1
+    //xa=k*ya+b=k*ya+x1-k*y1=k*(ya-y1)+x1
+    x := round(k * (a.fy - e1.fy) + e1.fx);
     result := ord(a.fx = x) + 2 * ord(a.fx < x);
   end;
 var
@@ -1512,6 +1610,7 @@ function TMultiPoly.getLineIntersection(const aMap,
   aNodeArray: OleVariant; newNodeId: int64): OleVariant;
 
 type
+  TNodeState = (nsNone, nsOut, nsOn, nsIn, nsBreak);
   PWayNodeDesc = ^TWayNodeDesc;
 
   TWayNodeDesc = record
@@ -1519,10 +1618,18 @@ type
     point: TGTPoint;
     bRect: TGTRect;
     pNextNode: PWayNodeDesc;
-    isIn: Shortint;
+    state: TNodeState;
   end;
 
   TWayNodeDescArray = array of TWayNodeDesc;
+
+  procedure fillOsmanNodeTags(aNode: OleVariant; nodeListIdx: integer);
+  begin
+    aNode.tags.setByKey('osman:node1', nodeList.items
+      [nodeListIdx].obj.id);
+    aNode.tags.setByKey('osman:node2', nodeList.items
+      [nodeListIdx + 1].obj.id);
+  end;
 
 var
   waySegList: array of PWayNodeDesc;
@@ -1569,6 +1676,69 @@ var
       end;
       includeSegment(pWND1);
     end;
+  end;
+
+  procedure makeSegmentTests(w: PWayNodeDesc);
+  var
+    pStart, pEnd, pCur: PWayNodeDesc;
+    middle: TGTPoint;
+    lineState: TNodeState;
+  begin
+    middle := nil;
+    pCur := w;
+    pStart := pCur;
+    lineState := nsNone;
+    while assigned(pCur) do begin
+      //we find a break node (start, end or intersection)
+      if ((pCur.state = nsBreak) or (not assigned(pCur.pNextNode))) then begin
+        if (assigned(pStart)) then begin
+          //we have active line of segments, so need to detect state
+          pEnd := pCur;
+          pCur := pStart;
+          //try to detect state in regular nodes
+          while (lineState = nsNone) do begin
+            case isInInt(pCur.point) of
+              0: lineState := nsOut;
+              2: lineState := nsIn;
+            end;
+            if(pCur = pEnd) then
+              break;
+            pCur := pCur.pNextNode;
+          end;
+          pCur := pStart;
+          //try to detect state in intermediate nodes
+          while (pCur <> pEnd) and (lineState = nsNone) do begin
+            if (not assigned(middle)) then
+              middle := TGTPoint.create();
+            middle.x := pCur.point.x;
+            middle.y := pCur.point.y;
+            middle.midPoint(pCur.pNextNode.point);
+            case isInInt(middle) of
+              0: lineState := nsOut;
+              2: lineState := nsIn;
+            end;
+            pCur := pCur.pNextNode;
+          end;
+          if (lineState = nsNone) then begin
+            //regular and middle point test fails, so all nodes between start
+            // and end are on-bound :-(
+            lineState := nsOn;
+          end;
+          if (lineState in [nsOn, nsIn]) then begin
+            pCur := pStart;
+            while (pCur <> pEnd) do begin
+              includeSegment(pCur);
+              pCur := pCur.pNextNode;
+            end;
+          end;
+          pCur := pEnd;
+        end;
+        pStart := pCur;
+        lineState := nsNone;
+      end;
+      pCur := pCur.pNextNode;
+    end;
+    freeAndNil(middle);
   end;
 
   procedure freeWaySeg();
@@ -1618,10 +1788,10 @@ var
       try
         while j > 0 do begin
           pv^ := pWND1.node;
-          if (pWND1.isIn = 1) and (
-            (pWND1 = pWND) {last segment node} or
+          if ((pWND1.state=nsBreak)and {way-bound intersection point}
+            ((pWND1 = pWND) {last segment node} or
             (pWND1 = pWND.pNextNode) {first segment node}
-            ) then begin
+            )) then begin
             pv^.tags.setByKey('osman:note', 'boundary');
           end;
           pWND1 := pWND1.pNextNode;
@@ -1635,13 +1805,7 @@ var
     end;
   end;
 
-  procedure markNode(const pN: PWayNodeDesc; const isInState: Shortint);
-  begin
-    if pN.isIn < isInState then pN.isIn := isInState;
-  end;
-
 var
-  prevIsIn: Shortint;
   simplePolyIdx, polySegmentIdx, i, nWayNodes, nodeListIdx: integer;
   p1, p2, i0: TGTPoint;
   polyPoints: TGTPointArray;
@@ -1667,6 +1831,7 @@ begin
   try
     polySegmentBRect := TGTRect.create();
     for i := nWayNodes - 1 downto 0 do begin
+      //make wayPoints list - from end downto beginning
       new(pWND);
       fillchar(pWND^, sizeof(pWND^), 0);
       pWND.pNextNode := wayPoints;
@@ -1676,14 +1841,17 @@ begin
       v := aNodeArray[i];
       p1.assignNode(v);
       wayPoints.node := v;
-      wayPoints.isIn := -1;
+      wayPoints.state := nsNone;
       wayBRect.updateBoundRect(p1);
       //first segment index is 1!
-      if (assigned(wayPoints.pNextNode)) then with wayPoints.pNextNode^ do begin
+      if (assigned(wayPoints.pNextNode)) then begin
+        with wayPoints.pNextNode^ do begin
+          //segment and bRect for [NodeX-1,NodeX]
           bRect := TGTRect.create();
           bRect.updateBoundRect(wayPoints.point);
           bRect.updateBoundRect(point);
         end;
+      end;
     end;
     nodeListIdx := 0;
     for simplePolyIdx := 0 to high(simplePolyList) do begin
@@ -1691,9 +1859,11 @@ begin
       if not wayBRect.canIntersects(simplePolyList[simplePolyIdx]) or
         (simplePolyList[simplePolyIdx].count < 3) then
         continue;
+      //current boundary poly can intersect our way, so check it
       polyPoints := simplePolyList[simplePolyIdx].fPoints;
       p2 := polyPoints[0];
       for polySegmentIdx := 1 to simplePolyList[simplePolyIdx].count - 1 do begin
+        //check every segment in boundary poly
         p1 := p2;
         p2 := polyPoints[polySegmentIdx];
         polySegmentBRect.resetBounds();
@@ -1701,8 +1871,10 @@ begin
         polySegmentBRect.updateBoundRect(p2);
         if not wayBRect.canIntersects(polySegmentBRect) then
           continue;
+        //segment can intersect way
         pWND := wayPoints;
         while assigned(pWND) do begin
+          //now check all segments in way and current bound segment
           pWND2 := pWND;
           pWND := pWND.pNextNode;
           if not (assigned(pWND) and polySegmentBRect.canIntersects(pWND.bRect)) then
@@ -1712,11 +1884,13 @@ begin
           if assigned(i0) then begin
             //test for distance and store point between pWND2 and pWND
             if (i0.distTest(pWND2.point, minPtDist)) then begin
-              markNode(pWND2, 1);
+              pWND2.state := nsBreak;
+              fillOsmanNodeTags(pWND2.node, nodeListIdx + polySegmentIdx - 1);
               freeAndNil(i0);
             end
             else if (i0.distTest(pWND.point, minPtDist)) then begin
-              markNode(pWND, 1);
+              pWND.state := nsBreak;
+              fillOsmanNodeTags(pWND.node, nodeListIdx + polySegmentIdx - 1);
               freeAndNil(i0);
             end
             else begin
@@ -1725,14 +1899,11 @@ begin
               with pWND2.pNextNode^ do begin
                 pNextNode := pWND;
                 node := makeNewNode(i0);
-                node.tags.setByKey('osman:node1', nodeList.items
-                  [nodeListIdx + polySegmentIdx - 1].obj.id);
-                node.tags.setByKey('osman:node2', nodeList.items
-                  [nodeListIdx + polySegmentIdx].obj.id);
+                fillOsmanNodeTags(node, nodeListIdx + polySegmentIdx - 1);
                 point := i0;
                 i0 := nil;
                 bRect := TGTRect.create();
-                isIn := 1; //new node, so we can mark it directly
+                state := nsBreak; //new node, so we can mark it directly
                 bRect.updateBoundRect(pWND2.point);
                 bRect.updateBoundRect(point);
                 pWND.bRect.resetBounds();
@@ -1747,46 +1918,7 @@ begin
     end;
     //now wayPoints contains new way segments
     //test segments if they is in or is out of boundary
-    pWND := wayPoints;
-    prevIsIn := -1;
-    while assigned(pWND) do begin
-      if (pWND.isIn = -1) then begin
-        case prevIsIn of
-          -1, 1:
-            pWND.isIn := isInInt(pWND.point); //pWND.isIn==-1, so mark it directly
-          //all boundary points marked with IsIn=1, so pWND can not be on-bound
-          0, 2: pWND.isIn := prevIsIn; //pWND.isIn==-1, so mark it directly
-        else
-          raise EIntOverflow.create(toString() + '.getIntersection: invalid isin=' +
-            inttostr(prevIsIn));
-        end;
-      end;
-      prevIsIn := pWND.isIn;
-      pWND := pWND.pNextNode;
-    end;
-    pWND := wayPoints;
-    pWND2 := pWND.pNextNode;
-    while assigned(pWND2) do begin
-      i := pWND.isIn * 4 + pWND2.isIn;
-      case i of
-        0, 1, 4 {'out-bound' segment}: {do not include this segment};
-        5 {'bound-bound' segments}: begin
-            if not assigned(i0) then
-              i0 := TGTPoint.create();
-            i0.x := pWND.point.x;
-            i0.y := pWND.point.y;
-            i0.midPoint(pWND2.point);
-            if isInInt(i0) > 0 then
-              includeSegment(pWND);
-          end;
-        6, 9, 10 {'bound-in' or 'in-in' segments}: includeSegment(pWND);
-      else
-        //2, 8, {'out-in' - get a bug???}
-        raise EIntOverflow.create(toString() + '.getIntersection: invalid case=' + inttostr(i));
-      end;
-      pWND := pWND2;
-      pWND2 := pWND2.pNextNode;
-    end;
+    makeSegmentTests(wayPoints);
     result := makeResult();
   finally
     freeAndNil(wayBRect);
@@ -2144,7 +2276,6 @@ var
       curList, resList: TDualLinkedRing;
       curTest, resTest: TIsInTestProc;
       pSeg: PSegDesc;
-      bmReverseSeg: pointer;
 
       procedure swapLists();
       var
@@ -2157,31 +2288,14 @@ var
         tmpTest := curTest;
         curTest := resTest;
         resTest := tmpTest;
-        bmReverseSeg := nil;
       end;
 
       procedure deleteSeg();
       begin
-        //debugPrint('del seg ('+inttostr(pSeg.pNode1^.id)+'-'+inttostr(pSeg.pNode2^.id)+')');//$$$
+        //debugPrint('del seg ('+floattostr(pSeg.pNode1^.id)+'-'+floattostr(pSeg.pNode2^.id)+')');//$$$
         assert(pSeg = curList.data, '{5F0D288C-F5F7-485C-BB60-14C3B4F88D69}');
         freeAndNilSeg(pSeg);
-        if (curList.bookmark = bmReverseSeg) then
-          bmReverseSeg := nil;
         curList.delete();
-      end;
-
-      procedure freeReverseSeg();
-      var
-        bm: pointer;
-      begin
-        if not assigned(bmReverseSeg) then
-          exit;
-        bm := curList.bookmark;
-        assert(bm <> bmReverseSeg, '{018D7BAB-065A-44D4-87E3-8A9C26778A2F}');
-        curList.bookmark := bmReverseSeg;
-        freeSeg(curList.delete());
-        curList.bookmark := bm;
-        bmReverseSeg := nil;
       end;
 
     var
@@ -2197,7 +2311,6 @@ var
       resList := slB;
       curTest := isInInt;
       resTest := polyA.isIn;
-      bmReverseSeg := nil;
       if curList.isEmpty() then
         swapLists();
       pb := TPolyBuilder.create(r);
@@ -2249,17 +2362,19 @@ var
                 end;
             end;
           end;
-          if not assigned(pSeg) then
+          if (not assigned(pSeg)) then
             continue;
           i641 := pSeg.pNode1^.id;
           i642 := pSeg.pNode2^.id;
+          if(pb.isBackStepSegment(i641,i642))then begin
+            deleteSeg();
+            continue;
+          end;
           if (i641 = pb.last) then begin
-            freeReverseSeg();
             pb.addSeg(curList);
           end
           else if (i642 = pb.last) then begin
             reverseSeg(pSeg);
-            freeReverseSeg();
             pb.addSeg(curList);
             if not curList.isEmpty() then
               curList.prev();
@@ -2277,43 +2392,44 @@ var
               i641 := pSeg.pNode1^.id;
               i642 := pSeg.pNode2^.id;
               if (i641 = pb.last) or (i642 = pb.last) then begin
-                if ((i641 = pb.last) and (i642 = pb.beforeLast)) or
-                  ((i642 = pb.last) and (i641 = pb.beforeLast)) then begin
-                  bmReverseSeg := curList.bookmark;
+                //we find next segment
+                if (pb.isBackStepSegment(i641,i642)) then begin
+                  //'backstep' segment. Delete & continue search.
+                  deleteSeg();
+                  continue;
                 end
                 else begin
-                  freeReverseSeg();
+                  //continue poly building
                   break;
                 end;
               end;
               if (bm = curList.bookmark) then begin
-                if assigned(bmReverseSeg) then begin
-                  //we find nothing except reverse seg, so try it :-(
-                  curList.bookmark := bmReverseSeg;
-                  bmReverseSeg := nil;
-                  break;
-                end;
+                //all segemnts in current list are analized.
                 inc(i);
                 if not resList.isEmpty() then
+                  //try to search in alternative list
                   swapLists()
                 else begin
                   inc(i); //we have only one list - count it twice(to remove non-poly tail from r)
                   break;
                 end;
+                //remove `list start` bookmark
                 bm := nil;
-                bmReverseSeg := nil;
               end
               else begin
                 if not assigned(bm) then
+                  //mark list start
                   bm := curList.bookmark;
                 curList.next();
               end;
             until (i > 1);
             if (i > 1) then begin
               //both list have no next segment for polygon.
-              //We should delete all segments to Seg.pNode1.id==firstId
-              pb.deleteChain();
-              break; //we can`t build poly, so stop and exit
+              //step back if possible and try agane
+              if not pb.isEmpty then
+                pb.deleteLast();
+              if (pb.isEmpty) then
+                break; //we can`t build poly, so stop and exit
             end;
           end;
         end;
@@ -2388,13 +2504,13 @@ var
         if not assigned(bm) then
           bm := slA.bookmark;
         if [sfOnBound1, sfOnBound2] = pSeg.flags then begin
+          bm := nil;
           pt.x := pSeg.pPoint1.x;
           pt.y := pSeg.pPoint1.y;
           pt.midPoint(pSeg.pPoint2);
           if isInInt(pt) > 0 then begin
             include(pSeg.flags, sfVisited);
             buildPolygon(result);
-            bm := nil;
             continue;
           end
           else begin
@@ -3047,7 +3163,7 @@ begin
         0: begin
             exit;
           end;
-        1: if i = 2 then
+        1: if i > 2 then
             case triangleTest(less.fPoints[i - 2], less.fPoints[i - 1], less.fPoints[i],
               midPoint, less.isIn, greater.isIn) of
               0: begin
@@ -3162,7 +3278,7 @@ begin
     end
     else begin
       //not first and not last
-      //debugPrint('add seg ('+inttostr(pSeg.pNode1^.id)+'-'+inttostr(pSeg.pNode2^.id)+')');//$$$
+      //debugPrint('add seg ('+inttostr(id1)+'-'+inttostr(id2)+')');
       dst.insert(pSeg);
       last1 := id1;
       last2 := id2;
@@ -3178,30 +3294,61 @@ begin
   bmFirst := nil;
 end;
 
-procedure TPolyBuilder.deleteChain;
+procedure TPolyBuilder.deleteAllUpper(limit: int64);
+begin
+  if isEmpty then exit;
+  //we have atleast one
+  repeat
+    deleteLast();
+  until (last <= limit) or isEmpty;
+end;
+
+procedure TPolyBuilder.deleteChain();
+begin
+  while not isEmpty do begin
+    deleteLast();
+  end;
+end;
+
+procedure TPolyBuilder.deleteLast();
 var
   pSeg: PSegDesc;
 begin
-  if isEmpty then
-    exit;
-  pSeg := nil;
-  while true do begin //we can skip IsEmpty check - r has at least one segment
-    pSeg := dst.delete();
-    if (pSeg.pNode1^.id = first1) then
-      break //we find the beginning
-    else
-      freeSeg(pSeg); //delete and try prev
-    dst.prev(); //if pSeg.pNode1^.id<>firstId then we have at least one segment in list
-  end;
+  assert(not isEmpty, '{AE3B928C-8847-4231-84C8-C061B9E17C4D}');
+  pSeg := dst.delete();
+  last2 := pSeg.pNode1^.id; //first node of deleted segment is second node of last.
+  fIsEmpty := last2 = first1; //Is it first segment?
   freeSeg(pSeg);
-  if not dst.isEmpty() then begin
-    dst.prev();
+  if (isEmpty) then begin
+    last2 := first2;
   end;
+  if (not dst.isEmpty()) then begin
+    pSeg := dst.prev();
+    last1 := pSeg.pNode1^.id;
+  end;
+end;
+
+function TPolyBuilder.isBackStepSegment(const aSeg: TSegDesc): boolean;
+var
+  id1,id2:int64;
+begin
+  id1:=aSeg.pNode1^.id;
+  id2:=aSeg.pNode2^.id;
+  result:=isBackStepSegment(id1,id2);
+end;
+
+function TPolyBuilder.isBackStepSegment(const id1, id2: int64): boolean;
+begin
+  result:=(not(isEmpty)) and (
+    ((id1=last)and(id2=beforeLast))
+    or
+    ((id1=beforeLast)and(id2=last))
+    );
 end;
 
 function TPolyBuilder.isClosedPoly: boolean;
 begin
-  result := (not isEmpty) and (first1 = last2);
+  result := (not isEmpty) and (first = last);
 end;
 
 end.

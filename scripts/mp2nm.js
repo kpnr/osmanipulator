@@ -56,9 +56,9 @@ function main(){
 		echot('Loading boundary...');
 		gme.open(boundMpName,true,true);
 		echo(gme.messageLog);
-		echot('Saving mp...');
-		gme.saveAs(srcMpName,'polish');
-		echo(gme.messageLog);
+//		echot('Saving mp...');
+//		gme.saveAs(srcMpName,'polish');
+//		echo(gme.messageLog);
 	};
 	echot('Saving nm2...');
 	gme.saveAs(dstNMName,'navitel-nm2');

@@ -211,7 +211,7 @@ begin
   exec('CREATE TABLE IF NOT EXISTS nodes_attr (' +
     'id INTEGER PRIMARY KEY AUTOINCREMENT,' +
     'version INTEGER DEFAULT 1 NOT NULL,' +
-    'timestamp VARCHAR(20),' +
+    'timestamp BIGINT DEFAULT 20000101000011,' +
     'userid INTEGER DEFAULT 0,' +
     'changeset BIGINT)');
 
@@ -303,7 +303,7 @@ begin
   exec('CREATE TABLE IF NOT EXISTS ways (' +
     'id INTEGER PRIMARY KEY AUTOINCREMENT,' +
     'version INTEGER DEFAULT 1 NOT NULL,' +
-    'timestamp VARCHAR(20),' +
+    'timestamp BIGINT DEFAULT 20000101000012,' +
     'userid INTEGER DEFAULT 0,' +
     'changeset BIGINT)');
   exec('CREATE TRIGGER IF NOT EXISTS ways_bu BEFORE UPDATE ON ways BEGIN ' +
@@ -358,7 +358,7 @@ begin
   exec('CREATE TABLE IF NOT EXISTS relations (' +
     'id INTEGER PRIMARY KEY AUTOINCREMENT,' +
     'version INTEGER DEFAULT 1 NOT NULL,' +
-    'timestamp VARCHAR(20),' +
+    'timestamp BIGINT DEFAULT 20000101000013,' +
     'userid INTEGER DEFAULT 0,' +
     'changeset BIGINT)');
   exec('CREATE TRIGGER IF NOT EXISTS relations_bu BEFORE UPDATE ON relations BEGIN ' +

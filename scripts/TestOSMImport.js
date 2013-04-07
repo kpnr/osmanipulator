@@ -1,6 +1,6 @@
 //settings
-var srcOSMName='f:\\db\\osm\\regions\\sahalin.osm';
-var destDBName='f:\\db\\osm\\regions\\sahalin.db3';
+var srcOSMName='f:\\db\\osm\\sql\\debug_o.osm';
+var destDBName='f:\\db\\osm\\sql\\debug_o.db3';
 //settings end
 var re=/wscript/i;
 if (WScript.FullName.search(re)>=0){

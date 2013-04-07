@@ -454,7 +454,7 @@ function TMapObjHandler.readObjAttributes(atts: IAttributes):boolean;
   end;
 
 begin
-  result:=atts.getValue('visible')<>'false';
+  result:=(atts.getValue('visible')<>'false')and(atts.getValue('action')<>'delete');
   if not result then begin
     mapObj:=Unassigned;
     exit;
@@ -617,8 +617,11 @@ begin
 end;
 
 function TOSMWriter.getObjAtts(const mapObject: OleVariant): UTF8String;
+var
+  i64:int64;
 begin
-  result := 'id="' + IntToStr(mapObject.id) + '" version="' + IntToStr(mapObject.version) +
+  i64:=mapObject.id;
+  result := 'id="' + IntToStr(i64) + '" version="' + IntToStr(mapObject.version) +
     '" timestamp="' + mapObject.timestamp + '" uid="' + IntToStr(mapObject.userId) +
     '" user="' + UTF8Encode(quote(mapObject.userName)) + '" changeset="' +
     IntToStr(mapObject.changeset) + '"';

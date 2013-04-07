@@ -111,9 +111,9 @@ type
   protected
     //IKeyList
     fTags: OleVariant;
-    fId, fChangeset: int64;
+    fId, fChangeset, fTimeStamp: int64;
     fVersion, fUserId: integer;
-    fUserName, fTimeStamp: WideString;
+    fUserName: WideString;
   public
     function get_tags: OleVariant;
     procedure set_tags(const newTags: OleVariant);
@@ -155,9 +155,9 @@ type
     function get_lon: double;
     procedure set_lon(const value: double);
   published
-    //node latitude. If out of bounds [-90...+90] exception raised
+    //node latitude. If out of bounds [-91...+91] exception raised
     property lat: double read get_lat write set_lat;
-    //node longitude. If out of bounds [-180...180] exception raised
+    //node longitude. If out of bounds [-181...181] exception raised
     property lon: double read get_lon write set_lon;
   end;
 
@@ -360,13 +360,17 @@ begin
   result := false;
   if qr.eos then exit;
   row := qr.read(1);
-  result := createNode;
+  result := createNode();
   result.id := row[0];
   result.version := row[1];
   result.userId := row[2];
   result.userName := row[3];
   result.changeset := row[4];
-  result.timestamp := row[5];
+  t:=row[5];
+  if VarIsType(t,varOleStr)and(length(WideString(t))<>length('20001010230023')) then
+    result.timestamp := t
+  else
+    result.timestamp:=timeStampToWideString(t);
   result.lat := intToDeg(row[6]);
   result.lon := intToDeg(row[7]);
   if VarIsNull(row[8]) then
@@ -429,7 +433,11 @@ begin
   result.userId := row[2];
   result.userName := row[3];
   result.changeset := row[4];
-  result.timestamp := row[5];
+  t:=row[5];
+  if VarIsType(t,varOleStr) then
+    result.timestamp := t
+  else
+    result.timestamp:=timeStampToWideString(t);
   if not VarIsNull(row[6]) then begin
     //relation has tags
     t := result.tags;
@@ -501,7 +509,11 @@ begin
   result.userId := row[2];
   result.userName := row[3];
   result.changeset := row[4];
-  result.timestamp := row[5];
+  t:=row[5];
+  if VarIsType(t,varOleStr) then
+    result.timestamp := t
+  else
+    result.timestamp:=timeStampToWideString(t);
   if not VarIsNull(row[6]) then begin
     //way has tags
     t := result.tags;
@@ -573,7 +585,7 @@ begin
   end;
   fStorage.sqlExec(fQryPutNode, VarArrayOf([':id', ':lat', ':lon', ':version', ':timestamp',
     ':userId', ':userName', ':changeset']),
-      VarArrayOf([id, degToInt(aNode.lat), degToInt(aNode.lon), aNode.version, aNode.timestamp,
+      VarArrayOf([id, degToInt(aNode.lat), degToInt(aNode.lon), aNode.version, wideStringToTimeStamp(aNode.timestamp),
     aNode.userId,
       aNode.userName, aNode.changeset]));
   k := aNode.tags;
@@ -602,7 +614,7 @@ begin
   end;
   fStorage.sqlExec(fQryPutRelation, VarArrayOf([':id', ':version', ':timestamp', ':userId',
     ':userName', ':changeset']),
-      VarArrayOf([id, aRelation.version, aRelation.timestamp, aRelation.userId, aRelation.userName,
+      VarArrayOf([id, aRelation.version, wideStringToTimeStamp(aRelation.timestamp), aRelation.userId, aRelation.userName,
     aRelation.changeset]));
   k := aRelation.tags;
   putTags(id, 2, k.getAll);
@@ -700,7 +712,7 @@ begin
   end;
   fStorage.sqlExec(fQryPutWay, VarArrayOf([':id', ':version', ':timestamp', ':userId', ':userName',
     ':changeset']),
-      VarArrayOf([id, aWay.version, aWay.timestamp, aWay.userId, aWay.userName, aWay.changeset]));
+      VarArrayOf([id, aWay.version, wideStringToTimeStamp(aWay.timestamp), aWay.userId, aWay.userName, aWay.changeset]));
   k := aWay.tags;
   putTags(id, 1, k.getAll);
   k := aWay.nodes;
@@ -783,7 +795,7 @@ end;
 
 function TMapObject.get_timestamp: WideString;
 begin
-  result := fTimeStamp;
+  result := timeStampToWideString(fTimeStamp);
 end;
 
 function TMapObject.get_userId: integer;
@@ -818,7 +830,8 @@ end;
 
 procedure TMapObject.set_timestamp(const newTimeStamp: WideString);
 begin
-  fTimeStamp := newTimeStamp;
+  assert(length(newTimeStamp)=length('2005-07-05T07:18:37Z'),'TMapObject.set_timestamp:Invalid timestamp '+newTimeStamp);
+  fTimeStamp := wideStringToTimeStamp(newTimeStamp);
 end;
 
 procedure TMapObject.set_userId(const newUserId: integer);
@@ -1007,14 +1020,14 @@ end;
 
 procedure TNode.set_lat(const value: double);
 begin
-  if (value > 90) or (value < -90) then
+  if (value > 91) or (value < -91) then
     raise ERangeError.create(toString() + '.set_lat: lat out of range');
   fLat := degToInt(value);
 end;
 
 procedure TNode.set_lon(const value: double);
 begin
-  if (value > 180) or (value < -180) then
+  if (value > 181) or (value < -181) then
     raise ERangeError.create(toString() + '.set_lon: lon out of range');
   fLon := degToInt(value);
 end;
@@ -1476,7 +1489,7 @@ begin
             result := fMap.getRelation(id);
             addRelToList(id);
             if varIsType(result, varDispatch) and checkRelationFilter(result) then begin
-              addToDoList(result.members.getAll);
+              addToDoList(result.members.getAll());
               resultValid := true;
             end;
             if fQry.eos then begin

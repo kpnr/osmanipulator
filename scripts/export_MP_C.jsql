@@ -1,0 +1,27 @@
+j 'Export mulipolies and coastlines'
+create temporary table tblRels (id integer primary key)
+create temporary table tblObjs (id integer primary key)
+create temporary table tblWays (id integer primary key)
+insert or ignore into tblRels(id) select objid>>2 from strobjtags where tagname='type' and (tagvalue in('multipolygon','boundary'))and objid&3=2
+insert or ignore into tblWays(id) select objid>>2 from strobjtags where tagname='natural' and tagvalue='coastline'
+j dst=h.mapHelper();dst.open(srcMapName+'_mpoly.db3',true,false);dst.close();
+COMMIT
+j src.exec('ATTACH "'+srcMapName+'_mpoly.db3" as dst')
+pragma dst.journal_mode=off
+insert into dst.relations select * from relations where id in (select id from tblRels)
+insert into dst.relationmembers select * from relationmembers where relationid in (select id from tblRels)
+insert or ignore into tblWays select memberid from dst.relationmembers where memberidxtype&3=1
+insert into dst.ways select * from ways where id in(select id from tblWays)
+insert into dst.waynodes select * from waynodes where wayid in(select id from tblWays)
+insert into dst.nodes select * from nodes where id in(select nodeid from dst.waynodes)
+insert or ignore into tblObjs select id*4+2 from dst.relations
+insert or ignore into tblObjs select id*4+1 from dst.ways
+insert or ignore into tblObjs select id*4 from dst.nodes
+insert into dst.objtags select * from objtags where objid in (select id from tblObjs)
+insert into dst.tags select * from tags where id in (select tagid from dst.objtags)
+insert or ignore into dst.users select * from users where id in (select userid from dst.nodes)
+insert or ignore into dst.users select * from users where id in (select userid from dst.ways)
+insert or ignore into dst.users select * from users where id in (select userid from dst.relations)
+DETACH dst
+j dst=h.mapHelper();dst.open(srcMapName+'_mpoly.db3',false,true);dst.exportXML(srcMapName+'_mpoly.osm');dst.close();
+q

@@ -76,7 +76,7 @@ var
   non: OleVariant;
   pv: POleVariant;
   i: integer;
-  d12_2, d13_2, d23_2, d2, d: double;
+  d: double;
 begin
   if not assigned(pt1) then pt1 := TGTPoint.create();
   if not assigned(pt2) then pt2 := TGTPoint.create();
@@ -102,20 +102,7 @@ begin
         inc(pv);
         pt3.assignNode(pv^);
         dec(i);
-        d12_2 := pt2.fastDistSqrM(pt1);
-        d13_2 := pt1.fastDistSqrM(pt3);
-        d23_2 := pt2.fastDistSqrM(pt3);
-        d2 := d13_2 - d12_2;
-        if (d23_2 <= d2) then
-          d := d12_2
-        else if (d23_2 <= -d2) then
-          d := d13_2
-        else if (d23_2 < 1E-4) then
-          d := d12_2
-        else begin
-          d := (d23_2 - d2) / (2 * sqrt(d23_2));
-          d := abs(d12_2 - d * d);
-        end;
+        d:=pt1.fastDistSqrM(pt2,pt3);
         if (d < result) then result := d;
       end;
       result := sqrt(result);
@@ -188,9 +175,11 @@ begin
   try
     for i := 0 to h do begin
       pNd^ := aMap.getNode(pId^);
-      if not VarIsType(pNd^, varDispatch) then
-        raise EReadError.create(toString() + '.wayToNodeArray: node ' + inttostr(pId^) +
+      if not VarIsType(pNd^, varDispatch) then begin
+        i64:=pId^;
+        raise EReadError.create(toString() + '.wayToNodeArray: node ' + inttostr(i64) +
           ' not found');
+      end;
       inc(pNd);
       inc(pId);
     end;
