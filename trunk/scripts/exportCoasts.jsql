@@ -1,0 +1,19 @@
+create temporary table coastObjs (id integer primary key)
+create temporary table coastWays (id integer primary key)
+insert or ignore into coastObjs(id) select objid from strobjtags where tagname='natural' and tagvalue='coastline' and objid&3=1
+j dst=h.mapHelper();dst.open(srcMapName+'_coasts.db3',true,false);dst.close();
+COMMIT
+j src.exec('ATTACH "'+srcMapName+'_coasts.db3" as dst')
+pragma dst.journal_mode=off
+insert into coastWays select id>>2 from coastObjs
+insert into dst.ways select * from ways where id in(select id from coastWays)
+insert into dst.waynodes select * from waynodes where wayid in(select id from coastWays)
+insert into dst.nodes select * from nodes where id in(select nodeid from dst.waynodes)
+insert or ignore into coastObjs select id*4 from dst.nodes
+insert into dst.objtags select * from objtags where objid in (select id from coastObjs)
+insert into dst.tags select * from tags where id in (select tagid from dst.objtags)
+insert or ignore into dst.users select * from users where id in (select userid from dst.nodes)
+insert or ignore into dst.users select * from users where id in (select userid from dst.ways)
+DETACH dst
+j dst=h.mapHelper();dst.open(srcMapName+'_coasts.db3',false,true);dst.exportXML(srcMapName+'_coasts.osm');dst.close();
+q

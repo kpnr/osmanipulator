@@ -123,7 +123,7 @@ function clipMap(cfg){
 	objCnt=0;
 	try{
 		while(notFoundObj.length>0){
-			objs=netMap.getNodes(notFoundObj.splice(0,netChunkSize)).toArray();
+			var objs=netMap.getNodes(notFoundObj.splice(0,netChunkSize)).toArray();
 			for(var i=0;i<objs.length;i++){
 				dst.map.putObject(objs[i]);
 				objCnt++;
@@ -158,7 +158,7 @@ function clipMap(cfg){
 	objCnt=0;
 	try{
 		while(notFoundObj.length>0){
-			objs=netMap.getWays(notFoundObj.splice(0,netChunkSize)).toArray();
+			var objs=netMap.getWays(notFoundObj.splice(0,netChunkSize)).toArray();
 			for(var i=0;i<objs.length;i++){
 				dst.map.putObject(objs[i]);
 				objCnt++;

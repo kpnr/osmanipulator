@@ -5,8 +5,13 @@ Hlp members:
 	fso - filesystem object
 	defaultStorage - default storage class name ('Storage')
 	defaultMap - default map class name ('Map');
+	bindFunc(obj,func,staticArguments) - bind function func to object obj with optional static arguments. Usage example:
+		f=bindFunc(myObj,myFunc,'test',1);
+		.....
+		f('tree',2) - equivalent with myObj.myFunc('test',1,'tree',2)
 	dumpMapObject(mapObj) - returns array of string with all map object properties
 	echo(msg,noLF,noCR) - write msg to stdout. Without line feed and carriage return if needed.
+	echot(msg,noLF,noCR) - write msg with timestamp to stdout. Without line feed and carriage return if needed.
 	indexOf(arr,elm) - returns index of element `elm` in array `arr`. If element not found then -1 returned.
 	mapHelper() - create MapHelper object
 	getMultiPoly(refs,srcMaps,backupMap) - get Multipoly from multiple sources or from backup. Updates backup if necessary.
@@ -54,8 +59,8 @@ MapHelper members:
 			0(default) - tags merged and stored
 			1 - new tags replaced with old
 			2 - old tags replaced with new
-	fixIncompleteRelations() - remove from relations members all members, which are not in map. If in result relation has no members it removed from map too.
-	fixIncompleteWays() - remove from ways all nodes which are not in map. If in result way has less then two nodes it removed from map too.
+	fixIncompleteRelations() - remove from relations members all members, which are not in map. If result relation has no members it removed from map too.
+	fixIncompleteWays() - remove from ways all nodes which are not in map. If result way has less then two nodes it removed from map too.
 	getNextNodeId() - get next available node id. result<0.
 	getNextWayId() - get next available way id. result<0.
 	getNextRelationId() - get next available relation id. result<0.
@@ -81,21 +86,29 @@ MapHelper members:
 	wayToNodeArray(wayOrWayId) - see GeoTools.wayToNodeArray
 	
 PolyIntersector members:
-	buildWayList(relation) - convert Relation into one-dimension Way objects array.
-		'osman:parent' tag filled with parent relation id.
+	buildWayList(relation,objOrId) - convert Relation into one-dimension Way objects or Way ID array.
+		objOrId - optional argument. If skipped then false assumed.
+			if it is true then array of ids returned.
+			if it is false then array of Way objects returned with 'osman:parent' tag filled with parent relation id.
 		Subrelations recursively proccessed too. 'Subarea' relations skipped.
 		If some way or subrelation missed in map then empty array returned.
 	buildNodeListArray(wayList) - returns 2-dimensional NodeList=[[way1 nodes],[way2 nodes]...]
 		'osman:parent' tag filled with parent way id
-		wayList - 1-dimensional Way objecta array [Way1,Way2....]. This array can be a buildWayList function result.
+		wayList - 1-dimensional Way objects array [Way1,Way2....]. This array can be a buildWayList function result.
 	clearParents(intersection) - deletes 'osman:parent' tag from all nodes.
 		intersection - 2-dimensional array of nodes with 'osman:parent' tag.
 		Call this function to prevent side effects for common nodes of boundary poly and several intersecting multipolygons.
-	mergeNodeLists(nodeList) - convert two-dimensional Nodes array  into 1-dimansional polygon list.
+	mergeNodeLists(nodeList) - convert two-dimensional Nodes array  into 1-dimensional polygon list.
 		nodeList - 2-dimesional Node objects array. It can be buildNodeListArray function result.
 		'osman:parent' tag for common nodes are merged. [n1(parent:1), n2(parent:1)],[n2(parent:2), n3(parent:2)] => [n1(parent:1), n2(parent:1;2), n3(parent:2)]
 		Example: [[1,2],[2,3],[3,1],[5,6,7,5]] => [[1,2,3,1],[5,6,7,5]]
 		If any polygon not closed then <false> returned.
+	mergeWayList(wayList) - convert one-dimensional Way array into one-dimensional array of cluster objects.
+		All polygon clusters are at beginning of the array and linear(non-closed) clusters are at end.
+		cluster object is {id1,idn,ways} where:
+			id1 - id of first node in cluster
+			idn - id of last node in cluster. For closed polygon idn==id1
+			ways - array of way objects for this cluster.
 	findNodeParents(intersection,nodeLists) - replaces every node in intersection with object{node,parent} where node is Node object from original intersection and parent is array of parent way Ids. Tag 'osman:parent' deleted from all nodes. Returns true if all nodes processed sucessfully.
 		intersection - 2-dimensional array of nodes with 'osman:parent' tag. It can be result of MultiPoly.getIntersection() function.
 		nodeLists - 2-dimensional array of nodes with 'osman:parent' tag. This argument represents original multipoly.
@@ -105,10 +118,9 @@ PolyIntersector members:
 		'osman:parent=1;2' => [1,2];
 		'osman:parent=apple' => false;
 		'osman:parent=' => false;
-	waysFromNodeLists(intersection,processingWayIds,nextWayId) - 
-returns array of arrays of way Objects as follows:
+	waysFromNodeLists(intersection,processingWayIds,nextWayId) - returns array of arrays of way Objects as follows:
 		intersection[a,b,c]=>[[a_way1,a_way2],[b_way],[]]
-		modifies processingWayIds. On return it is array of wayIds which are in processingWayIds, but not used in resulting 'ways'
+		modifies processingWayIds. Returned array of wayIds which are in processingWayIds, but not used in resulting 'ways'
 		If new way requred, then it created via dstMap.createNode(), new Id is dstMap.getNextWayId() or nextWayId argument
 		nextWayId is optional. Use it for speedup (avoid getNextWayId()) call.
 */
@@ -202,7 +214,7 @@ MapHelper.prototype.exportDB=function(dstMap,exportFilter){
 
 MapHelper.prototype.exportMultiPoly=function(dstMap,refs){
 	var t=this,h=t.h;
-	function buildList(dst,relref){
+	function buildList(relref){
 		//convert Relation into one-dimension Relation object array.
 		//Subrelations recursively proccessed too.
 		//If some subrelation missed in map then empty array returned
@@ -218,16 +230,16 @@ MapHelper.prototype.exportMultiPoly=function(dstMap,refs){
 					rs.push('way:'+rm[i+1]);
 				}else if((rm[i]=='relation')&&(h.indexOf(['','outer','inner','enclave','exclave'],rm[i+2])>=0)){
 					//process subrelations
-					var sr=buildList(dst,'relation:'+rm[i+1]);
+					var sr=buildList('relation:'+rm[i+1]);
 					rs=rs.concat(sr);
 				};
 			};
 		};
-		dst.putObject(r);
+		dstMap.putObject(r);
 		return rs;
 	};
 	for(var i=0;i<refs.length;i++){
-		t.exportRecurcive(dstMap,buildList(dstMap,refs[i]));
+		t.exportRecurcive(dstMap,buildList(refs[i]));
 	};
 };
 
@@ -304,7 +316,7 @@ MapHelper.prototype.findOrStore=function(newNode,tagPolicy){
 	};
 	q=s.sqlExec(q,[':lat',':lon'],[newNode.lat,newNode.lon]).read(1).toArray();
 	if(q.length){
-		//$$$dbg echo('node found at lat='+newNode.lat+' lon='+newNode.lon);
+		//dbg echo('node found at lat='+newNode.lat+' lon='+newNode.lon);
 		var oldNode=m.getNode(q[0]),storeNode=false;
 		tagPolicy=tagPolicy||0;
 		switch(tagPolicy){
@@ -323,7 +335,7 @@ MapHelper.prototype.findOrStore=function(newNode,tagPolicy){
 		m.putNode(oldNode);
 		return oldNode;
 	}else{
-		//$$$dbg echo('node not found at lat='+newNode.lat+' lon='+newNode.lon);
+		//dbg echo('node not found at lat='+newNode.lat+' lon='+newNode.lon);
 		m.putNode(newNode);
 		return newNode;
 	};
@@ -452,7 +464,7 @@ MapHelper.prototype.replaceObject=function(oldObject,newObjects){
 			rel.members.setAll(newmbrs);
 			m.putRelation(rel);
 			if(newmbrs.length==0)killRelList.push(rel);
-			//$$$dbg echo('		Replace in relation['+rel.id+']. Old len='+(mbrs.length/3)+' new len='+(newmbrs.length/3));
+			//dbg echo('		Replace in relation['+rel.id+']. Old len='+(mbrs.length/3)+' new len='+(newmbrs.length/3));
 		};
 		for(var i=0;i<killRelList.length;i++)t.replaceObject(killRelList[i],[]);
 	};
@@ -476,28 +488,28 @@ MapHelper.prototype.replaceObject=function(oldObject,newObjects){
 			way.nodes=newnodes;
 			m.putWay(way);
 			if(newnodes.length<2)killWayList.push(way);
-			//$$$dbg echo('Replace in way['+way.id+']. Old len='+nodes.length+' new len='+newnodes.length);
+			//dbg echo('Replace in way['+way.id+']. Old len='+nodes.length+' new len='+newnodes.length);
 		};
 		for(var i=0;i<killWayList.length;i++)t.replaceObject(killWayList[i],[]);
 	};
 	var objIntType=getObjIntType(oldObject);
-	//$$$dbg echo('	Replace object['+oldObject.id+'] with [',true,true);for(var i=0;i<newObjects.length;i++)echo(((i>0)?(','):(''))+newObjects[i].id,true,true);echo(']');
-	if(objIntType<0)throw 'Invalid object. ClassName='+oldObject.getClassName();
-	for(var i=0;i<newObjects.length;i++)if(getObjIntType(newObjects[i])!=objIntType) throw 'Can`t replace '+oldObject.getClassName()+' with '+newObjects[i].getClassName();
+	//dbg echo('	Replace object['+oldObject.id+'] with [',true,true);for(var i=0;i<newObjects.length;i++)echo(((i>0)?(','):(''))+newObjects[i].id,true,true);echo(']');
+	if(objIntType<0)throw {name:'MapHelper',description:'Invalid object. ClassName='+oldObject.getClassName()};
+	for(var i=0;i<newObjects.length;i++)if(getObjIntType(newObjects[i])!=objIntType) throw {name:'MapHelper',description:'Can`t replace '+oldObject.getClassName()+' with '+newObjects[i].getClassName()};
 	replaceInRelation(oldObject,objIntType,newObjects);
 	switch(objIntType){
 		case 0:replaceInWay(oldObject,newObjects);
-			//$$$dbg t.h.echo('		replaceObject. Delete node['+oldObject.id+']');
+			//dbg t.h.echo('		replaceObject. Delete node['+oldObject.id+']');
 			m.deleteNode(oldObject.id);
 			break;
 		case 1:m.deleteWay(oldObject.id);
-			//$$$dbg echo('		replaceObject. Delete way['+oldObject.id+']');
+			//dbg echo('		replaceObject. Delete way['+oldObject.id+']');
 			break;
 		case 2:m.deleteRelation(oldObject.id);
 			break;
 	};
 	for(var i=0;i<newObjects.length;i++){
-		//$$$dbg echo('		replaceObject. Store object['+newObjects[i].id+']');
+		//dbg echo('		replaceObject. Store object['+newObjects[i].id+']');
 		m.putObject(newObjects[i]);
 	};
 };
@@ -510,11 +522,11 @@ MapHelper.prototype.wayToNodeArray=function(wayOrWayId){
 MapHelper.prototype.getObject=function(strObj){
 	var funcName='helpers.MapHelper.getObject: ';
 	var t=this;
-	if(!t.map)throw funcName+'no map opened';
+	if(!t.map)throw {name:'MapHelper',description:funcName+'no map opened'};
 	strObj=strObj.split(':');
-	if((strObj.length!=2))throw funcName+'invalid object specifier='+strObj;
+	if((strObj.length!=2))throw {name:'MapHelper',description:funcName+'invalid object specifier='+strObj};
 	var objId=parseFloat(strObj[1]);
-	if(isNaN(objId))throw funcName+'invalid object id='+strObj[1];
+	if(isNaN(objId))throw {name:'MapHelper',description:funcName+'invalid object id='+strObj[1]};
 	switch(strObj[0]){
 	case 'node':
 		return t.map.getNode(objId);
@@ -526,7 +538,7 @@ MapHelper.prototype.getObject=function(strObj){
 		return t.map.getRelation(objId);
 		break;
 	default:
-		throw funcName+'invalid object type='+strObj[0];
+		throw {name:'MapHelper',description:funcName+'invalid object type='+strObj[0]};
 		break;
 	};
 };
@@ -548,7 +560,7 @@ MapHelper.prototype.getObjectChildren=function(obj,policy){
 			if(!o)r.push(t+':'+i);
 			break;
 		default:
-			throw fn+'invalid policy <'+policy+'>';
+			throw {name:'MapHelper',description:fn+'invalid policy <'+policy+'>'};
 		};
 	};
 	policy=(policy)?(policy):(0);
@@ -570,7 +582,7 @@ MapHelper.prototype.getObjectChildren=function(obj,policy){
 		};
 		break;
 	default:
-		throw fn+'invalid object class <'+obj.getClassName+'>';
+		throw {name:'MapHelper',description:fn+'invalid object class <'+obj.getClassName+'>'};
 	};
 	return r;
 };
@@ -607,7 +619,7 @@ function PolyIntersector(hlpRef,srcMapHelper,dstMapHelper,boundMultiPoly){
 	t.h=hlpRef;
 };
 
-PolyIntersector.prototype.buildWayList=function(relation){
+PolyIntersector.prototype.buildWayList=function(relation,objOrId){
 	//convert Relation into one-dimension Way object array.
 	//Subrelations recursively proccessed too.
 	//If some way or subrelation missed in map then empty array returned
@@ -618,12 +630,17 @@ PolyIntersector.prototype.buildWayList=function(relation){
 			//skip nodes - they not processed at all
 			if(rm[i]=='way'){
 				//process way
-				var way=map.getWay(rm[i+1]);
-				if(!way){
-					echo('Relation '+r.id+' missed way '+rm[i+1]);
-					return [];
+				var way;
+				if(objOrId){
+					way=rm[i+1];
+				}else{
+					way=map.getWay(rm[i+1]);
+					if(!way){
+							echo('Relation '+r.id+' missed way '+rm[i+1]);
+							return [];
+					};
+					way.tags.setByKey('osman:parent',r.id);
 				};
-				way.tags.setByKey('osman:parent',r.id);
 				rs.push(way);
 			}else if((rm[i]=='relation')&&(t.h.indexOf(['','outer','inner','enclave','exclave'],rm[i+2])>=0)){
 				//process subrelations
@@ -634,7 +651,7 @@ PolyIntersector.prototype.buildWayList=function(relation){
 				}else{
 					var st=sr.tags.getByKey('type');
 					if((st!='multipolygon')&&(st!='boundary')){
-						//$$$dbg echo('	relation '+(rm[i+1])+' of type '+st+' skipped');
+						//dbg echo('	relation '+(rm[i+1])+' of type '+st+' skipped');
 						continue;
 					}
 					sr=getRaw(sr);
@@ -645,10 +662,10 @@ PolyIntersector.prototype.buildWayList=function(relation){
 		};
 		return rs;
 	};
-	var rs=getRaw(relation);
-	rs.sort(function(a,b){return (a.id-b.id)});
+	var rs=getRaw(relation),cf=(objOrId)?(function(a,b){return (a-b)}):(function(a,b){return (a.id-b.id)});
+	rs.sort(cf);
 	for(var i=rs.length-1;i>0;i--){
-		if(rs[i].id==rs[i-1].id){
+		if(!cf(rs[i],rs[i-1])){
 			i--;
 			rs.splice(i,2);
 		};
@@ -683,7 +700,7 @@ PolyIntersector.prototype.findNodeParents=function(intersection,nodeLists){
 	var resultValid=true,t=this,echo=t.h.echo,indexOf=t.h.indexOf;
 	function findUsingNodeLists(poly){
 		var curNode,gt=t.h.gt;
-		//$$$dbg echo('using node list');//$$$dbg 
+		//dbg echo('using node list');
 		for(var i=0;i<poly.length;i++){
 			curNode=poly[i];
 			if(!curNode.parent.length)break;
@@ -705,13 +722,13 @@ PolyIntersector.prototype.findNodeParents=function(intersection,nodeLists){
 		};
 		if(minDist<Number.MAX_VALUE){
 			curNode.parent=t.parseParents(nodeLists[minIdx[0]][minIdx[1]])||[];
-			//$$$dbg echo('minDist='+minDist.toFixed(2)+' node id='+nodeLists[minIdx[0]][minIdx[1]].id+' parents='+nodeLists[minIdx[0]][minIdx[1]].tags.getByKey('osman:parent'));//$$$dbg 
+			//dbg echo('minDist='+minDist.toFixed(2)+' node id='+nodeLists[minIdx[0]][minIdx[1]].id+' parents='+nodeLists[minIdx[0]][minIdx[1]].tags.getByKey('osman:parent'));
 		return true;
 		}else{
 			return false;
 		};
 	};
-	//$$$dbg echo('findNodeParents');//$$$dbg 
+	//dbg echo('findNodeParents');
 	//convert 'osman:parent' tag into 'parents' property of node
 	for(var j=0;j<intersection.length;j++){
 		var ij=intersection[j];
@@ -722,7 +739,7 @@ PolyIntersector.prototype.findNodeParents=function(intersection,nodeLists){
 	for(var j=0;(j<intersection.length)&&resultValid;j++){
 		//check all sub-poly
 		var curWayId=[], hasChanges=2,hasAmbiguities, step=-1;
-		//$$$dbg echo(' process '+j+'-th intersection');//$$$dbg 
+		//dbg echo(' process '+j+'-th intersection');
 		do{
 			hasChanges--;
 			hasAmbiguities=false;
@@ -731,13 +748,13 @@ PolyIntersector.prototype.findNodeParents=function(intersection,nodeLists){
 				//find parent way for nodes.
 				var curNode=intersection[j][k],isEndNode=(k==0)||(k==intersection[j].length-1);
 				var parents=curNode.parent;
-				//$$$dbg echo('['+j+'.'+k+'] id='+curNode.node.id+' pnts(l='+parents.length+')='+parents);//$$$dbg 
+				//dbg echo('['+j+'.'+k+'] id='+curNode.node.id+' pnts(l='+parents.length+')='+parents);
 				switch(curWayId.length){
 					case 0:
 						if(parents.length){
 							curWayId=parents;
 						}else{
-							//$$$dbg echo('ambigous 4');
+							//dbg echo('ambigous 4');
 							hasAmbiguities=true;
 						}
 						break;
@@ -795,7 +812,7 @@ PolyIntersector.prototype.findNodeParents=function(intersection,nodeLists){
 					case 2:
 						switch(parents.length){
 							case 0://dual curWayId, no parent
-								//$$$dbg echo('ambigous 0');
+								//dbg echo('ambigous 0');
 								curNode.parent=curWayId;
 								hasChanges=2;
 								hasAmbiguities=true;
@@ -805,7 +822,7 @@ PolyIntersector.prototype.findNodeParents=function(intersection,nodeLists){
 									curNode.parent=[curWayId[0],curWayId[1]];
 									curWayId=parents;
 									hasChanges=2;
-									//$$$ dbg echo('Start of way '+curWayId+' at node '+curNode.node.id);
+									//dbg echo('Start of way '+curWayId+' at node '+curNode.node.id);
 								}else{
 									hasAmbiguities=true;
 									if(intersection[j][k-step].parent[0]==parents[0]){
@@ -833,11 +850,11 @@ PolyIntersector.prototype.findNodeParents=function(intersection,nodeLists){
 					default:
 						echo('invalid curWayId='+curWayId);
 				};
-				//$$$dbg echo('	pnts(l='+curNode.parent.length+')='+curNode.parent+' CurWayId (l='+curWayId.length+')='+curWayId);//$$$dbg
+				//dbg echo('	pnts(l='+curNode.parent.length+')='+curNode.parent+' CurWayId (l='+curWayId.length+')='+curWayId);
 			};
 			if(hasAmbiguities&&(hasChanges==0)){
 				//we have no parents for this polygon
-				//$$$dbgecho('no parents at all');
+				//dbg echo('no parents at all');
 				hasChanges=(findUsingNodeLists(intersection[j]))?(2):(0);
 			};
 		}while(hasAmbiguities&&(hasChanges>0));
@@ -914,29 +931,88 @@ PolyIntersector.prototype.mergeNodeLists=function(nodeList){
 		node1.tags.setByKey('osman:parent',s);
 		node2.tags.setByKey('osman:parent',s);
 	};
-	var doRepeat,rs;
+	var doRepeat,activeList=[];
+	for(var i=nodeList.length-1;i>=0;i--){
+		if(nodeList[i][0].id!=nodeList[i][nodeList[i].length-1].id){
+			//nodeList[i] is not polygon already, so include it into merging list
+			activeList.push(nodeList[i]);
+			nodeList.splice(i,1);
+		};
+	};
 	do{
 		doRepeat=false;
-		rs=true;
-		for(var i=0;i<nodeList.length;i++){
-			if(nodeList[i][0].id==nodeList[i][nodeList[i].length-1].id)continue;//nodeList[i] is polygon already
-			rs=false;
-			for(var j=i+1;j<nodeList.length;j++){
-				var merged=merge2(nodeList[i],nodeList[j]);
+		for(var i=0;i<activeList.length;i++){
+			for(var j=i+1;j<activeList.length;j++){
+				var merged=merge2(activeList[i],activeList[j]);
 				if(merged.length){
-					nodeList[i]=merged;
+					activeList[i]=merged;
 					doRepeat=true;
-					nodeList.splice(j,1);
+					activeList.splice(j,1);
 					j--;
 				}
 			}
-			if((nodeList[i].length>2)&&(nodeList[i][0].id==nodeList[i][nodeList[i].length-1].id)){
+			if((activeList[i].length>2)&&(activeList[i][0].id==activeList[i][activeList[i].length-1].id)){
 				//got a new poly. Fix parents for first and last node
-				mergeParents(nodeList[i][0],nodeList[i][nodeList[i].length-1]);
+				mergeParents(activeList[i][0],activeList[i][activeList[i].length-1]);
+				nodeList.push(activeList[i]);
+				activeList.splice(i,1);
+				i--;
 			};
 		};
 	}while(doRepeat);
+	var rs=activeList.length==0;
+	while(activeList.length>0)nodeList.push(activeList.pop());
 	return rs;
+};
+
+PolyIntersector.prototype.mergeWayList=function(wayList){
+/*
+convert one-dimensional Way array into one-dimensional array of cluster objects.
+All polygon clusters are at beginning of the array and linear(non-closed) clusters are at end.
+	cluster object is {id1,idn,ways} where:
+		id1 - id of first node in cluster
+		idn - id of last node in cluster. For closed polygon idn==id1
+		ways - array of way objects for this cluster.
+*/
+	var mw=[],clusters=[];
+	for(var i=0;i<wayList.length;i++){
+		var w=wayList[i],n=w.nodes.toArray();
+		mw.push({id1:n[0],idn:n.slice(-1)[0],ways:[w]});
+	};
+	var i=mw.length;
+	while(i>0){
+		i--;
+		var mwi=mw[i];
+		if(mwi.id1==mwi.idn){
+			clusters.push(mwi);
+			mw.splice(i,1);
+			continue;
+		};
+		for(var j=i-1;j>=0;j--){
+			var mwj=mw[j];
+			if(mwi.id1==mwj.id1){
+				mwj.id1=mwi.idn;
+				mwi.ways.reverse();
+				mwj.ways=mwi.ways.concat(mwj.ways);
+			}else if(mwi.id1==mwj.idn){
+				mwj.idn=mwi.idn;
+				mwj.ways=mwj.ways.concat(mwi.ways);
+			}else if(mwi.idn==mwj.id1){
+				mwj.id1=mwi.id1;
+				mwj.ways=mwi.ways.concat(mwj.ways);
+			}else if(mwi.idn==mwj.idn){
+				mwj.idn=mwi.id1;
+				mwi.ways.reverse();
+				mwj.ways=mwj.ways.concat(mwi.ways);
+			}else{
+				continue;
+			};
+			mw.splice(i,1);
+			break;
+		};
+	};
+	clusters=clusters.concat(mw);
+	return clusters;
 };
 
 PolyIntersector.prototype.parseParents=function (obj){
@@ -1019,7 +1095,7 @@ PolyIntersector.prototype.waysFromNodeLists=function(intersection,processingWayI
 	
 	function getNewWayNodeIds(shouldBePoly,nodes,midIdx,dir,curWayId){
 		var newWayNIds=[],wStartIdx=-1,wEndIdx=-1,curNode=nodes[midIdx],parents,pIdx;
-		//$$$dbgecho('poly='+shouldBePoly+' mid='+midIdx);
+		//dbg echo('poly='+shouldBePoly+' mid='+midIdx);
 		if(shouldBePoly){
 			wStartIdx=0;
 			wEndIdx=nodes.length-1;
@@ -1029,7 +1105,7 @@ PolyIntersector.prototype.waysFromNodeLists=function(intersection,processingWayI
 				curNode=nodes[wEndIdx];
 				parents=curNode.parent;
 				pIdx=indexOf(parents,curWayId);
-				//$$$dbgecho('node '+wEndIdx+' parents='+parents+' pidx='+pIdx);
+				//dbg echo('node '+wEndIdx+' parents='+parents+' pidx='+pIdx);
 				if(pIdx<0){//end of way
 					wEndIdx--;
 					break;
@@ -1041,7 +1117,7 @@ PolyIntersector.prototype.waysFromNodeLists=function(intersection,processingWayI
 				curNode=nodes[wStartIdx];
 				parents=curNode.parent;
 				pIdx=indexOf(parents,curWayId);
-				//$$$dbgecho('node '+wStartIdx+' parents='+parents+' pidx='+pIdx);
+				//dbg echo('node '+wStartIdx+' parents='+parents+' pidx='+pIdx);
 				if(pIdx<0){//end of way
 					wStartIdx++;
 					break;
@@ -1064,33 +1140,33 @@ PolyIntersector.prototype.waysFromNodeLists=function(intersection,processingWayI
 			return (p.length==0);
 		};
 		//remove wayId from parents of ending nodes
-		//$$$dbg echo('shrinkNodes start='+wStartIdx+' end='+wEndIdx);//$$$dbg 
+		//dbg echo('shrinkNodes start='+wStartIdx+' end='+wEndIdx);
 		if((wStartIdx==0)||(removeParentAndIsEmpty(nodes[wStartIdx],wayId)))wStartIdx--;
 		if((wEndIdx+1==nodes.length)||(removeParentAndIsEmpty(nodes[wEndIdx],wayId)))wEndIdx++;
 		//wStartIdx and wEndIdx preserved. Nodes between them are replaced with one emptyNode
 		var l=wEndIdx-wStartIdx-1;
 		var needEmptyNodeIns=(wStartIdx>0)&&(wEndIdx<nodes.length)&&(l>0);
 		//remove nodes, used in way
-		//$$$dbg echo('shrinkNodes2 start='+wStartIdx+' end='+wEndIdx+' insert='+needEmptyNodeIns+' l='+l);//$$$dbg 
+		//dbg echo('shrinkNodes2 start='+wStartIdx+' end='+wEndIdx+' insert='+needEmptyNodeIns+' l='+l);
 		wStartIdx++;
 		if(needEmptyNodeIns)nodes.splice(wStartIdx,l,{node:emptyNode,parent:[]});else nodes.splice(wStartIdx,l);
 		//remove duplicated empty nodes
 		l=nodes.length;
 		if(l){
-			//$$$dbg echo('shrinkNodes3 start='+wStartIdx+' nn='+l);//$$$dbg 
+			//dbg echo('shrinkNodes3 start='+wStartIdx+' nn='+l);
 			wEndIdx=wStartIdx;
 			for(wStartIdx=(wStartIdx>=l)?(l-1):(wStartIdx);(wStartIdx>=0)&&(nodes[wStartIdx].node.id==0);wStartIdx--);
-			//$$$dbg echo('shrinkNodes4 start='+wStartIdx);//$$$dbg 
+			//dbg echo('shrinkNodes4 start='+wStartIdx);
 			for(;(wEndIdx<nodes.length)&&(nodes[wEndIdx].node.id==0);wEndIdx++);
-			//$$$dbg echo('shrinkNodes4 end='+wEndIdx);
+			//dbg echo('shrinkNodes4 end='+wEndIdx);
 			if(wStartIdx<0)wStartIdx=0;
 			if(wEndIdx>=nodes.length)wEndIdx=nodes.length-1;
 			if(nodes[wStartIdx].node.id!=0)wStartIdx++;
 			if(nodes[wEndIdx].node.id!=0)wEndIdx--;
-			//$$$dbg echo('shrinkNodes5 start='+wStartIdx+' end='+wEndIdx);//$$$dbg 
+			//dbg echo('shrinkNodes5 start='+wStartIdx+' end='+wEndIdx);
 			if((wEndIdx==(l-1))||(wStartIdx==0))wEndIdx++;
 			if(wEndIdx>wStartIdx){
-				//$$$dbg echo('kill '+(wEndIdx-wStartIdx)+' empty nodes from '+wStartIdx+' to '+wEndIdx);//$$$dbg 
+				//dbg echo('kill '+(wEndIdx-wStartIdx)+' empty nodes from '+wStartIdx+' to '+wEndIdx);
 				nodes.splice(wStartIdx,wEndIdx-wStartIdx);
 			};
 		};
@@ -1101,9 +1177,9 @@ PolyIntersector.prototype.waysFromNodeLists=function(intersection,processingWayI
 		var oldWay=false,oldWayNIds=[],r=[];
 		for(var i=0;i<nodes.length;i++){
 			var curNode=nodes[i];
-			//$$$dbg if(curNode.node.id==0){
-			//$$$dbg 	echo('i='+i+'/'+nodes.length+' zero id at '+curNode.node.lat+','+curNode.node.lon);
-			//$$$dbg };
+			//dbg if(curNode.node.id==0){
+			//dbg 	echo('i='+i+'/'+nodes.length+' zero id at '+curNode.node.lat+','+curNode.node.lon);
+			//dbg };
 			var parents=curNode.parent;
 			var wIdIdx=-1;
 			//check that we should process this way(s)
@@ -1112,17 +1188,17 @@ PolyIntersector.prototype.waysFromNodeLists=function(intersection,processingWayI
 				continue;
 			}
 			var curWayId=pwi[wIdIdx];
-			//$$$dbg echo('wIdIdx='+wIdIdx+' id='+curWayId+' i='+i+' Nid='+curNode.node.id+' pnts='+parents);//$$$dbg 
+			//dbg echo('wIdIdx='+wIdIdx+' id='+curWayId+' i='+i+' Nid='+curNode.node.id+' pnts='+parents);
 			var oldWayIsPoly;
 			if((!oldWay)||oldWay.id!=curWayId){
-				//$$$dbg echo('get way['+curWayId+'] from map');
+				//dbg echo('get way['+curWayId+'] from map');
 				oldWay=t.srcMapHelper.map.getWay(curWayId);
 				oldWayNIds=oldWay.nodes.toArray();
 				oldWayIsPoly=(oldWayNIds.length>2)?(oldWayNIds[0]==oldWayNIds[oldWayNIds.length-1]):(false);
 			};
 			if(oldWayNIds.length<2)continue;
 			//determine direction
-			var dir=detectWayDirection(nodes,i,oldWayNIds,curNode.id);
+			var dir=detectWayDirection(nodes,i,oldWayNIds,curNode.node.id);
 			if(dir==0){
 				if(i==nodes.length-1){
 					dir=1;//force forward direction for last node
@@ -1132,13 +1208,13 @@ PolyIntersector.prototype.waysFromNodeLists=function(intersection,processingWayI
 			};
 			var nwis=getNewWayNodeIds(oldWayIsPoly,nodes,i,dir,curWayId),newWayNIds=nwis.newWayNIds;
 			i=nwis.start-1;
-			//$$$dbg echo(' new way['+curWayId+'] start='+nwis.start+'@'+newWayNIds[0]+' end='+nwis.end+'@'+newWayNIds[newWayNIds.length-1]+' len='+newWayNIds.length+' nn='+nodes.length+' dir='+dir);//$$$dbg
-			if(oldWayIsPoly&&(newWayNIds[0]!=newWayNIds[newWayNIds.length-1]))throw 'Line result in poly intersection';
+			//dbg echo(' new way['+curWayId+'] start='+nwis.start+'@'+newWayNIds[0]+' end='+nwis.end+'@'+newWayNIds[newWayNIds.length-1]+' len='+newWayNIds.length+' nn='+nodes.length+' dir='+dir);
+			if(oldWayIsPoly&&(newWayNIds[0]!=newWayNIds[newWayNIds.length-1]))throw {name:'MapHelper',description:'Line result in poly intersection'};
 			shrinkNodes(nodes,nwis.start,nwis.end,curWayId);
 			if((newWayNIds.length==1)&&(i==nodes.length)&&(i>0)){
 				var pidx=indexOf(nodes[0].parent,curWayId);
 				if(pidx>=0){
-					//$$$dbg echo('appending 0. way=['+curWayId+']:');
+					//dbg echo('appending 0. way=['+curWayId+']:');
 					newWayNIds.push(nodes[0].node.id);
 					for(pidx=0;pidx<newWayNIds.length;pidx++)echo(newWayNIds[pidx]);
 					shrinkNodes(nodes,0,0,curWayId);
@@ -1149,12 +1225,12 @@ PolyIntersector.prototype.waysFromNodeLists=function(intersection,processingWayI
 				oldWay.nodes=newWayNIds;
 				r.push(oldWay);
 			}else{
-				//$$$dbg echo('i='+i+' wlen='+newWayNIds.length);
-				//$$$dbg for(var j=0;j<nodes.length;j++){
-				//$$$dbg 	curNode=nodes[j];
-				//$$$dbg 	echo('idx='+j+' id='+curNode.node.id+' parents='+curNode.parent);
-				//$$$dbg };
-				//$$$dbg WScript.sleep(100);
+				//dbg echo('i='+i+' wlen='+newWayNIds.length);
+				//dbg for(var j=0;j<nodes.length;j++){
+				//dbg 	curNode=nodes[j];
+				//dbg 	echo('idx='+j+' id='+curNode.node.id+' parents='+curNode.parent);
+				//dbg };
+				//dbg WScript.sleep(100);
 			};
 		};
 		return r;
@@ -1164,8 +1240,30 @@ PolyIntersector.prototype.waysFromNodeLists=function(intersection,processingWayI
 	var pwi=processingWayIds.concat([]);
 	for(var i=0;i<intersection.length;i++){
 		var spoly=intersection[i].concat([]);//make a copy
-		//$$$dbg echo(''+i+'-th intersection nnodes='+spoly.length);//$$$dbg
-		//$$$dbg for(var j=0;j<spoly.length;j++)echo('	n['+spoly[j].node.id+']/'+j+' pr='+spoly[j].parent);
+		//prepare spoly
+		if((spoly.length>0)&&(spoly[0].node.id == spoly[spoly.length-1].node.id)&& isSameArrays(spoly[0].parent,spoly[spoly.length-1].parent)){
+			//spoly is polygon
+			spoly.pop();//remove extra node
+			//seek to ways "junction" point
+			for(var j=spoly.length; (j>0)&&(spoly[0].parent)&&(spoly[0].parent.length==1);j--){
+				spoly.unshift(spoly.pop());
+			};
+			//is it really junction?
+			if(spoly[0].parent && (spoly[0].parent.length>1)&&(spoly.length>1)){
+				//now add extra node and fix parent array for first and last node
+				for(var j=0;j<spoly[0].parent.length;j++){
+					var pIdx=indexOf(spoly[1].parent,spoly[0].parent[j]);
+					if(pIdx>=0){
+						spoly[0].parent.splice(j,1);
+						spoly.push({node:spoly[0].node,parent:spoly[0].parent});
+						spoly[0].parent=[spoly[1].parent[pIdx]];
+						break;
+					};
+				}
+			};
+		};
+		//dbg echo(''+i+'-th intersection nnodes='+spoly.length);
+		//dbg for(var j=0;j<spoly.length;j++)echo('	n['+spoly[j].node.id+']/'+j+' pr='+spoly[j].parent);
 		var oldPolyLen=0;
 		var pwl=[];
 		while((spoly.length>0)&&(spoly.length!=oldPolyLen)){//have nodes to process or change in last cycle
@@ -1190,7 +1288,7 @@ PolyIntersector.prototype.waysFromNodeLists=function(intersection,processingWayI
 					oldw.nodes=[];
 				};
 				if(!isSameArrays(w.nodes.toArray(),oldw.nodes.toArray())){
-					//$$$dbg echo('	way['+w.id+'] has different nodes. fork.');
+					//dbg echo('	way['+w.id+'] has different nodes. fork.');
 					w.tags.setAll(oldw.tags.getAll());
 					w.tags.setByKey('osman:parent',w.id);
 					w.id=nextWayId; w.changeset=0;
@@ -1204,7 +1302,7 @@ PolyIntersector.prototype.waysFromNodeLists=function(intersection,processingWayI
 	};
 	for(var i=0;i<processingWayIds.length;){
 		if(indexOf(processedWayIds,processingWayIds[i])<0){
-			//$$$dbg echo('Way['+processingWayIds[i]+'] not in processed list');//$$$dbg 
+			//dbg echo('Way['+processingWayIds[i]+'] not in processed list');
 			i++;
 		}else{
 			processingWayIds.splice(i,1);
@@ -1330,8 +1428,26 @@ Hlp.prototype.polyIntersector=function(srcMapHelper,dstMapHelper,boundMultiPoly)
 	return (new PolyIntersector(this,srcMapHelper,dstMapHelper,boundMultiPoly));
 };
 
+Hlp.prototype.bindFunc=function(obj,func,staticArguments){
+  var ars=[];
+  for(var i=2;i<arguments.length;i++){
+    ars.push(arguments[i]);
+  };
+  return function(){
+    var ar=ars.slice(0);
+    for(var i=0;i<arguments.length;i++)ar.push(arguments[i]);
+    return func.apply(obj,ar);
+  }
+}
+
 Hlp.prototype.echo=function(s,noLF,noCR){
 	WScript.stdOut.write(s+(noCR?(''):('\r'))+(noLF?(''):('\n')));
+};
+
+Hlp.prototype.echot=function(s,l,r){
+	var d=new Date();
+	function f(t){return (t>9)?(t):('0'+t)};
+	this.echo(''+f(d.getYear()%100)+'.'+f(d.getMonth() + 1)+'.'+f(d.getDate())+' '+f(d.getHours())+':'+f(d.getMinutes())+':'+f(d.getSeconds())+' '+s,l,r);
 };
 
 Hlp;

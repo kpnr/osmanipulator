@@ -1,9 +1,9 @@
 //settings
-var testOSMOutFile='F:\\db\\osm\\testdata\\testOutFiltered.osm';
-var testMapFile='F:\\db\\osm\\sql\\rf.db3';
+var testOSMOutFile='F:\\db\\osm\\sql\\rf_part.osm';
+var testMapFile='S:\\db\\osm\\sql\\rf.db3';
 var useBPolyFilter=false;
 var useBBoxFilter=true;
-var bBoxFilter=[':bbox',45,38,44,37];
+var bBoxFilter=[':bbox',75.6,83.1,74.8,80.8];
 var clipIncompleteWays=false;
 var useCustomFilter=false;
 //see line 'var cf={' for filter conditions

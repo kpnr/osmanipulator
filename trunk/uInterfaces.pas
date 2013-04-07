@@ -167,9 +167,9 @@ type
     procedure set_lat(const value: Double);
     function get_lon: Double;
     procedure set_lon(const value: Double);
-    //node latitude. If out of bounds [-90...+90] exception raised
+    //node latitude. If out of bounds [-91...+91] exception raised
     property lat: Double read get_lat write set_lat;
-    //node longitude. If out of bounds [-180...180] exception raised
+    //node longitude. If out of bounds [-181...181] exception raised
     property lon: Double read get_lon write set_lon;
   end;
 

@@ -12,7 +12,7 @@
   * *version* <br> OSM object version. It is 32-bit _Integer_. It is *0* by default.
   * *userId* <br> Last editor _userId_. It is 32-bit _Integer_. It is *0* by default.
   * *userName* <br> Last editor _userName_. It is _String_. It is empty string by default.
-  * *timestamp* <br> OSM object timestamp. It is _String_. It is empty string by default. Format "yyyy-mm-ddThh:nn:ssZ" like in OSM files. By now _timestamp_ not parsed by OSMan.
+  * *timestamp* <br> OSM object timestamp. It is _String_. Format "yyyy-mm-ddThh:nn:ssZ" like in OSM files.
   * *tags* <br> optional object tags like _highway=seconadry_, etc. This property supports [IKeyList IKeyList] interface.
 
 = Usage =

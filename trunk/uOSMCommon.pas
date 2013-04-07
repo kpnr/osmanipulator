@@ -116,6 +116,10 @@ function degToStr(const deg: double): WideString;
 function degToInt(const deg: double): integer;
 function IntToDeg(const i: integer): double;
 
+//convert TimeStamp from WideString to Int64 and vice versa
+function wideStringToTimeStamp(const w:WideString):int64;
+function timeStampToWideString(const i64:int64):WideString;
+
 //extended version of pos procedure
 function PosEx(const SubStr, Str: WideString; FromPos, ToPos: integer): integer;
 
@@ -123,6 +127,107 @@ function PosEx(const SubStr, Str: WideString; FromPos, ToPos: integer): integer;
 procedure debugPrint(const msg:WideString);
 
 implementation
+
+function wideStringToTimeStamp(const w:WideString):int64;
+var
+  pWCh:pWideChar;
+  i:integer;
+  flipFlop:boolean;
+  b:array[0..9]of byte;
+  pB:pByte;
+begin
+//12345678901234567890
+//2005-07-05T07:18:37Z
+  pWCh:=pWideChar(w)-1;
+  if(length(w)<>20)or
+    ((pWCh+5)^<>'-')or
+    ((pWCh+8)^<>'-')or
+    ((pWCh+11)^<>'T')or
+    ((pWCh+14)^<>':')or
+    ((pWCh+17)^<>':')or
+    ((pWCh+20)^<>'Z')then begin
+    result:=20000101000000;
+    exit;
+  end;
+  pB:=@b[6];
+  pDWORD(pB)^:=0;//clear not used digits and sign
+  flipFlop:=false;
+  for i:=1 to 19 do begin
+    inc(pWCh);
+    if(i in [5,8,11,14,17])then continue;
+    if((pWCh^<'0')or(pWCh^>'9'))then begin
+      result:=20000101000001;
+      exit;
+    end;
+    if(flipFlop)then begin
+      inc(pB^,(ord(pWCh^)-ord('0')));
+      dec(pB);
+    end
+    else begin
+      pB^:=byte((ord(pWCh^)-ord('0'))shl 4);
+    end;
+    flipFlop:=not flipFlop;
+  end;
+  asm
+    FBLD b
+    FISTP result
+  end;
+end;
+
+function timeStampToWideString(const i64:int64):WideString;
+var
+  s:array[0..9] of byte;
+  pWCh:pWideChar;
+  pB:pByte;
+  i:integer;
+  flipFlop:boolean;
+begin
+//12345678901234
+//20050705071837
+
+//12345678901234567890
+//2005-07-05T07:18:37Z
+
+// s index is ___________ 0  1  2  3  4  5  6  7  8  9
+//store BCD in LE format [37,18,07,05,07,05,20,00,00,00]
+  asm
+    FILD i64
+    FBSTP s
+  end;
+  setlength(result,20);
+  flipFlop:=false;
+  pB:=@s[6];
+  pWCh:=PWideChar(result);
+  for i:=1 to 19 do begin
+    case i of
+    5,8:
+      begin
+        pWCh^:='-';
+      end;
+    11:
+      begin
+        pWCh^:='T';
+      end;
+    14,17:
+      begin
+        pWCh^:=':';
+      end;
+    else
+      begin
+        if flipFlop then begin
+          pWCh^:=WideChar((pB^ and $f)+ord('0'));
+          dec(pB);
+        end
+        else begin
+          pWCh^:=WideChar((pB^ shr 4)+ord('0'));
+        end;
+        flipFlop:=not flipFlop;
+      end;
+    end;
+    inc(pWCh);
+  end;
+  pWCh^:='Z';
+end;
 
 function PosEx(const SubStr, Str: WideString; FromPos, ToPos: integer): integer;
 var

@@ -93,7 +93,7 @@ function mergeDupNodes(hMap){
 };
 
 function ttable(hMap){
-	var ttf=include('utf2win1251.inc');
+	var ttf=include('utf2win1251.js');
 	var stg=hMap.map.storage;
 	var qtgs=stg.sqlPrepare('SELECT id,tagname,tagvalue FROM tags');
 	var qUpdTg=stg.sqlPrepare('UPDATE OR FAIL tags SET tagvalue=:tagvalue WHERE id=:id');
@@ -215,6 +215,43 @@ function removeNotUsedNodes(hMap){
 	hMap.exec('DELETE FROM nodes WHERE id NOT IN (SELECT id FROM '+unl.tableName+')');
 };
 
+function removeNotUsedWays(hMap){
+	var unl=hMap.map.storage.createIdList();
+	echot('	adding relation ways');
+	hMap.exec('INSERT OR IGNORE INTO '+unl.tableName+' (id) SELECT memberid FROM relationmembers WHERE memberidxtype&3=1');
+	echot('	adding tagged ways');
+	hMap.exec('INSERT OR IGNORE INTO '+unl.tableName+' (id) SELECT objid>>2 FROM objtags WHERE objid&3=1');
+	echot('	removing ways');
+	hMap.exec('DELETE FROM ways WHERE id NOT IN (SELECT id FROM '+unl.tableName+')');
+};
+
+function normalizeRelations(hMap){
+	var sRid=hMap.exec('SELECT id FROM relations');
+	while(!sRid.eos){
+		var rid=sRid.read(1).toArray()[0],rel=hMap.map.getRelation(rid);
+		echo('\rrel['+rid+']',true,true);
+		if(!rel)continue;
+		var rtags=rel.tags,members=rel.members.getAll().toArray();
+		for(var i=members.length-3;i>=0;i-=3){
+			if(members[i]!='way')continue;
+			var wid=members[i+1],way=hMap.map.getWay(wid);
+			if(!way)continue;
+			var wtags=way.tags.getAll().toArray(),isModified=false;
+			for(var j=wtags.length-2;j>=0;j-=2){
+				if(rtags.hasKey(wtags[j]) && (rtags.getByKey(wtags[j])==wtags[j+1])){
+					wtags.splice(j,2);
+					isModified=true;
+				};
+			};
+			if(isModified){
+				way.tags.setAll(wtags);
+				hMap.map.putWay(way);
+			};
+		};
+		echo(' ',true);
+	};
+};
+
 function main(){
 	if(!checkArgs())return;
 	echot('Opening map');
@@ -237,8 +274,12 @@ function main(){
 	};
 	echot('Remove duplicated nodes from ways');
 	removeWayNodeDup(dst);
+	echot('Remove not used ways');
+	removeNotUsedWays(dst);
 	echot('Remove not used nodes');
 	removeNotUsedNodes(dst);
+	echot('Normalize relations');
+	normalizeRelations(dst);
 	echot('Fix incomplete ways');
 	dst.fixIncompleteWays();
 	echot('Fix incomplete relations');

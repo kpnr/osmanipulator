@@ -16,11 +16,7 @@ function include(n){var w=WScript,h=w.createObject('WScript.Shell'),o=h.currentD
 
 var h=new (include('helpers.js'))();
 var echo=h.echo;
-function echot(s,l,r){
-	var d=new Date();
-	function f(t){return (t>9)?(t):('0'+t)};
-	echo(''+f(d.getYear()%100)+'.'+f(d.getMonth() + 1)+'.'+f(d.getDate())+' '+f(d.getHours())+':'+f(d.getMinutes())+':'+f(d.getSeconds())+' '+s,l,r);
-}
+var echot=h.bindFunc(h,h.echot);
 
 function checkArgs(){
 	function help(){
@@ -56,62 +52,60 @@ function checkArgs(){
 function exportMaps(hMap,bounds){
 	function deactivateRegion(r){
 		delete r.qPutn;
-		r.hMap.close();
-		echot('	Attach to small db');
-		hMap.exec('COMMIT');
-		hMap.exec('ATTACH "'+h.fso.buildPath(dstDir, r.name+'.db3')+'" AS smalldb');
-		hMap.exec('PRAGMA smalldb.journal_mode=off');
-		hMap.exec('BEGIN');
+		echot('	Attach small & big db');
+		r.hMap.exec('COMMIT');
+		r.hMap.exec('ATTACH "'+hMap.map.storage.dbName+'" AS bigdb');
+		r.hMap.exec('PRAGMA bigdb.journal_mode=off');
+		r.hMap.exec('BEGIN');
 		echot('	Build way list');
-		hMap.exec('INSERT OR IGNORE INTO '+r.silWays.tableName+' (id) SELECT wayid FROM waynodes WHERE nodeid IN (SELECT id FROM '+r.silNodes.tableName+')');
+		r.hMap.exec('INSERT OR IGNORE INTO '+r.silWays.tableName+' (id) SELECT wayid FROM bigdb.waynodes WHERE nodeid IN (SELECT id FROM '+r.silNodes.tableName+')');
 		echot('	Build relation list');
-		hMap.exec('INSERT OR IGNORE INTO '+r.silRelations.tableName+'(id) SELECT relationid FROM relationmembers WHERE (memberid IN (SELECT id FROM '+r.silNodes.tableName+') AND memberidxtype&3=0) OR (memberid IN (SELECT id FROM '+r.silWays.tableName+') AND memberidxtype&3=1 )');
+		r.hMap.exec('INSERT OR IGNORE INTO '+r.silRelations.tableName+'(id) SELECT relationid FROM bigdb.relationmembers WHERE (memberid IN (SELECT id FROM '+r.silNodes.tableName+') AND memberidxtype&3=0) OR (memberid IN (SELECT id FROM '+r.silWays.tableName+') AND memberidxtype&3=1 )');
 		echot('	completing relation list');
-		var objCnt,qobj,addList=hMap.map.storage.createIdList();
+		var objCnt,qobj,addList=r.hMap.map.storage.createIdList();
 		do{
-			hMap.exec('INSERT OR IGNORE INTO ' + addList.tableName + '(id) SELECT relationid FROM relationmembers WHERE memberid IN (SELECT id FROM ' + r.silRelations.tableName + ') AND (memberidxtype & 3)=2');
-			hMap.exec('DELETE FROM ' + addList.tableName + ' WHERE id IN (SELECT id FROM ' + r.silRelations.tableName + ')');
-			hMap.exec('INSERT INTO '+r.silRelations.tableName+'(id) SELECT id FROM '+addList.tableName);
-			qobj=hMap.exec('SELECT count(1) FROM '+addList.tableName);
+			r.hMap.exec('INSERT OR IGNORE INTO ' + addList.tableName + '(id) SELECT relationid FROM bigdb.relationmembers WHERE memberid IN (SELECT id FROM ' + r.silRelations.tableName + ') AND (memberidxtype & 3)=2');
+			r.hMap.exec('DELETE FROM ' + addList.tableName + ' WHERE id IN (SELECT id FROM ' + r.silRelations.tableName + ')');
+			r.hMap.exec('INSERT INTO '+r.silRelations.tableName+'(id) SELECT id FROM '+addList.tableName);
+			qobj=r.hMap.exec('SELECT count(1) FROM '+addList.tableName);
 			objCnt=qobj.read(1).toArray()[0];
 			echot('	added '+objCnt+' relations');
 		}while(objCnt>0);
-		hMap.exec('DELETE FROM ' + addList.tableName);
+		r.hMap.exec('DELETE FROM ' + addList.tableName);
 		echot('	exporting nodes attrs...');
-		hMap.exec('INSERT INTO smalldb.nodes_attr (id,version,timestamp,userId,changeset) SELECT id,version,timestamp,userId,changeset FROM nodes_attr WHERE id IN (SELECT id FROM '+r.silNodes.tableName+')');
+		r.hMap.exec('INSERT INTO nodes_attr (id,version,timestamp,userId,changeset) SELECT id,version,timestamp,userId,changeset FROM bigdb.nodes_attr WHERE id IN (SELECT id FROM '+r.silNodes.tableName+')');
 		echot('	exporting ways...');
-		hMap.exec('INSERT INTO smalldb.ways (id,version,timestamp,userId,changeset) SELECT id,version,timestamp,userId,changeset FROM ways WHERE id IN (SELECT id FROM '+r.silWays.tableName+')');
+		r.hMap.exec('INSERT INTO ways (id,version,timestamp,userId,changeset) SELECT id,version,timestamp,userId,changeset FROM bigdb.ways WHERE id IN (SELECT id FROM '+r.silWays.tableName+')');
 		echot('	exporting way nodes');
-		hMap.exec('INSERT INTO smalldb.waynodes (wayid,nodeidx,nodeid) SELECT wayid,nodeidx,nodeid FROM waynodes WHERE wayid IN (SELECT id FROM '+r.silWays.tableName+')');
+		r.hMap.exec('INSERT INTO waynodes (wayid,nodeidx,nodeid) SELECT wayid,nodeidx,nodeid FROM bigdb.waynodes WHERE wayid IN (SELECT id FROM '+r.silWays.tableName+')');
 		echot('	exporting relations...');
-		hMap.exec('INSERT INTO smalldb.relations (id,version,timestamp,userId,changeset) SELECT id,version,timestamp,userId,changeset FROM relations WHERE id IN (SELECT id FROM '+r.silRelations.tableName+')');
+		r.hMap.exec('INSERT INTO relations (id,version,timestamp,userId,changeset) SELECT id,version,timestamp,userId,changeset FROM bigdb.relations WHERE id IN (SELECT id FROM '+r.silRelations.tableName+')');
 		echot('	exporting relation members...');
-		hMap.exec('INSERT INTO smalldb.relationmembers (relationid,memberidxtype,memberid,memberrole) SELECT relationid,memberidxtype,memberid,memberrole FROM relationmembers WHERE relationid IN (SELECT id FROM '+r.silRelations.tableName+')');
+		r.hMap.exec('INSERT INTO relationmembers (relationid,memberidxtype,memberid,memberrole) SELECT relationid,memberidxtype,memberid,memberrole FROM bigdb.relationmembers WHERE relationid IN (SELECT id FROM '+r.silRelations.tableName+')');
 		echot('	exporting node tags...');
-		hMap.exec('INSERT INTO smalldb.objtags (objid,tagid) SELECT objid,tagid FROM objtags WHERE objid IN(SELECT id*4 FROM '+r.silNodes.tableName+')');
+		r.hMap.exec('INSERT INTO objtags (objid,tagid) SELECT objid,tagid FROM bigdb.objtags WHERE objid IN(SELECT id*4 FROM '+r.silNodes.tableName+')');
 		echot('	exporting way tags...');
-		hMap.exec('INSERT INTO smalldb.objtags (objid,tagid) SELECT objid,tagid FROM objtags WHERE objid IN(SELECT id*4+1 FROM '+r.silWays.tableName+')');
+		r.hMap.exec('INSERT INTO objtags (objid,tagid) SELECT objid,tagid FROM bigdb.objtags WHERE objid IN(SELECT id*4+1 FROM '+r.silWays.tableName+')');
 		echot('	exporting relation tags...');
-		hMap.exec('INSERT INTO smalldb.objtags (objid,tagid) SELECT objid,tagid FROM objtags WHERE objid IN(SELECT id*4+2 FROM '+r.silRelations.tableName+')');
+		r.hMap.exec('INSERT INTO objtags (objid,tagid) SELECT objid,tagid FROM bigdb.objtags WHERE objid IN(SELECT id*4+2 FROM '+r.silRelations.tableName+')');
 		echot('	exporting tag values...');
-		hMap.exec('INSERT INTO smalldb.tags (id,tagname,tagvalue) SELECT id,tagname,tagvalue FROM tags WHERE id IN (SELECT tagid FROM smalldb.objtags)');
+		r.hMap.exec('INSERT INTO tags (id,tagname,tagvalue) SELECT id,tagname,tagvalue FROM bigdb.tags WHERE id IN (SELECT tagid FROM objtags)');
 		echot('	exporting users...');
-		hMap.exec('INSERT OR IGNORE INTO '+addList.tableName+' (id) SELECT userId FROM smalldb.relations');
-		hMap.exec('INSERT OR IGNORE INTO '+addList.tableName+' (id) SELECT userId FROM smalldb.ways');
-		hMap.exec('INSERT OR IGNORE INTO '+addList.tableName+' (id) SELECT userId FROM smalldb.nodes_attr');
-		hMap.exec('INSERT INTO smalldb.users (id,name) SELECT id,name FROM users WHERE id IN (SELECT id FROM '+addList.tableName+')');
-		hMap.exec('COMMIT');
-		hMap.exec('DETACH smalldb');
-		hMap.exec('BEGIN');
+		r.hMap.exec('INSERT OR IGNORE INTO '+addList.tableName+' (id) SELECT userId FROM relations');
+		r.hMap.exec('INSERT OR IGNORE INTO '+addList.tableName+' (id) SELECT userId FROM ways');
+		r.hMap.exec('INSERT OR IGNORE INTO '+addList.tableName+' (id) SELECT userId FROM nodes_attr');
+		r.hMap.exec('INSERT INTO users (id,name) SELECT id,name FROM bigdb.users WHERE id IN (SELECT id FROM '+addList.tableName+')');
+		r.hMap.exec('COMMIT');
+		r.hMap.exec('DETACH bigdb');
 		echot('	exporting boundary...');
-		r.hMap.open(h.fso.buildPath(dstDir, r.name+'.db3'));
 		if(boundBackupDir){
 			var bbhm=h.mapHelper();
 			bbhm.open(h.fso.buildPath(boundBackupDir,r.name+'.db3'),false,true);
 			bbhm.exportMultiPoly(r.hMap.map,r.ref);
 			bbhm.close();
+		}else{
+			hMap.exportMultiPoly(r.hMap.map,r.ref);
 		};
-		hMap.exportMultiPoly(r.hMap.map,r.ref);
 		delete r.silNodes;
 		delete r.silWays;
 		delete r.silRelations;
@@ -131,9 +125,9 @@ function exportMaps(hMap,bounds){
 			if(b.bbox[2]<latRange.min)latRange.min=b.bbox[2];
 			b.hMap=h.mapHelper();
 			b.hMap.open(h.fso.buildPath(dstDir, b.name+'.db3'),true);
-			b.silNodes=hMap.map.storage.createIdList();
-			b.silWays=hMap.map.storage.createIdList();
-			b.silRelations=hMap.map.storage.createIdList();
+			b.silNodes=b.hMap.map.storage.createIdList();
+			b.silWays=b.hMap.map.storage.createIdList();
+			b.silRelations=b.hMap.map.storage.createIdList();
 			//ignore insertion in case of "shared in several bounds" node
 			b.qPutn=b.hMap.map.storage.sqlPrepare('INSERT OR IGNORE INTO nodes_latlon(id,minlat,maxlat,minlon,maxlon)VALUES(:id,:lat,:lat,:lon,:lon)');
 		}else if(a.act=='-'){
@@ -154,7 +148,7 @@ function exportMaps(hMap,bounds){
 				if(b.bbox[0]>latRange.max)latRange.max=b.bbox[0];
 				if(b.bbox[2]<latRange.min)latRange.min=b.bbox[2];
 			};
-		}else throw 'Invalid action '+a.act;
+		}else throw {name:'dev',description:'Invalid action '+a.act};
 	};
 	for(var i=0;i<bounds.length;i++){
 		actions.push({act:'+',lon:bounds[i].bbox[3],idx:i});
@@ -208,8 +202,10 @@ function main(){
 	};
 	echot('opening src map '+srcMapName);
 	var srcMap=h.mapHelper();
-	srcMap.open(srcMapName);
+	srcMap.open(srcMapName,false,true);
+	srcMap.exec('COMMIT');
 	srcMap.exec('PRAGMA locking_mode=NORMAL');
+	srcMap.exec('BEGIN');
 	try{
 		echot('reading region list');
 		var boundsCollection=include(regionListFileName);
@@ -224,15 +220,15 @@ function main(){
 			if (boundBackupDir) bbkMap.open(h.fso.buildPath(boundBackupDir,bs.name+'.db3'));
 			if(typeof(bs.ref)=='string')bs.ref=bs.ref.split(',');
 			var mpr=h.getMultiPoly(bs.ref,srcMap.map,(boundBackupDir)?(bbkMap.map):(false));
-			if(boundBackupDir)bbkMap.close();
 			if(!mpr.poly){
 				echo('	'+bs.name+' boundary not resolved. Skipped.');
-				continue;
+			}else{
+				echo('	'+bs.name+' boundary resolved from '+mpr.usedMap.storage.dbName);
+				bs.bpoly=mpr.poly;
+				bs.bbox=mpr.poly.getBBox().toArray();
+				bounds.push(bs);
 			};
-			echo('	'+bs.name+' boundary resolved from '+mpr.usedMap.storage.dbName);
-			bs.bpoly=mpr.poly;
-			bs.bbox=mpr.poly.getBBox().toArray();
-			bounds.push(bs);
+			if(boundBackupDir)bbkMap.close();
 		};
 		exportMaps(srcMap,bounds);
 	}finally{
