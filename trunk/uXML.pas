@@ -1125,6 +1125,7 @@ var
   i64:int64;
   su8:UTF8String;
   hasTags:boolean;
+  ws:WideString;
 begin
   qAtt:=inStg.sqlPrepare('SELECT nodes.id,version,timestamp,userid,users.name,changeset,lat,lon FROM nodes,users WHERE nodes.userid=users.id');
   qTgs:=inStg.sqlPrepare('SELECT tagname,tagvalue FROM objtags,tags WHERE :id*4+0=objid AND tagid=tags.id');
@@ -1145,7 +1146,15 @@ begin
         inc(pV);
         writeUTF8(inttostr(pV^)+'" timestamp="');
         inc(pV);
-        writeUTF16(pWideChar(wideString(pV^)));
+        if VarIsType(pV^,varOleStr)then begin
+          ws:=pV^;
+          if (length(ws)<>length('20001010230023'))then
+            writeUTF16(ws)
+          else
+            writeUTF16(timeStampToWideString(WideStrToInt64(ws)));
+        end
+        else
+          writeUTF16(timeStampToWideString(pV^));
         inc(pV);
         writeUTF8('" uid="'+inttostr(pV^)+'" user="');
         inc(pV);
@@ -1200,6 +1209,7 @@ var
   pV,pVt:PVariant;
   n,l:integer;
   i64:int64;
+  ws:WideString;
   hasTags:boolean;
 begin
   qAtt:=inStg.sqlPrepare('SELECT relations.id,version,timestamp,userid,users.name,changeset FROM relations,users WHERE relations.userid=users.id');
@@ -1222,7 +1232,15 @@ begin
         inc(pV);
         writeUTF8(inttostr(pV^)+'" timestamp="');
         inc(pV);
-        writeUTF16(pWideChar(wideString(pV^)));
+        if VarIsType(pV^,varOleStr)then begin
+          ws:=pV^;
+          if (length(ws)<>length('20001010230023'))then
+            writeUTF16(ws)
+          else
+            writeUTF16(timeStampToWideString(WideStrToInt64(ws)));
+        end
+        else
+          writeUTF16(timeStampToWideString(pV^));
         inc(pV);
         writeUTF8('" uid="'+inttostr(pV^)+'" user="');
         inc(pV);
@@ -1303,6 +1321,7 @@ var
   pV,pVt:PVariant;
   n,l:integer;
   i64:int64;
+  ws:WideString;
   hasTags:boolean;
 begin
   qAtt:=inStg.sqlPrepare('SELECT ways.id,version,timestamp,userid,users.name,changeset FROM ways,users WHERE ways.userid=users.id');
@@ -1325,7 +1344,15 @@ begin
         inc(pV);
         writeUTF8(inttostr(pV^)+'" timestamp="');
         inc(pV);
-        writeUTF16(pWideChar(wideString(pV^)));
+        if VarIsType(pV^,varOleStr)then begin
+          ws:=pV^;
+          if (length(ws)<>length('20001010230023'))then
+            writeUTF16(ws)
+          else
+            writeUTF16(timeStampToWideString(WideStrToInt64(ws)));
+        end
+        else
+          writeUTF16(timeStampToWideString(pV^));
         inc(pV);
         writeUTF8('" uid="'+inttostr(pV^)+'" user="');
         inc(pV);

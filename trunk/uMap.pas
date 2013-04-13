@@ -350,6 +350,7 @@ const
 var
   //IQueryResult
   qr, row, t: OleVariant;
+  ws:WideString;
 begin
   if not varIsType(fStorage, varDispatch) then
     raise EInOutError.create(toString() + '.getNode: storage not assigned');
@@ -367,8 +368,13 @@ begin
   result.userName := row[3];
   result.changeset := row[4];
   t:=row[5];
-  if VarIsType(t,varOleStr)and(length(WideString(t))<>length('20001010230023')) then
-    result.timestamp := t
+  if VarIsType(t,varOleStr)then begin
+    ws:=t;
+    if (length(ws)<>length('20001010230023'))then
+      result.timestamp := ws
+    else
+      result.timestamp := timeStampToWideString(WideStrToInt64(ws));
+  end
   else
     result.timestamp:=timeStampToWideString(t);
   result.lat := intToDeg(row[6]);
@@ -417,6 +423,7 @@ const
 var
   //IQueryResult
   qr, row, t: OleVariant;
+  ws: WideString;
 begin
   if not varIsType(fStorage, varDispatch) then
     raise EInOutError.create(toString() + '.getRelation: storage not assigned');
@@ -434,8 +441,13 @@ begin
   result.userName := row[3];
   result.changeset := row[4];
   t:=row[5];
-  if VarIsType(t,varOleStr) then
-    result.timestamp := t
+  if VarIsType(t,varOleStr)then begin
+    ws:=t;
+    if (length(ws)<>length('20001010230023'))then
+      result.timestamp := ws
+    else
+      result.timestamp := timeStampToWideString(WideStrToInt64(ws));
+  end
   else
     result.timestamp:=timeStampToWideString(t);
   if not VarIsNull(row[6]) then begin
@@ -493,6 +505,7 @@ var
   qr, row, t: OleVariant;
   pv: PVarData;
   pi64: PInt64;
+  ws:WideString;
 begin
   if not varIsType(fStorage, varDispatch) then
     raise EInOutError.create(toString() + '.getWay: storage not assigned');
@@ -510,8 +523,13 @@ begin
   result.userName := row[3];
   result.changeset := row[4];
   t:=row[5];
-  if VarIsType(t,varOleStr) then
-    result.timestamp := t
+  if VarIsType(t,varOleStr)then begin
+    ws:=t;
+    if (length(ws)<>length('20001010230023'))then
+      result.timestamp := ws
+    else
+      result.timestamp := timeStampToWideString(WideStrToInt64(ws));
+  end
   else
     result.timestamp:=timeStampToWideString(t);
   if not VarIsNull(row[6]) then begin
