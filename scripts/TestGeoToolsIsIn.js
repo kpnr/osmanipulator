@@ -1,7 +1,7 @@
 //settings start
 var testFileDir='F:\\db\\osm\\sql';
-var testFileName='rf.db3';
-var testRelationId=1221185;
+var testFileName='komi.db3';
+var testRelationId=115136;
 var cIntToDeg=1e-7,cDegToInt=1e7;
 //settings end
 var re=/wscript/i;
@@ -18,7 +18,7 @@ function echo(s){
 
 function testIsIn(map,stg,mpoly){
 	var bbox=mpoly.getBBox().toArray();
-	var q=stg.sqlPrepare('select lat*'+cIntToDeg+',lon*'+cIntToDeg+' from nodes where '/*lat between '+(bbox[2]*cDegToInt)+' and '+(bbox[0]*cDegToInt)+' and lon between '+(bbox[3]*cDegToInt)+' and '+(bbox[1]*cDegToInt)+' and*/+' id=257624151 limit 800000');
+	var q=stg.sqlPrepare('select lat*'+cIntToDeg+',lon*'+cIntToDeg+' from nodes '/*where lat between '+(bbox[2]*cDegToInt)+' and '+(bbox[0]*cDegToInt)+' and lon between '+(bbox[3]*cDegToInt)+' and '+(bbox[1]*cDegToInt)+' and id=257624151*/+' limit 800000');
 	var r=stg.sqlExec(q,'','');
 	var inc=0,exc=0;
 	var d=new Date();
