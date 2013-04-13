@@ -240,13 +240,17 @@ function getTestNode(testPoly,testWays,map){
 			if(d<testDistance){
 				continue;
 			};
-			var midlat=(n1.lat+n2.lat)/2,midlon=(n1.lon+n2.lon)/2,dlat=(n2.lat-n1.lat)/d*testDistance,dlon=(n2.lon-n1.lon)/d*testDistance;
-			result.lat=midlat - dlon;
-			result.lon=midlon + dlat;
-			if(testPoly.isIn(result))return result;
-			result.lat=midlat + dlon;
-			result.lon=midlon - dlat;
-			if(testPoly.isIn(result))return result;
+			var midlat=(n1.lat+n2.lat)/2,midlon=(n1.lon+n2.lon)/2,dlat=(n2.lat-n1.lat)/d*testDistance,dlon=(n2.lon-n1.lon)/d*testDistance,tn1={lat:midlat - dlon,lon:midlon + dlat},tn2={lat:midlat + dlon,lon:midlon - dlat},testCase=((testPoly.isIn(tn1))?(1):(0))+((testPoly.isIn(tn2))?(2):(0));
+			if(testCase==1){
+				result.lat=tn1.lat;
+				result.lon=tn1.lon;
+				return result;
+			};
+			if(testCase==2){
+				result.lat=tn2.lat;
+				result.lon=tn2.lon;
+				return result;
+			};
 		};
 	};
 	var tpa=testPoly.getArea();
@@ -491,24 +495,37 @@ function osmanPolyFromNodeList(nl,cutter){
 
 function orderClusters(cls,map){
 	function insertClusterIntoTree(tree,cl){
-		for(var i=0;i<tree.length;i++){
-			if(cl.osmanPoly.isIn(tree[i].testNode)){
-				//tree-poly included into new cl-poly. Store treetpoly as subpoly of new and replace in tree.
-				var t=tree[i];
-				tree[i]=cl;
-				if(!cl.subPolies)cl.subPolies=[];
-				cl.subPolies.push(t);
-			}else if(tree[i].osmanPoly.isIn(cl.testNode)){
+		for(var i=tree.length-1;i>=0;i--){
+			var testCase=((cl.osmanPoly.isIn(tree[i].testNode))?(1):(0))+((tree[i].osmanPoly.isIn(cl.testNode))?(2):(0));
+			if(testCase==3){
+				//both testNodes are in both polies. So lets rely on poly areas - bigger is outer
+				testCase=(cl.osmanPoly.getArea()>tree[i].osmanPoly.getArea())?(1):(2);
+			};
+			switch(testCase){
+			case 0:
+				//polies is siblings, so try next pair
+				break;
+			case 1:
+				//tree-poly included into new cl-poly. Store old as subpoly of new and replace in tree.
+				for(var j=i;j>=0;j--){
+					//now check rest
+					var t=tree[j];
+					if(insertClusterIntoTree([cl],t)){//if old is part of new
+						tree.splice(j,1);//remove it from new siblings
+					};
+				};
+				tree.push(cl);
+				return true;
+			case 2:
 				//new poly included into tree poly.
 				if(!tree[i].subPolies)tree[i].subPolies=[];
 				if(insertClusterIntoTree(tree[i].subPolies,cl)){
 					//new poly is subsubpoly and stored somewhere deeper in tree.
-					return true;
 				}else{
 					//new poly is not subsub, but simple sub, so store it and return
 					tree[i].subPolies.push(cl);
-					return true;
-				}
+				};
+				return true;
 			};
 		};
 		return false;
@@ -523,7 +540,9 @@ function orderClusters(cls,map){
 			continue;//and block insertion into tree
 		};
 		c.testNode=getTestNode(c.osmanPoly,c.ways,map);
-		if(!insertClusterIntoTree(r,c))r.push(c);
+		if(!insertClusterIntoTree(r,c)){
+			r.push(c);
+		};
 	};
 	return r;
 };
@@ -795,10 +814,21 @@ function intersectMultipoly(relId,cutter,boundIndex){
 		for(var i=pr.subPoly.length-1;i>=0;i--)res=mergeWays(pr.subPoly[i]) && res;
 		return res;
 	};
+
+	function makeClusterArray(pr,cls){
+		for(var i=0;i<pr.clusters.length;i++){
+			var cl=pr.clusters[i];
+			cl.srcPtr=[pr,i];
+			cls.push(cl);
+		};
+		for(var i=0;i<pr.subPoly.length;i++){
+			makeClusterArray(pr.subPoly[i],cls);
+		};
+	};
 	
 	function indexWays(pr,widx,testPoly,map){
 		
-		function markCluster(cluster,role){
+		function markCluster(cluster,role,relId){
 			for(var i=cluster.ways.length-1;i>=0;i--){
 				var idx=getWayKey(pr.obj.id,cluster.ways[i].id);
 				var oldRole=widx[idx];
@@ -808,20 +838,20 @@ function intersectMultipoly(relId,cutter,boundIndex){
 				cluster.role=role;
 			};
 		};
-		
-		for(var i=pr.clusters.length-1;i>=0;i--){
-			var cluster=pr.clusters[i];
-			var cObj=osmanPolyFromWayList(cluster.ways,map);
-			if(!cObj){
-				pr.clusters.splice(i,1);
-				echo('\n	Warning: indexWays failed with relId='+pr.obj.id);
-				continue;
+
+		function indexTree(cT,role){
+			for(var i=0;i<cT.length;i++){
+				var cl=cT[i];
+				markCluster(cl,role,cl.srcPtr[0].obj.id);
+				if(cl.subPolies && cl.subPolies.length){
+					indexTree(cl.subPolies,(role=='outer')?('inner'):('outer'));
+				};
 			};
-			var nds=cluster.ways[0].nodes.toArray();
-			var testNode=getTestNode(cObj,cluster.ways,map);
-			markCluster(cluster,(testPoly.isIn(testNode)? ('outer') : ('inner')));
 		};
-		for(var i=pr.subPoly.length-1;i>=0;i--)indexWays(pr.subPoly[i],widx,testPoly,map);
+		var cList=[];
+		makeClusterArray(pr,cList);
+		var cTree=orderClusters(cList,map);
+		indexTree(cTree,'outer');
 	};
 	
 	function detectClusterRole(pr,widx){
@@ -946,16 +976,6 @@ function intersectMultipoly(relId,cutter,boundIndex){
 	};
 	
 	function filterClusters(pr,map){
-		function makeClusterArray(pr,cls){
-			for(var i=0;i<pr.clusters.length;i++){
-				var cl=pr.clusters[i];
-				cl.srcPtr=[pr,i];
-				cls.push(cl);
-			};
-			for(var i=0;i<pr.subPoly.length;i++){
-				makeClusterArray(pr.subPoly[i],cls);
-			};
-		};
 		
 		function getClusterPerimeterAndBoundFlag(c){
 		//returns {perimeter:length_in_meters, boundFlag: all_cluster_nodes_are_on_bound}

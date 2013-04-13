@@ -30,7 +30,7 @@ function checkArgs(){
 		echo('dst='+dstMapName);
 		echo('refs='+exportObjects);
 		return true;
-	}
+	};
 	help();
 	return false;
 };

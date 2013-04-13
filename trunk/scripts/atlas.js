@@ -12,10 +12,10 @@ ttable:0|1
 */
 //settings begin
 var cfg={
-	countryDBName:'s:\\db\\osm\\sql\\rf_mpoly.db3',
-	areaFile:'atlas_cfg_small.js',
+	countryDBName:'s:\\db\\osm\\sql\\rf_mpc.db3',
+	areaFile:'atlas_cfg.js',
 	boundBackupDir:'f:\\db\\osm\\sql\\bounds',
-	workDir:'f:\\db\\osm\\coasts',
+	workDir:'f:\\db\\osm\\regions',
 	maxTasks:2
 };
 //settings end
@@ -121,7 +121,11 @@ function genTasks(){
 					ti.push({task:'exportOSM.js',cmdline:'/src:"'+dstDBName+'" /dst:"'+dstOSMName+'"'});
 					ti.push({task:'exportPolyFile.js',cmdline:'/src:"'+dstDBName+'" /dst:"'+boundPolyName+'" /refs:"'+ai.bound+'"'});
 					ti.push({task:'f:\\db\\cvt\\mp_no_rt.bat',cmdline:'"'+dstOSMName+'" "'+mpFileName+'"'});
-					ti.push({task:'mp2nm.js',cmdline:'/src:"'+mpFileName+'" /dst:"'+nmFileName+'" /bound:"'+boundPolyName+'"'});
+					ti.push({task:'mp2nm.js',cmdline:'/src:"'+mpFileName+'" /dst:"'+nmFileName
+					/*
+					do not use map cover poly
+					+'" /bound:"'+boundPolyName+'"'*/
+					});
 					ti.push({task:'%ComSpec%',cmdline:'/C del "'+boundPolyName+'"'});
 					dstDBDeleteOffset=-3;
 				};

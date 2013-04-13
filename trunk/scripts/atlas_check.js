@@ -1,5 +1,5 @@
 var cfg={
-	countryDBName:'s:\\db\\osm\\sql\\rf.db3',
+	countryDBName:'f:\\db\\osm\\sql\\rf.db3',
 	areaFile:'atlas_cfg.js',
 	boundBackupDir:'f:\\db\\osm\\sql\\bounds'
 };
