@@ -47,6 +47,7 @@ type
     procedure Close();
     procedure Open(const FileName: WideString;openFlags:integer=SQLITE_OPEN_READWRITE or SQLITE_OPEN_CREATE);
     procedure StartTransaction();
+    procedure SetBusyTimeout(ms:integer);
     procedure Commit();
     procedure Rollback();
     property IsInTransaction:boolean read GetIsInTransaction;
@@ -130,6 +131,11 @@ begin
     stmtRollback:=CreateStmt('ROLLBACK;');
   end;
   stmtRollback.Exec();
+end;
+
+procedure TSQLiteDB.SetBusyTimeout(ms: integer);
+begin
+  SQLite3_BusyTimeout(hDB,ms);
 end;
 
 procedure TSQLiteDB.StartTransaction;

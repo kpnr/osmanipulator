@@ -86,17 +86,18 @@ function main(){
 	while(!qAllWays.eos){
 		var aAllWays=qAllWays.read(1000).toArray();
 		for(var i=0;i<aAllWays.length;i+=2){
-			var nId=aAllWays[i+1];
-			var ll=stg.sqlExec(qGetNodeLL,':id',nId).read(1).toArray();
-			if(!ll.length)continue;
-			testNode.lat=ll[0]; testNode.lon=ll[1];
-			if((!bpoly) || bpoly.isIn(testNode)){
-				exportWays.add(aAllWays[i]);
+			totcnt++;
+			if(bpoly){
+				var nId=aAllWays[i+1];
+				var ll=stg.sqlExec(qGetNodeLL,':id',nId).read(1).toArray();
+				if(!ll.length)continue;
+				testNode.lat=ll[0]; testNode.lon=ll[1];
+				if(!bpoly.isIn(testNode))continue;
 				exportNodes.add(nId);
 				dstg.sqlExec(qPutn,[':id',':lat',':lon'],[nId,ll[2],ll[3]]);
-				incnt++;
-			};
-			totcnt++;
+			}
+			exportWays.add(aAllWays[i]);
+			incnt++;
 		};
 		echo('Added '+incnt+' of '+totcnt,true);
 	};
@@ -110,16 +111,15 @@ function main(){
 	while(!qGetNodeLL.eos){
 		var aNodes=qGetNodeLL.read(1000).toArray();
 		for(var i=0;i<aNodes.length;i+=5){
+			totcnt++;
 			var nId=aNodes[i];
 			if(bpoly){
 				testNode.lat=aNodes[i+1]; testNode.lon=aNodes[i+2];
+				if(!bpoly.isIn(testNode))continue;
 			};
-			if((!bpoly) || bpoly.isIn(testNode)){
-				exportNodes.add(nId);
-				dstg.sqlExec(qPutn,[':id',':lat',':lon'],[nId,aNodes[i+3],aNodes[i+4]]);
-				incnt++;
-			};
-			totcnt++;
+			exportNodes.add(nId);
+			dstg.sqlExec(qPutn,[':id',':lat',':lon'],[nId,aNodes[i+3],aNodes[i+4]]);
+			incnt++;
 		};
 		echo('Added '+incnt+' of '+totcnt,true);
 	};

@@ -1,4 +1,7 @@
 /*
+globals:
+	noHostCheck - if true then ScriptHost windowness and bitness are not checked.
+		if false then script restarted in 32bit console host.
 Hlp members:
 	man - OSMan application
 	gt - OSMan GeoTools module
@@ -124,7 +127,6 @@ PolyIntersector members:
 		If new way requred, then it created via dstMap.createNode(), new Id is dstMap.getNextWayId() or nextWayId argument
 		nextWayId is optional. Use it for speedup (avoid getNextWayId()) call.
 */
-
 function MapHelper(hlpRef){
 	this.h=hlpRef;
 	this.map=false;
@@ -251,8 +253,8 @@ MapHelper.prototype.exportRecurcive=function(dstMap,refs){
 	};
 	while(q.length>0){
 		var obj=q.pop();
-		dstMap.putObject(obj);
 		q=q.concat(t.getObjectChildren(obj));
+		dstMap.putObject(obj);
 	};
 };
 
@@ -1448,6 +1450,30 @@ Hlp.prototype.echot=function(s,l,r){
 	var d=new Date();
 	function f(t){return (t>9)?(t):('0'+t)};
 	this.echo(''+f(d.getYear()%100)+'.'+f(d.getMonth() + 1)+'.'+f(d.getDate())+' '+f(d.getHours())+':'+f(d.getMinutes())+':'+f(d.getSeconds())+' '+s,l,r);
+};
+
+if((typeof(noHostCheck)=='undefined') || (!noHostCheck)){
+	//check window/console
+	var host=WScript.FullName,exe='',sh=WScript.CreateObject('WScript.Shell'),env=sh.Environment('Process'),fso=WScript.CreateObject('Scripting.FileSystemObject');
+	if ((/wscript\.exe$/i).test(host)){
+		exe=fso.buildPath(fso.buildPath(env('WINDIR'),'system32'),'cscript.exe');
+	}else if(!(/cscript\.exe$/i).test(host)){
+		WScript.echo('Warning: Can`t detect script host windowness for <'+host+'>');
+	};
+	//check bitness
+	var pf86=env('PROGRAMFILES(X86)');
+	if(pf86){
+		//we in Win64
+		if(pf86!=env('PROGRAMFILES')){
+			//our host in 64-bit
+			exe=fso.buildPath(fso.buildPath(env('WINDIR'),'SysWOW64'),'cscript.exe');
+		};
+	};
+	if(exe){
+		var args='"'+WScript.ScriptFullName+'"',a=WScript.arguments;
+		for(var i=0;i<a.length;i++)args+=' "'+a(i)+'"';
+		WScript.Quit(sh.Run('"'+exe+'" '+args,1,true));
+	};
 };
 
 Hlp;

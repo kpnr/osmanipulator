@@ -405,6 +405,7 @@ type
     //aBitLevel should be between 2 and 31.
     //Suitable for mp-format convertion
     procedure bitRound(aNode: OleVariant; aBitLevel: integer);
+    function utf8to16(const U8:WideString):WideString;
   end;
 
   IMultiPoly = interface(IOSManAll)

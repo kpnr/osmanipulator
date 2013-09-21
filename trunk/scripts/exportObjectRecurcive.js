@@ -1,7 +1,7 @@
 //settings begin
-var exportObjects='relation:2032715,relation:81995';
-var srcMapName='f:\\db\\osm\\regions\\ctfo_s.db3';
-var dstMapName='s:\\db\\osm\\sql\\debug.db3';
+var exportObjects='way:218559335';
+var srcMapName='s:\\db\\osm\\sql\\rf.db3';
+var dstMapName='f:\\db\\osm\\regions\\yufo_w.db3';
 //settings end
 function include(n){var w=WScript,h=w.createObject('WScript.Shell'),o=h.currentDirectory,s=w.createObject('Scripting.FileSystemObject'),f,t;h.currentDirectory=s.getParentFolderName(w.ScriptFullName);try{f=s.openTextFile(n,1,!1);try{t=f.ReadAll()}finally{f.close()}return eval(t)}catch(e){if(e instanceof Error)e.description+=' '+n;throw e}finally{h.currentDirectory=o}}
 

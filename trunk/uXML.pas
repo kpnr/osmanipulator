@@ -421,7 +421,7 @@ begin
     fWayHandler.init(uri, localName, qName, atts, onDoneAdd)
   else if qName = 'relation' then
     fRelationHandler.init(uri, localName, qName, atts, onDoneAdd)
-  else if (qName = 'bound') or (qName = 'bounds') then begin
+  else if (qName = 'bound') or (qName = 'bounds') or (qName='changeset') then begin
     TBaseHandler.create(fReader).init(uri, localName, qName, atts);
   end
   else

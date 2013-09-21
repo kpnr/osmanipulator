@@ -52,43 +52,29 @@ function checkArgs(){
 
 function mergeDupNodes(hMap){
 	var stg=hMap.map.storage;
-	var dupIdList=stg.createIdList();
-	hMap.exec('INSERT OR IGNORE INTO '+dupIdList.tableName+'(id) SELECT n1.id FROM nodes_latlon AS n1,nodes_latlon AS n2 WHERE n1.minlat=n2.minlat AND n1.minlon=n2.minlon AND n1.id<n2.id');
-	var qcoord=stg.sqlPrepare('SELECT minlat,minlon FROM nodes_latlon WHERE id=:id');
+	var qcoord=stg.sqlPrepare('SELECT n1.minlat,n1.minlon FROM nodes_latlon AS n1,nodes_latlon AS n2 WHERE n1.minlat=n2.minlat AND n1.minlon=n2.minlon AND n1.id<>n2.id LIMIT 1');
 	var qdup=stg.sqlPrepare('SELECT id FROM nodes_latlon WHERE minlat=:lat AND minlon=:lon');
-	var dupListIsEmpty;
 	do{
-		dupListIsEmpty=true;
-		var qdn=hMap.exec('SELECT id FROM '+dupIdList.tableName);
-		while(!qdn.eos){
-			var nid=qdn.read(1).toArray();
-			if(typeof(nid[0])!='number'){
-				echo('warning: unexpected type of node id: '+typeof(nid[0]));continue;
-			};
-			dupIdList.remove(nid[0]);
-			var nc=stg.sqlExec(qcoord,':id',nid).read(1).toArray();
-			if(!nc.length)continue;
-			dupListIsEmpty=false;
-			var qnids=stg.sqlExec(qdup,[':lat',':lon'],nc),nds=[];
-			while(!qnids.eos)nds=nds.concat(qnids.read(1000).toArray());
-			if(nds.length<2)continue;
-			for(var i=nds.length-1;i>=0;i--){
-				dupIdList.remove(nds[i]);
-				nds[i]=hMap.map.getNode(nds[i]);
-				if(!nds[i])nds.splice(i,1);
-			};
-			if(nds.length<2)continue;
-			var tags=nds[0].tags;
-			echo('['+nds.length+'] => '+nds[0].id+'   ',true);
-			for(var i=nds.length-1;i>0;i--){
-				var tags2=nds[i];
-				for(var j=tags2.count-1;j>=0;j--){
-					tags.setByKey(tags2.getKey(j),tags2.getValue(j));
-				};
-				hMap.replaceObject(nds[i],[nds[0]]);
-			};
+		var nc=stg.sqlExec(qcoord,0,0).read(1).toArray();
+		if(!nc.length)break;
+		var qnids=stg.sqlExec(qdup,[':lat',':lon'],nc),nds=[];
+		while(!qnids.eos)nds=nds.concat(qnids.read(1000).toArray());
+		if(nds.length<2)continue;
+		for(var i=nds.length-1;i>=0;i--){
+			nds[i]=hMap.map.getNode(nds[i]);
+			if(!nds[i])nds.splice(i,1);
 		};
-	}while (!dupListIsEmpty)
+		if(nds.length<2)continue;
+		var tags=nds[0].tags;
+		echo('['+nds.length+'] => '+nds[0].id+'   ',true);
+		for(var i=nds.length-1;i>0;i--){
+			var tags2=nds[i];
+			for(var j=tags2.count-1;j>=0;j--){
+				tags.setByKey(tags2.getKey(j),tags2.getValue(j));
+			};
+			hMap.replaceObject(nds[i],[nds[0]]);
+		};
+	}while (true)
 	echo('');
 };
 
@@ -229,7 +215,6 @@ function normalizeRelations(hMap){
 	var sRid=hMap.exec('SELECT id FROM relations');
 	while(!sRid.eos){
 		var rid=sRid.read(1).toArray()[0],rel=hMap.map.getRelation(rid);
-		echo('\rrel['+rid+']',true,true);
 		if(!rel)continue;
 		var rtags=rel.tags,members=rel.members.getAll().toArray();
 		for(var i=members.length-3;i>=0;i-=3){
@@ -248,9 +233,54 @@ function normalizeRelations(hMap){
 				hMap.map.putWay(way);
 			};
 		};
-		echo(' ',true);
 	};
 };
+
+function processAssociatedStreet(hMap){
+	var sRid=hMap.exec("SELECT objid>>2 FROM objtags WHERE tagid in (SELECT id FROM tags WHERE tagname='type' AND tagvalue='associatedStreet') and objid&3=2"),tagtest=/^name(:..)?$/;
+	while(!sRid.eos){
+		var rid=sRid.read(1).toArray()[0],rel=hMap.map.getRelation(rid);
+		if(!rel)continue;
+		var rtags=rel.tags,members=rel.members.getAll().toArray(),ways=[],rta=rtags.getAll().toArray(),isModified=false;
+		for(var i=rta.length-2;i>=0;i-=2){
+			if(!tagtest.test(rta[i]))rta.splice(i,2);
+		};
+		//copy names from ways to relation
+		for(var i=members.length-3;i>=0;i-=3){
+			if((members[i]!='way')||(members[i+2]!='street'))continue;
+			var wid=members[i+1],way=hMap.map.getWay(wid);
+			if(!way)continue;
+			ways.push(way);
+			var wtags=way.tags.getAll().toArray();
+			for(var j=wtags.length-2;j>=0;j-=2){
+				if(!tagtest.test(wtags[j]))continue;
+				if(!rtags.hasKey(wtags[j])){
+					rtags.setByKey(wtags[j],wtags[j+1]);
+					rta.push(wtags[j],wtags[j+1]);
+					isModified=true;
+				};
+			};
+		};
+		if(isModified){
+			hMap.map.putRelation(rel);
+		};
+		//copy names from relation to ways
+		for(var i=ways.length-1;i>=0;i--){
+			var w=ways[i];
+			isModified=false;
+			for(var j=rta.length-2;j>=0;j-=2){
+				if(!w.tags.hasKey(rta[j])){
+					w.tags.setByKey(rta[j],rta[j+1]);
+					isModified=true;
+				};
+			};
+			if(isModified){
+				hMap.map.putWay(w);
+			};
+		};
+	};
+};
+
 
 function main(){
 	if(!checkArgs())return;
@@ -280,6 +310,8 @@ function main(){
 	removeNotUsedNodes(dst);
 	echot('Normalize relations');
 	normalizeRelations(dst);
+	echot('Process associatedStreet names');
+	processAssociatedStreet(dst);
 	echot('Fix incomplete ways');
 	dst.fixIncompleteWays();
 	echot('Fix incomplete relations');

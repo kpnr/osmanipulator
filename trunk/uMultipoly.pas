@@ -1280,8 +1280,10 @@ function TMultiPoly.resolve(const srcMap: OleVariant): boolean;
               (role = 'exclave')) then continue;
             if (s = 'relation') then begin
               varCopyNoInd(newObj, srcMap.getRelation(id));
-              if VarIsType(newObj, varDispatch) then
-                putList(relationList, newObj, i)
+              if VarIsType(newObj, varDispatch) then begin
+                putList(relationList, newObj, i);
+                if(relationList.count>10000) then raise EConvertError.Create(toString()+': Recurcive or too complex relation '+inttostr(id));
+              end
               else begin
                 addNotResolved('relation', id);
                 result := false;
@@ -1697,9 +1699,11 @@ var
           pCur := pStart;
           //try to detect state in regular nodes
           while (lineState = nsNone) do begin
-            case isInInt(pCur.point) of
-              0: lineState := nsOut;
-              2: lineState := nsIn;
+            if (pCur.state <> nsBreak) then begin//do not check boundary nodes
+              case isInInt(pCur.point) of
+                0: lineState := nsOut;
+                2: lineState := nsIn;
+              end;
             end;
             if(pCur = pEnd) then
               break;
