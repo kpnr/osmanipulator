@@ -404,6 +404,7 @@ begin
       newDB.open(newName, SQLITE_OPEN_READONLY)
     else
       newDB.open(newName);
+    newDB.setBusyTimeout(30000);
   except
     FreeAndNil(newDB);
     raise;
@@ -438,7 +439,14 @@ begin
       v := VarArrayOf([v]);
     end;
   end;
-  sqlQuery.sqlExecInt(n, v);
+  try
+     sqlQuery.sqlExecInt(n, v);
+  except
+    on E:Exception do begin
+      E.Message:=toString()+':'+E.Message;
+      raise;
+    end;
+  end;
   result := sqlQuery;
 end;
 

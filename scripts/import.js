@@ -1,10 +1,10 @@
 //settings begin
 var destDBName='f:\\db\\osm\\sql\\world.db3';
 var srcOSMName=[
-'f:\\db\\planet-120920.osm.bz2'
+'e:\\reget\\planet-130710.osm.bz2'
 ];
-var bpolyRelationId=60189;//set to false if no bpoly needed
-var bpolyDBName='f:\\db\\osm\\sql\\rfbound121002.db3';
+var bpolyRelationId=false;//60189;//set to false if no bpoly needed
+var bpolyDBName=0;//'f:\\db\\osm\\sql\\rfbound121002.db3';
 //settings end
 
 var man=WScript.createObject('OSMan.Application');

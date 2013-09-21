@@ -6,12 +6,6 @@ var boundBackupDir='';
 var cDegToInt=1e7;
 //end settings
 
-var re=/wscript/i;
-if (WScript.FullName.search(re)>=0){
-	var sh=WScript.CreateObject('WScript.Shell');
-	WScript.Quit(sh.Run('CScript '+WScript.ScriptFullName,1,true));
-};
-
 function include(n){var w=WScript,h=w.createObject('WScript.Shell'),o=h.currentDirectory,s=w.createObject('Scripting.FileSystemObject'),f,t;h.currentDirectory=s.getParentFolderName(w.ScriptFullName);try{f=s.openTextFile(n,1,!1);try{t=f.ReadAll()}finally{f.close()}return eval(t)}catch(e){if(e instanceof Error)e.description+=' '+n;throw e}finally{h.currentDirectory=o}};
 
 var h=new (include('helpers.js'))();
@@ -95,17 +89,20 @@ function exportMaps(hMap,bounds){
 		r.hMap.exec('INSERT OR IGNORE INTO '+addList.tableName+' (id) SELECT userId FROM ways');
 		r.hMap.exec('INSERT OR IGNORE INTO '+addList.tableName+' (id) SELECT userId FROM nodes_attr');
 		r.hMap.exec('INSERT INTO users (id,name) SELECT id,name FROM bigdb.users WHERE id IN (SELECT id FROM '+addList.tableName+')');
-		r.hMap.exec('COMMIT');
-		r.hMap.exec('DETACH bigdb');
 		echot('	exporting boundary...');
-		if(boundBackupDir){
+		if(r.useBackup){
+			echo('from backup');
 			var bbhm=h.mapHelper();
 			bbhm.open(h.fso.buildPath(boundBackupDir,r.name+'.db3'),false,true);
 			bbhm.exportMultiPoly(r.hMap.map,r.ref);
 			bbhm.close();
 		}else{
+			echo('from main');
 			hMap.exportMultiPoly(r.hMap.map,r.ref);
 		};
+		echo('done');
+		r.hMap.exec('COMMIT');
+		r.hMap.exec('DETACH bigdb');
 		delete r.silNodes;
 		delete r.silWays;
 		delete r.silRelations;
@@ -226,6 +223,7 @@ function main(){
 				echo('	'+bs.name+' boundary resolved from '+mpr.usedMap.storage.dbName);
 				bs.bpoly=mpr.poly;
 				bs.bbox=mpr.poly.getBBox().toArray();
+				bs.useBackup=boundBackupDir && (mpr.usedMap.storage.dbName==bbkMap.map.storage.dbName);
 				bounds.push(bs);
 			};
 			if(boundBackupDir)bbkMap.close();

@@ -16,11 +16,6 @@ var minPolySideRatio=0.001;//ratio=Area/(Perimeter^2)*16. Ratios for different s
 	//rectangle a=1m, b=1km r=0.004
 	//rectangle a=1m, b=4km r=0.001
 //settings end
-var re=/wscript/i;
-if (WScript.FullName.search(re)>=0){
-	var sh=WScript.CreateObject('WScript.Shell');
-	WScript.Quit(sh.Run('CScript '+WScript.ScriptFullName,1,true));
-};
 
 function include(n){var w=WScript,h=w.createObject('WScript.Shell'),o=h.currentDirectory,s=w.createObject('Scripting.FileSystemObject'),f,t;h.currentDirectory=s.getParentFolderName(w.ScriptFullName);try{f=s.openTextFile(n,1,!1);try{t=f.ReadAll()}finally{f.close()}return eval(t)}catch(e){if(e instanceof Error)e.description+=' '+n;throw e}finally{h.currentDirectory=o}}
 
@@ -260,8 +255,6 @@ function getTestNode(testPoly,testWays,map){
 	return result;
 };
 
-function getWayKey(relId,wayId){return (''+relId+','+wayId)};
-
 function putIONode(node,ntype,idx,ioNodes,boundIndex){
 	var n=node;
 	if(!n){
@@ -350,6 +343,17 @@ function mergeIONodesAndBound(ioNodes,boundIndex,boundWays){
 			return;
 		};
 		var bs=findIONodeOnBound(ios[0],boundIndex);
+		if(bs[2]==0){
+			var n0=boundIndex.indexToObject(bs),id2=((n0.id==ios[0].nid1)?(ios[0].nid2):(ios[0].nid1));
+			bs[2]++;
+			if(boundIndex.indexToObject(bs).id==id2){
+				//we need first segment [id1,id2,...,id1]
+				bs[2]=0;
+			}else{
+				//we need last segment [id1,...,id2,id1]
+				bs[2]=boundIndex.indexToObject(bs.slice(0,2)).length-2;
+			};
+		};
 		if(!bs)throw {name:'user',message:'Bound segment ['+ios[0].nid1+','+ios[0].nid2+'] not found'};
 		if(ios.length==1){
 			insertSimple(ios[0],bs);
@@ -602,7 +606,6 @@ var defparams={
 	clusters:[],
 	map:{},
 	boundIndex:{},
-	roleDetector:function(){return false},
 	directionDetector:{},
 	strictIOType:false,
 	nextWayId:-1,
@@ -611,13 +614,12 @@ var defparams={
 	for(var i in defparams)if(!(i in params))params[i]=defparams[i];
 	var clusters=params.clusters,map=params.map;
 	boundIndex=params.boundIndex;
-	var roleDetector=params.roleDetector,directionDetector=params.directionDetector;
+	var directionDetector=params.directionDetector;
 	var strictIOType=params.strictIOType,nextWayId=params.nextWayId,newWayTags=params.newWayTags;
 	var r=[],g=[];
 	for(var i=clusters.length-1; i>=0; i--){
 		var cc=clusters[i];
 		if(cc.id1==cc.idn){//don`t glue - already poly
-			if(!cc.role)roleDetector(cc);
 			r.push(cc);
 		}else{
 			g.push(cc);
@@ -641,38 +643,18 @@ var defparams={
 		};
 	};
 	var ioNodeIndex=new IONodeIndexer(ioNodes);
-	var node_plus,node_minus,role;
+	var node_plus,node_minus;
 	while(ioNodes.length){
 		//merge g into polies
 		var curIO=false;
 		for(var i=0;i<ioNodes.length;i++){//search for incoming IONode
 			curIO=ioNodes[i];
 			if(curIO.ndType=='i'){//IONode must be 'i' type for correct cluster_is_poly test
-				role=g[curIO.clusterIdx].role;
-				if((role=='inner')||(role=='outer')){
-					ioNodes.splice(i,1);
-					ioNodeIndex.remove(curIO);
-					break;
-				};
+				ioNodes.splice(i,1);
+				ioNodeIndex.remove(curIO);
+				break;
 			};
 			curIO=false;
-			role=false;
-		};
-		if(!role){//try to detect cluster role
-			for(var i=0;i<ioNodes.length;i++){
-				curIO=ioNodes[i];
-				if(roleDetector(g[curIO.clusterIdx]))break;
-				curIO=false;
-			};
-			if(curIO)continue;
-		};
-		if(!curIO){
-			curIO=ioNodes.shift();
-			g[curIO.clusterIdx].role='outer';//lets throw a coin
-			ioNodes.push(curIO);
-			curIO=curIO.node;
-			echo(' \n	Warning: can`t detect cluster role near '+curIO.lat.toFixed(7)+' '+curIO.lon.toFixed(7)+'. <outer> assumed');
-			continue;
 		};
 		var curClustIdx=curIO.clusterIdx,curClust=g[curClustIdx];
 		while(curClust.id1!=curClust.idn){
@@ -826,92 +808,9 @@ function intersectMultipoly(relId,cutter,boundIndex){
 		};
 	};
 	
-	function indexWays(pr,widx,testPoly,map){
-		
-		function markCluster(cluster,role,relId){
-			for(var i=cluster.ways.length-1;i>=0;i--){
-				var idx=getWayKey(pr.obj.id,cluster.ways[i].id);
-				var oldRole=widx[idx];
-				if(oldRole==role)continue;
-				role=( (!oldRole) || (oldRole=='') ) ? (role) : ('mixed');
-				widx[idx]=role;
-				cluster.role=role;
-			};
-		};
-
-		function indexTree(cT,role){
-			for(var i=0;i<cT.length;i++){
-				var cl=cT[i];
-				markCluster(cl,role,cl.srcPtr[0].obj.id);
-				if(cl.subPolies && cl.subPolies.length){
-					indexTree(cl.subPolies,(role=='outer')?('inner'):('outer'));
-				};
-			};
-		};
-		var cList=[];
-		makeClusterArray(pr,cList);
-		var cTree=orderClusters(cList,map);
-		indexTree(cTree,'outer');
-	};
-	
-	function detectClusterRole(pr,widx){
-		for(var i=0;i<pr.clusters.length;i++){
-			var cluster=pr.clusters[i],ways=cluster.ways;
-			for(var j=0;(j<ways.length)&&(!cluster.role);j++){
-				var idx=getWayKey(pr.obj.id,ways[j].id);
-				switch (widx[idx]){
-					case 'inner':
-						cluster.role='inner';
-						break;
-					case 'outer':
-						cluster.role='outer';
-						break;
-				};
-			};
-		};
-		for(var i=0;i<pr.subPoly.length;i++)detectClusterRole(pr.subPoly[i],widx);
-	};
-	
-	function glueClusters(pr,map,testPoly,orParsedRel,orNodeIndex){//orNodeIndex used only in recursive calls. Do not use it in ordinal calls!
-		function tryToDetectRole(curClust){
-			function indexNodes(pr){
-				echo('i',true,true);
-				var i,j,k,cl,oldRole,newRole,nids,key;
-				for(i=0;i<pr.clusters.length;i++){
-					cl=pr.clusters[i];
-					newRole=cl.role;
-					for(j=0;j<cl.ways.length;j++){
-						nids=cl.ways[j].nodes.toArray();
-						for(k=0;k<nids.length;k++){
-							key=orNodeIndex.idToKey(nids[k]);
-							oldRole=orNodeIndex.idHash[key];
-							if((oldRole==newRole)||(oldRole=='mixed'))continue;
-							orNodeIndex.idHash[key]=( (!oldRole) || (oldRole=='') ) ? (newRole) : ('mixed');
-						};
-					};
-				};
-				for(i=0;i<pr.subPoly.length;i++)indexNodes(pr.subPoly[i]);
-			};
-			if(!orNodeIndex){
-				orNodeIndex=new IdIndexer();
-				indexNodes(orParsedRel);
-			}
-			var i,j,nids,w,role;
-			for(i=0;i<curClust.ways.length;i++){
-				w=curClust.ways[i];
-				nids=w.nodes.toArray();
-				for(j=0;j<nids.length;j++){
-					role=orNodeIndex.idToIndex(nids[j]);
-					if((role=='inner')||(role=='outer')){
-						curClust.role=role;
-						return true;
-					};
-				};
-			};
-			return false;
-		};
+	function glueClusters(pr,map,testPoly){
 		function detectDir(clust,curIO,ioNodes,nplus,nminus){
-			var isInInverted=clust.role=='inner',p=1,m=1,step,testPlus,testMinus,bothOut=false;
+			var p=1,m=1,step,testPlus,testMinus,bothOut=false;
 			do{
 				testPlus={
 					lat:nplus.lat*p+curIO.node.lat*(1-p),
@@ -944,7 +843,6 @@ function intersectMultipoly(relId,cutter,boundIndex){
 						rap=Math.cos(rap);ram=Math.cos(ram);//now value about 1 is backstep direction, about -1 is forward
 						//select min and treat it as direction
 						step=(rap<ram)?(1):(-1);
-						if(isInInverted)step=-step;//pre-invert direction
 						break;
 				};
 				if((!step)&&((dp<testDistance)||(dm<testDistance))){
@@ -953,16 +851,12 @@ function intersectMultipoly(relId,cutter,boundIndex){
 					return 0;
 				};
 			}while(step==0);
-			if(isInInverted){
-				step=-step;//invert direction for inners
-			};
 			return step;
 		};
 		var ctpp={
 			clusters:pr.clusters,
 			map:map,
 			boundIndex:boundIndex,
-			roleDetector:tryToDetectRole,
 			directionDetector:detectDir,
 			nextWayId:intersectMultipoly.nextWayId,
 			newWayTags:['osman:note','generated by areaCut/intersectMultipoly/'+pr.obj.id]
@@ -971,7 +865,7 @@ function intersectMultipoly(relId,cutter,boundIndex){
 		intersectMultipoly.nextWayId=ctpp.nextWayId;
 		//proccess subPoly
 		for(var i=0;i<pr.subPoly.length;i++){
-			glueClusters(pr.subPoly[i],map,testPoly,orParsedRel,orNodeIndex);
+			glueClusters(pr.subPoly[i],map,testPoly);
 		};
 	};
 	
@@ -995,11 +889,12 @@ function intersectMultipoly(relId,cutter,boundIndex){
 			return {perimeter:d,boundFlag:fl};
 		};
 		
-		function filterByMinRatioAndBoundCover(tree){
+		function filterByMinRatioAndBoundCover(tree,role){
 			for(var i=tree.length-1;i>=0;i--){
 				var cl=tree[i];
+				cl.role=role;
 				if(cl.subPolies){
-					filterByMinRatioAndBoundCover(cl.subPolies);
+					filterByMinRatioAndBoundCover(cl.subPolies,(role=='outer')?('inner'):('outer'));
 					if(!cl.subPolies.length)delete cl.subPolies;
 				};
 				if(!cl.subPolies){
@@ -1012,49 +907,11 @@ function intersectMultipoly(relId,cutter,boundIndex){
 				};
 			};
 		};
-		
-		function addExtCluster(c){
-			var ob=boundIndex.data[0];//use only outer bounds
-			echo(' \nAdd extra for relation['+c.srcPtr[0].obj.id+']');
-			for(var i=0;i<ob.length;i++){
-				var p=ob[i];
-				if(!p.osmanPoly)p.osmanPoly=osmanPolyFromNodeList(p,cutter);
-				if(p.usedInRel)continue;
-				if(p.osmanPoly.isIn(c.testNode)){
-					p.usedInRel=true;
-					var sp=c.srcPtr[0];
-					for(var j=0;j<p.ways.length;j++){
-						sp.members.push('way',p.ways[j],'outer');
-					};
-					break;
-				};
-			};
-		};
-		
+
 		var clusters=[];
 		makeClusterArray(pr,clusters);
 		var clustTree=orderClusters(clusters,map),defRole,i;
-		filterByMinRatioAndBoundCover(clustTree);
-		for(i=0;(i<clustTree.length)&&(!defRole);i++){
-			defRole=clustTree[i].role;
-		};
-		for(i=0;i<clustTree.length;i++){
-			var c=clustTree[i];
-			if(!c.role)c.role=defRole;
-			if(c.role!='outer'){
-				if(c.role=='inner'){
-					addExtCluster(c);
-				}else{
-					var relId=c.srcPtr[0].obj.id;
-					echo('\nCluster with role<'+c.role+'> found in relation['+relId+'] in polygon with way['+c.ways[0].id+']\nPress enter to continue.');
-					WScript.stdIn.readLine();
-					var sp=c.srcPtr;
-					sp[0].clusters[sp[1]]=false;//remove cluster from parsed relation structure
-					clustTree.splice(i,1);
-					i--;
-				};
-			};
-		};
+		filterByMinRatioAndBoundCover(clustTree,'outer');//lets treat first level as outer.
 	};
 	
 	function saveRelation(pr,map,newWayIdStart){
@@ -1087,27 +944,10 @@ function intersectMultipoly(relId,cutter,boundIndex){
 		};
 		return saveIt;
 	};
-	
-	function clearBoundFlags(){
-		var ob=boundIndex.data[0];//use only outer bounds
-		for(var i=0;i<ob.length;i++){
-			delete ob[i].usedInRel;
-		};
-	};
-	
+
 	echo('p',true,true);//parse new relation
 	var nrParsedRel={members:[],ways:[],subPoly:[],obj:0,clusters:[]};
 	if(!parseRel(relId,nrParsedRel,hSmallMap.map)){
-		return;
-	};
-	echo('P',true,true);//parse old relation
-	var orParsedRel={members:[],ways:[],subPoly:[],obj:0,clusters:[]};
-	if(!parseRel(relId,orParsedRel,hBigMap.map)){
-		return;
-	};
-	echo('M',true,true);//merge old relation ways into clusters
-	if(!mergeWays(orParsedRel)){
-		removeRelation(relId);
 		return;
 	};
 	echo('O',true,true);//get OSMan MultiPoly object for old relation
@@ -1116,25 +956,19 @@ function intersectMultipoly(relId,cutter,boundIndex){
 		removeRelation(relId);
 		return;
 	};
-	echo('I',true,true);//detect roles for old relation clusters and make way index - [relId,wayId]=>(inner|outer|mixed)
-	var orWayIdx={};
-	indexWays(orParsedRel,orWayIdx,orPoly,hBigMap.map);
 	//convert ways array into clusters
 	echo('m',true,true);//merge new relation ways into clusters
 	mergeWays(nrParsedRel);
-	echo('c',true,true);//detect roles for new clusters
-	detectClusterRole(nrParsedRel,orWayIdx);
 	echo('g',true,true);//glue clusters into polygons
 	if(!intersectMultipoly.nextWayId){
 		intersectMultipoly.nextWayId=hSmallMap.getNextWayId();
 	};
 	var newWayIdStart=intersectMultipoly.nextWayId;
-	glueClusters(nrParsedRel,hSmallMap.map,orPoly,orParsedRel);
+	glueClusters(nrParsedRel,hSmallMap.map,orPoly);
 	echo('f',true,true);//filter clusters by area and ratio
 	filterClusters(nrParsedRel,hSmallMap.map);
 	echo('s',true,true);
 	saveRelation(nrParsedRel,hSmallMap.map,newWayIdStart);
-	clearBoundFlags();
 	echo(' ',true);
 };
 
@@ -1174,7 +1008,7 @@ function intersectWay(way,cutter,usedWayList,notUsedWayList,boundIndex){
 			var nid=curNode.id,ntags=curNode.tags.getAll();
 			if((nid<=newNodeIdStart)||(curNode.tags.getByKey('osman:note')=='boundary')){
 				//store new/modified node to map
-				curNode.tags.deletebyKey('osman:note');
+				//curNode.tags.deletebyKey('osman:note');do not delete osman:note=boundary. It used in routing export
 				curNode.tags.deletebyKey('osman:node1');
 				curNode.tags.deletebyKey('osman:node2');
 				curNode=hSmallMap.findOrStore(curNode);//node could be replaced with old one from map
@@ -1313,7 +1147,6 @@ function intersectCoastLines(cutter,boundIndex){
 		//first Node is always in-node (from outside to inside bound)
 		//last Node is always out-node (from inside to outside bound).
 		//make in-out nodes list
-		function roleDetector(c){c.role='outer';return true};
 		function dirDetector(curClust,curIO,ioNodes,np,nm){
 			var ndc1=getClusterBeforeLastNode(curClust,hSmallMap.map);
 			if(rightAngle(ndc1,curIO.node,nm)<rightAngle(ndc1,curIO.node,np)){
@@ -1327,7 +1160,6 @@ function intersectCoastLines(cutter,boundIndex){
 			clusters:coastClusters,
 			map:hSmallMap.map,
 			boundIndex:boundIndex,
-			roleDetector:roleDetector,
 			directionDetector:dirDetector,
 			strictIOType:true,
 			nextWayId:nextWayId,
@@ -1401,7 +1233,7 @@ function main(){
 	if(!checkArgs())return;
 	cutBound=cutBound.split(',');
 	if(!cutBound.length)throw {name:'user',message:funcName+'empty bounds'};
-	/*create/restore backup DB if map created elsewhere */
+	//create/restore backup DB if map created elsewhere
 	if(noImport){
 		if(h.fso.fileExists(smallMapFile+'.bak')){
 				echot('Copy file from backup');
@@ -1417,7 +1249,7 @@ function main(){
 	echot('resolving boundary');
 	if(noImport){
 		hSmallMap.open(smallMapFile);
-		bPoly=h.getMultiPoly(cutBound,[hBigMap.map,hSmallMap.map]);
+		bPoly=h.getMultiPoly(cutBound,[hSmallMap.map,hBigMap.map]);
 	}else{
 		hSmallMap.open(smallMapFile,true,false);//force recreate, read-write
 		bPoly=h.getMultiPoly(cutBound,hBigMap.map);
@@ -1468,7 +1300,7 @@ function main(){
 	};
 	echot('building incomplete ways');
 	var icptWayList=hSmallMap.map.storage.createIdList();
-	hSmallMap.exec('INSERT OR IGNORE INTO '+icptWayList.tableName+'(id) SELECT wayid FROM waynodes WHERE nodeid NOT IN (SELECT id FROM NODES)');
+	hSmallMap.exec('INSERT OR IGNORE INTO '+icptWayList.tableName+'(id) SELECT wayid FROM waynodes WHERE nodeid NOT IN (SELECT id FROM nodes)');
 
 	echot('building incomplete multipolygons');
 	var icptRelList=hSmallMap.map.storage.createIdList();

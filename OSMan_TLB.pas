@@ -12,16 +12,16 @@ unit OSMan_TLB;
 // ************************************************************************ //
 
 // PASTLWTR : 1.2
-// File generated on 06.04.2013 22:43:07 from Type Library described below.
+// File generated on 21.09.2013 11:28:30 from Type Library described below.
 
 // ************************************************************************  //
-// Type Lib: C:\work\osm2russa\OSMan\OSMan.tlb (1)
+// Type Lib: D:\work\osm2russa\OSMan\OSMan.tlb (1)
 // LIBID: {99AA9527-601D-420B-BC61-41859542A1A6}
 // LCID: 0
 // Helpfile: 
 // HelpString: OSMan Library
 // DepndLst: 
-//   (1) v2.0 stdole, (D:\WINDOWS\system32\stdole2.tlb)
+//   (1) v2.0 stdole, (C:\Windows\SysWOW64\stdole2.tlb)
 // ************************************************************************ //
 {$TYPEDADDRESS OFF} // Unit must be compiled without type-checked pointers. 
 {$WARN SYMBOL_PLATFORM OFF}

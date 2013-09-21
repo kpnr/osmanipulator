@@ -23,6 +23,7 @@ type
     function exec(const cmdLine: WideString): OleVariant;
     function wayToNodeArray(aMap, aWayOrWayId: OleVariant): OleVariant;
     procedure bitRound(aNode: OleVariant; aBitLevel: integer);
+    function utf8to16(const U8:WideString):WideString;
   end;
 
   TAppExec = class(TOSManObject, IAppExec)
@@ -150,6 +151,13 @@ begin
   if (pei.hProcess <> 0) then
     ae.hProcess := pei.hProcess;
   result := ae as IDispatch;
+end;
+
+function TGeoTools.utf8to16(const U8: WideString): WideString;
+begin
+  setlength(result,length(U8)*2);
+  if(length(U8)=0)then exit;
+  setlength(result,Utf8ToUnicode(pWidechar(result),pAnsiChar(@U8[1]),length(result)+1)-1);
 end;
 
 function TGeoTools.wayToNodeArray(aMap,

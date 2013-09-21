@@ -1,5 +1,5 @@
 var cfg={
-	countryDBName:'f:\\db\\osm\\sql\\rf.db3',
+	countryDBName:'s:\\db\\osm\\sql\\rf.db3',
 	areaFile:'atlas_cfg.js',
 	boundBackupDir:'f:\\db\\osm\\sql\\bounds'
 };
@@ -25,12 +25,14 @@ function checkBounds(ar){
 			for(var i=0;i<ar.areas.length;i++)awl=awl.concat(checkBounds(ar.areas[i]));
 		};
 		bbhm.open(h.fso.buildPath(cfg.boundBackupDir,ar.name+'.db3'));
-		echo(ar.name,true,true);
+		echo(ar.name+'	',true,true);
 		try{
 			ar.bound=ar.bound.split(',');
 			bpoly=h.getMultiPoly(ar.bound,src.map,bbhm.map);
 			if(bpoly.poly){
-				s+='	ok in '+bpoly.usedMap.storage.dbName+'\n';
+				if(bpoly.usedMap.storage.dbName!=src.map.storage.dbName){
+					s+='	ok in '+bpoly.usedMap.storage.dbName;
+				}
 			};
 			var cutter=h.polyIntersector(bbhm);
 			for(var i=0;i<ar.bound.length;i++){
@@ -85,7 +87,7 @@ function checkBounds(ar){
 			passCnt++;
 		}
 	};
-	WScript.stdOut.write(s);
+	echo(s,!s);
 	return bwl;
 };
 

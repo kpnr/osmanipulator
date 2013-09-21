@@ -6,14 +6,8 @@ function A(s,a){for(var i=0;i<a.length;i++)c[s+i]=a[i];};
 function S(s,a){A(s,a.split(','));};
 function C(s,a){var q=[];for(var i=0;i<a.length;i++)q[i]=a.charAt(i);A(s,q);};
 
-c[0x0081]='$';
-c[0x0082]=' ';
-c[0x008A]='[?]';
-
-c[0x0090]='[?]';
-c[0x009A]='[?]';
-c[0x009F]='!';
-
+C(0x0080,'$$$$$$$$$$$$$$$$\
+$$$$$$$$$$$$$$$$');
 S(0x00A0,' ,!,c,(f),\u00A4,Y=,|,\u00A7,",\u00A9,a,\u00AB,\u00AC,\u00AD,\u00AE,\u00AF');
 
 c[0x00B0]='\u00B0';
@@ -56,16 +50,14 @@ C(0x0200,'AaAaEeEeIiIiOoOoRrRrUuUuSsTtYyHh');
 C(0x0250,'aaabocdde@@eeeej');
 c[0x0263]='y';
 c[0x0272]='n';
-c[0x02B9]='\'';
-c[0x02BB]='`';
-c[0x02BC]='\'';
-
-c[0x02CA]='`';
-
-c[0x02EE]='"';
+C(0x02B0,'hhjrrrRwy\'"`\'`)(\
+??<>^v^v|-\'`|_`\'\
+:.)(^v+-u.o,~"rx\
+ylsxc#######v="v\
+^<>o`""~:####__<');
 
 c[0x0384]='`';
-c[0x0386]='\u0410';
+C(0x0386,'\u0410;\u0415\u042D\u0419');
 c[0x038C]='\u041E';
 
 S(0x0390,'\u0438,\u0410,\u0411,\u0413,\u0414,\u0415,\u0417,\u042D,\u0422,\u0418,\u041A,\u041B,\u041C,\u041D,\u041A\u0421,\u041E');
@@ -191,7 +183,7 @@ S(0x06A0,'GH,F,F,F,v,f,ph,Q,Q,kh,k,K,K,ng,K,g');
 S(0x06B0,'G,N,G,G,G,L,L,L,L,N,N,N,N,N,h,Ch');
 S(0x06C0,'hy,h,H,@,W,oe,oe,u,yu,yu,W,v,y,Y,Y,W');//arabic end
 S(0x06D0,'e,y,y,y\',.,ae\'');
-
+S(0x06F0,'0,1,2,3,4,5,6,7,8,9,Sh,D,Gh,&,+m,');
 //0x070 qq{//}, qq{/}, qq{,}, qq{!}, qq{!}, qq{-}, qq{,}, qq{,}, qq{;}, qq{?}, qq{~}, qq{\{}, qq{\}}, qq{*}, '[?]', "",
 S(0x0710,'\', ,b,g,g,d,d,h,w,z,H,t,t,y,yh,k,l,m,n,s,s,`,p,p,S,q,r,sh,t');
 //0x073 'a', 'a', 'a', 'A', 'A', 'A', 'e', 'e', 'e', 'E', 'i', 'i', 'u', 'u', 'u', 'o',
@@ -211,7 +203,8 @@ S(0x0930,'r,rr,l,l,lll,v,sh,ss,s,h');
 S(0x093C,'\',\',aa,i');
 S(0x0940,'ii,u,uu,R,RR,eN,e,e,ai,oN,o,o,au,v');
 //0x0950'AUM,'}, qq{'}, qq{`}, qq{'}, '[?]', '[?]', '[?]', 'q', 'khh', 'ghh', 'z', 'dddh', 'rh', 'f', 'yy',
-//0x0960'RR', 'LL', 'L', 'LL, / }, qq{ // }, '0', '1', '2', '3', '4', '5', '6', '7', '8', '9',
+//0x0960'RR', 'LL', 'L', 'LL, / }, qq{ // },
+C(0x0966,'0123456789');
 //0x0970 qq{.}, '[?]', '[?]', '[?]', '[?]', '[?]', '[?]', '[?]', '[?]', '[?]', '[?]', '[?]', '[?]', '[?]', '[?]', '[?]',
 S(0x0981, 'N,N,H');
 S(0x0985, 'a,aa,i,ii,u,uu,R,RR');
@@ -370,32 +363,70 @@ c[0x201E]='"';
 c[0x2021]='\u2021';
 c[0x2022]='\u2022';
 c[0x2026]='\u2026';
-c[0x2032]='\'';
+S(0x2032,'\',\'\'');
 c[0x203A]='>';
 c[0x207F]='^n';
 c[0x2082]='2';
 c[0x20AC]='\u20AC';
 c[0x2116]='\u2116';
 c[0x2122]='\u2122';
+S(0x2150,'1/7,1/9,1/10,1/3,2/3,1/5,2/5,3/5,4/5,1/6,5/6,1/8,3/8,5/8,7/8,1/,\
+I,II,III,IV,V,VI,VII,VIII,IX,X,XI,XII,L,C,D,M,\
+i,ii,iii,iv,v,vi,vii,viii,ix,x,xi,xii,l,c,d,m,\
+[1000],[5000],[10000],~C,~c,[6],[50],[50000],[100000],0/3');
 c[0x2190]='<-';
 c[0x2191]='^';
 c[0x2192]='->';
 c[0x2193]='V';
 c[0x2194]='<->';
 c[0x21D2]='=>';
+c[0x2206]='(DELTA)'
 c[0x2212]='-';
 c[0x2215]='/';
 c[0x221E]='(inf)';
 c[0x2248]='=';
 c[0x25CA]='<>';
+c[0x2605]='*';
 c[0x265E]='(BK)';
 c[0x2665]='(black heart)';
 c[0x267F]='(disabled)';
-C(0x3000,' ,');
-c[0x301C]='~';
+S(0x2D30,'a,b,bh,g,gh,j,j,d,dh,dd,ddh,ey,f,k,k,kh,\
+h,h,h,hh,a,kh,kh,q,q,i,zh,zh,zh,l,m,n,\
+gn,ng,p,u,r,rr,gh,gh,gh,s,ss,sh,t,th,ch,tt,\
+v,w,y,z,z,zz,r,o');
+C(0x3000,' ,."^"/0<>');
+S(0x300A,'<<,>>,[,],{,\,\
+[(,)],\@,X,[},],[[},]],((,)),[[,]],~,``,\'\'');
+c[0x301F]=',,';
+C(0x3020,'@123456789');
 S(0x3041,'a,a,i,i,u,u,e,e,o,o,ka,ga,ki,gi,ku,gu,ke,ge,ko,go,sa,za,si,zi,su,zu,se,ze,so,zo,ta,da,ti,di,tu,tu,du,te,de,to,do,na,ni,nu,ne,no,ha,ba,pa,hi,bi,pi,hu,bu,pu,he,be,pe,ho,bo,po,ma,mi,mu,me,mo,ya,ya,yu,yu,yo,yo,ra,ri,ru,re,ro,wa,wa,wi,we,wo,n,vu');
 S(0x30A1,'a,A,i,I,u,U,e,E,o,o,ka,ga,ki,gi,ku,gu,ke,ge,ko,go,sa,za,si,zi,su,zu,se,ze,so,zo,ta,da,ti,di,tu,TU,du,te,de,to,do,na,ni,nu,ne,no,ha,ba,pa,hi,bi,pi,hu,bu,pu,he,be,pe,ho,bo,po,ma,mi,mu,me,mo,ya,YA,yu,YU,yo,YO,ra,ri,ru,re,ro,wa,wa,wi,we,wo,n,vu,ka,ke,va,vi,ve,vo,.,-,\\,\\"');
+C(0x3105,'BPMFDTNLGKHJQX');
+S(0x3112,'ZH,CH,SH');
+C(0x3116,'RZCSAOE');
+S(0x311D,'EH,AI,EI,\
+AU,OU,AN,EN,ANG,ENG,ER,I,U,IU,V,NG,GN,IH');
+S(0x3200,'(g),(n),(d),(r),(m),(b),(s),(),(j),(c),(k),(t),(p),(h),(ga),(na),\
+(da),(ra),(ma),(ba),(sa),(a),(ja),(ca),(ka),(ta),(pa),(ha),(ju)');
+S(0x3220,'(1),(2),(3),(4),(5),(6),(7),(8),(9),(10),(Yue),(Huo),(Shui),(Mu),(Jin),(Tu),\
+(Ri),(Zhu),(You),(She),(Ming),(Te),(Cai),(Zhu),(Lao),(Dai),(Hu),(Xue),(Jian),(Qi),(Zi),(Xie),\
+(Ji),(Xiu),<<,>>');
+S(0x3260,'(g),(n),(d),(r),(m),(b),(s),(),(j),(c),(k),(t),(p),(h),(ga),(na),\
+(da),(ra),(ma),(ba),(sa),(a),(ja),(ca),(ka),(ta),(pa),(ha)');
+S(0x327F,'KIS,\
+(1),(2),(3),(4),(5),(6),(7),(8),(9),(10),(Yue),(Huo),(Shui),(Mu),(Jin),(Tu),\
+(Ri),(Zhu),(You),(She),(Ming),(Te),(Cai),(Zhu),(Lao),(Mi),(Nan),(Nu),(Shi),(You),(Yin),(Zhu),\
+(Xiang),(Xiu),(Xie),(Zheng),(Shang),(Zhong),(Xia),(Zuo),(You),(Yi),(Zong),(Xue),(Jian),(Qi),(Zi),(Xie),\
+(Ye)');
+S(0x32C0,'1M,2M,3M,4M,5M,6M,7M,8M,9M,10M,11M,12M');
+S(0x32D0,'a,i,u,u,o,ka,ki,ku,ke,ko,sa,si,su,se,so,ta,\
+ti,tu,te,to,na,ni,nu,ne,no,ha,hi,hu,he,ho,ma,mi,\
+mu,me,mo,ya,yu,yo,ra,ri,ru,re,ro,wa,wi,we,wo');
+
 c[0x362D]='[?]';
+c[0x39E5]='[?]';
+c[0x39EC]='[?]';
+
 S(0x4E00,'\u2014,Ding ,Kao ,Qi ,Shang ,Xia ,[?] ,Mo ,Zhang ,San ,Shang ,Xia ,Ji ,Bu ,Yu ,Mian ,Gai ,Chou ,Chou ,Zhuan ,Qie ,Pi ,Shi ,Shi ,Qiu ,Bing ,Ye ,Cong ,Dong ,Si ,Cheng ,Diu ,Qiu ,Liang ,Diu ,You ,Liang ,Yan ,Bing ,Sang ,Gun ,Jiu ,Ge ,Ya ,Qiang ,Zhong ,Ji ,Jie ,Feng ,Guan ,Chuan ,Chan ,Lin ,Zhuo ,Zhu ,Ha ,Wan ,Dan ,Wei ,Zhu ,Jing ,Li ,Ju ,Pie ,Fu ,Yi ,Yi ,Nai ,Shime ,Jiu ,Jiu ,Zhe ,Yao ,Yi ,[?] ,Zhi ,Wu ,Zha ,Hu ,Fa ,Le ,Zhong ,Ping ,Pang ,Qiao ,Hu ,Guai ,Cheng ,Cheng ,Yi ,Yin ,[?] ,Mie ,Jiu ,Qi ,Ye ,Xi ,Xiang ,Gai ,Diu ,Hal ,[?] ,Shu ,Twul ,Shi ,Ji ,Nang ,Jia ,Kel ,Shi ,[?] ,Ol ,Mai ,Luan ,Cal ,Ru ,Xue ,Yan ,Fu ,Sha ,Na ,Gan ,Sol ,El ,Cwul ,[?] ,Gan ,Chi ,Gui ,Gan ,Luan ,Lin ,Yi ,Jue ,Liao ,Ma ,Yu ,Zheng ,Shi ,Shi ,Er ,Chu ,Yu ,Yu ,Yu ,Yun ,Hu ,Qi ,Wu ,Jing ,Si ,Sui ,Gen ,Gen ,Ya ,Xie ,Ya ,Qi ,Ya ,Ji ,Tou ,Wang ,Kang ,Ta ,Jiao ,Hai ,Yi ,Chan ,Heng ,Mu ,[?] ,Xiang ,Jing ,Ting ,Liang ,Xiang ,Jing ,Ye ,Qin ,Bo ,You ,Xie ,Dan ,Lian ,Duo ,Wei ,Ren ,Ren ,Ji ,La ,Wang ,Yi ,Shi ,Ren ,Le ,Ding ,Ze ,Jin ,Pu ,Chou ,Ba ,Zhang ,Jin ,Jie ,Bing ,Reng ,Cong ,Fo ,San ,Lun ,Sya ,Cang ,Zi ,Shi ,Ta ,Zhang ,Fu ,Xian ,Xian ,Tuo ,Hong ,Tong ,Ren ,Qian ,Gan ,Yi ,Di ,Dai ,Ling ,Yi ,Chao ,Chang ,Sa ,[?] ,Yi ,Mu ,Men ,Ren ,Jia ,Chao ,Yang ,Qian ,Zhong ,Pi ,Wan ,Wu ,Jian ,Jie ,Yao ,Feng ,Cang ,Ren ,Wang ,Fen ,Di ,Fang '); 
 S(0x4F00,'Zhong ,Qi ,Pei ,Yu ,Diao ,Dun ,Wen ,Yi ,Xin ,Kang ,Yi ,Ji ,Ai ,Wu ,Ji ,Fu ,Fa ,Xiu ,Jin ,Bei ,Dan ,Fu ,Tang ,Zhong ,You ,Huo ,Hui ,Yu ,Cui ,Chuan ,San ,Wei ,Chuan ,Che ,Ya ,Xian ,Shang ,Chang ,Lun ,Cang ,Xun ,Xin ,Wei ,Zhu ,[?] ,Xuan ,Nu ,Bo ,Gu ,Ni ,Ni ,Xie ,Ban ,Xu ,Ling ,Zhou ,Shen ,Qu ,Si ,Beng ,Si ,Jia ,Pi ,Yi ,Si ,Ai ,Zheng ,Dian ,Han ,Mai ,Dan ,Zhu ,Bu ,Qu ,Bi ,Shao ,Ci ,Wei ,Di ,Zhu ,Zuo ,You ,Yang ,Ti ,Zhan ,He ,Bi ,Tuo ,She ,Yu ,Yi ,Fo ,Zuo ,Kou ,Ning ,Tong ,Ni ,Xuan ,Qu ,Yong ,Wa ,Qian ,[?] ,Ka ,[?] ,Pei ,Huai ,He ,Lao ,Xiang ,Ge ,Yang ,Bai ,Fa ,Ming ,Jia ,Er ,Bing ,Ji ,Hen ,Huo ,Gui ,Quan ,Tiao ,Jiao ,Ci ,Yi ,Shi ,Xing ,Shen ,Tuo ,Kan ,Zhi ,Gai ,Lai ,Yi ,Chi ,Kua ,Guang ,Li ,Yin ,Shi ,Mi ,Zhu ,Xu ,You ,An ,Lu ,Mou ,Er ,Lun ,Tong ,Cha ,Chi ,Xun ,Gong ,Zhou ,Yi ,Ru ,Jian ,Xia ,Jia ,Zai ,Lu ,Ko ,Jiao ,Zhen ,Ce ,Qiao ,Kuai ,Chai ,Ning ,Nong ,Jin ,Wu ,Hou ,Jiong ,Cheng ,Zhen ,Zuo ,Chou ,Qin ,Lu ,Ju ,Shu ,Ting ,Shen ,Tuo ,Bo ,Nan ,Hao ,Bian ,Tui ,Yu ,Xi ,Cu ,E ,Qiu ,Xu ,Kuang ,Ku ,Wu ,Jun ,Yi ,Fu ,Lang ,Zu ,Qiao ,Li ,Yong ,Hun ,Jing ,Xian ,San ,Pai ,Su ,Fu ,Xi ,Li ,Fu ,Ping ,Bao ,Yu ,Si ,Xia ,Xin ,Xiu ,Yu ,Ti ,Che ,Chou ,[?] ,Yan ,Lia ,Li ,Lai ,[?] ,Jian ,Xiu ,Fu ,He ,Ju ,Xiao ,Pai ,Jian ,Biao ,Chu ,Fei ,Feng ,Ya ,An ,Bei ,Yu ,Xin ,Bi ,Jian ');
 S(0x5000,'Chang ,Chi ,Bing ,Zan ,Yao ,Cui ,Lia ,Wan ,Lai ,Cang ,Zong ,Ge ,Guan ,Bei ,Tian ,Shu ,Shu ,Men ,Dao ,Tan ,Jue ,Chui ,Xing ,Peng ,Tang ,Hou ,Yi ,Qi ,Ti ,Gan ,Jing ,Jie ,Sui ,Chang ,Jie ,Fang ,Zhi ,Kong ,Juan ,Zong ,Ju ,Qian ,Ni ,Lun ,Zhuo ,Wei ,Luo ,Song ,Leng ,Hun ,Dong ,Zi ,Ben ,Wu ,Ju ,Nai ,Cai ,Jian ,Zhai ,Ye ,Zhi ,Sha ,Qing ,[?] ,Ying ,Cheng ,Jian ,Yan ,Nuan ,Zhong ,Chun ,Jia ,Jie ,Wei ,Yu ,Bing ,Ruo ,Ti ,Wei ,Pian ,Yan ,Feng ,Tang ,Wo ,E ,Xie ,Che ,Sheng ,Kan ,Di ,Zuo ,Cha ,Ting ,Bei ,Ye ,Huang ,Yao ,Zhan ,Chou ,Yan ,You ,Jian ,Xu ,Zha ,Ci ,Fu ,Bi ,Zhi ,Zong ,Mian ,Ji ,Yi ,Xie ,Xun ,Si ,Duan ,Ce ,Zhen ,Ou ,Tou ,Tou ,Bei ,Za ,Lu ,Jie ,Wei ,Fen ,Chang ,Gui ,Sou ,Zhi ,Su ,Xia ,Fu ,Yuan ,Rong ,Li ,Ru ,Yun ,Gou ,Ma ,Bang ,Dian ,Tang ,Hao ,Jie ,Xi ,Shan ,Qian ,Jue ,Cang ,Chu ,San ,Bei ,Xiao ,Yong ,Yao ,Tan ,Suo ,Yang ,Fa ,Bing ,Jia ,Dai ,Zai ,Tang ,[?] ,Bin ,Chu ,Nuo ,Can ,Lei ,Cui ,Yong ,Zao ,Zong ,Peng ,Song ,Ao ,Chuan ,Yu ,Zhai ,Cou ,Shang ,Qiang ,Jing ,Chi ,Sha ,Han ,Zhang ,Qing ,Yan ,Di ,Xi ,Lu ,Bei ,Piao ,Jin ,Lian ,Lu ,Man ,Qian ,Xian ,Tan ,Ying ,Dong ,Zhuan ,Xiang ,Shan ,Qiao ,Jiong ,Tui ,Zun ,Pu ,Xi ,Lao ,Chang ,Guang ,Liao ,Qi ,Deng ,Chan ,Wei ,Ji ,Fan ,Hui ,Chuan ,Jian ,Dan ,Jiao ,Jiu ,Seng ,Fen ,Xian ,Jue ,E ,Jiao ,Jian ,Tong ,Lin ,Bo ,Gu ,[?] ,Su ,Xian ,Jiang ,Min ,Ye ,Jin ,Jia ,Qiao ,Pi ,Feng ,Zhou ,Ai ,Sai ');
@@ -571,6 +602,23 @@ S(0xBF00,'bbess,bbeng,bbej,bbec,bbek,bbet,bbep,bbeh,bbyeo,bbyeog,bbyeogg,bbyeogs
 S(0xC000,'bbweok,bbweot,bbweop,bbweoh,bbwe,bbweg,bbwegg,bbwegs,bbwen,bbwenj,bbwenh,bbwed,bbwel,bbwelg,bbwelm,bbwelb,bbwels,bbwelt,bbwelp,bbwelh,bbwem,bbweb,bbwebs,bbwes,bbwess,bbweng,bbwej,bbwec,bbwek,bbwet,bbwep,bbweh,bbwi,bbwig,bbwigg,bbwigs,bbwin,bbwinj,bbwinh,bbwid,bbwil,bbwilg,bbwilm,bbwilb,bbwils,bbwilt,bbwilp,bbwilh,bbwim,bbwib,bbwibs,bbwis,bbwiss,bbwing,bbwij,bbwic,bbwik,bbwit,bbwip,bbwih,bbyu,bbyug,bbyugg,bbyugs,bbyun,bbyunj,bbyunh,bbyud,bbyul,bbyulg,bbyulm,bbyulb,bbyuls,bbyult,bbyulp,bbyulh,bbyum,bbyub,bbyubs,bbyus,bbyuss,bbyung,bbyuj,bbyuc,bbyuk,bbyut,bbyup,bbyuh,bbeu,bbeug,bbeugg,bbeugs,bbeun,bbeunj,bbeunh,bbeud,bbeul,bbeulg,bbeulm,bbeulb,bbeuls,bbeult,bbeulp,bbeulh,bbeum,bbeub,bbeubs,bbeus,bbeuss,bbeung,bbeuj,bbeuc,bbeuk,bbeut,bbeup,bbeuh,bbyi,bbyig,bbyigg,bbyigs,bbyin,bbyinj,bbyinh,bbyid,bbyil,bbyilg,bbyilm,bbyilb,bbyils,bbyilt,bbyilp,bbyilh,bbyim,bbyib,bbyibs,bbyis,bbyiss,bbying,bbyij,bbyic,bbyik,bbyit,bbyip,bbyih,bbi,bbig,bbigg,bbigs,bbin,bbinj,bbinh,bbid,bbil,bbilg,bbilm,bbilb,bbils,bbilt,bbilp,bbilh,bbim,bbib,bbibs,bbis,bbiss,bbing,bbij,bbic,bbik,bbit,bbip,bbih,sa,sag,sagg,sags,san,sanj,sanh,sad,sal,salg,salm,salb,sals,salt,salp,salh,sam,sab,sabs,sas,sass,sang,saj,sac,sak,sat,sap,sah,sae,saeg,saegg,saegs,saen,saenj,saenh,saed,sael,saelg,saelm,saelb,saels,saelt,saelp,saelh,saem,saeb,saebs,saes,saess,saeng,saej,saec,saek,saet,saep,saeh,sya,syag,syagg,syags,syan,syanj,syanh,syad,syal,syalg,syalm,syalb,syals,syalt,syalp,syalh,syam,syab,syabs,syas,syass,syang,syaj,syac,syak,syat,syap,syah');
 S(0xC100,'syae,syaeg,syaegg,syaegs,syaen,syaenj,syaenh,syaed,syael,syaelg,syaelm,syaelb,syaels,syaelt,syaelp,syaelh,syaem,syaeb,syaebs,syaes,syaess,syaeng,syaej,syaec,syaek,syaet,syaep,syaeh,seo,seog,seogg,seogs,seon,seonj,seonh,seod,seol,seolg,seolm,seolb,seols,seolt,seolp,seolh,seom,seob,seobs,seos,seoss,seong,seoj,seoc,seok,seot,seop,seoh,se,seg,segg,segs,sen,senj,senh,sed,sel,selg,selm,selb,sels,selt,selp,selh,sem,seb,sebs,ses,sess,seng,sej,sec,sek,set,sep,seh,syeo,syeog,syeogg,syeogs,syeon,syeonj,syeonh,syeod,syeol,syeolg,syeolm,syeolb,syeols,syeolt,syeolp,syeolh,syeom,syeob,syeobs,syeos,syeoss,syeong,syeoj,syeoc,syeok,syeot,syeop,syeoh,sye,syeg,syegg,syegs,syen,syenj,syenh,syed,syel,syelg,syelm,syelb,syels,syelt,syelp,syelh,syem,syeb,syebs,syes,syess,syeng,syej,syec,syek,syet,syep,syeh,so,sog,sogg,sogs,son,sonj,sonh,sod,sol,solg,solm,solb,sols,solt,solp,solh,som,sob,sobs,sos,soss,song,soj,soc,sok,sot,sop,soh,swa,swag,swagg,swags,swan,swanj,swanh,swad,swal,swalg,swalm,swalb,swals,swalt,swalp,swalh,swam,swab,swabs,swas,swass,swang,swaj,swac,swak,swat,swap,swah,swae,swaeg,swaegg,swaegs,swaen,swaenj,swaenh,swaed,swael,swaelg,swaelm,swaelb,swaels,swaelt,swaelp,swaelh,swaem,swaeb,swaebs,swaes,swaess,swaeng,swaej,swaec,swaek,swaet,swaep,swaeh,soe,soeg,soegg,soegs,soen,soenj,soenh,soed,soel,soelg,soelm,soelb,soels,soelt,soelp,soelh,soem,soeb,soebs,soes,soess,soeng,soej,soec,soek,soet,soep,soeh,syo,syog,syogg,syogs');
 S(0xC200,'syon,syonj,syonh,syod,syol,syolg,syolm,syolb,syols,syolt,syolp,syolh,syom,syob,syobs,syos,syoss,syong,syoj,syoc,syok,syot,syop,syoh,su,sug,sugg,sugs,sun,sunj,sunh,sud,sul,sulg,sulm,sulb,suls,sult,sulp,sulh,sum,sub,subs,sus,suss,sung,suj,suc,suk,sut,sup,suh,sweo,sweog,sweogg,sweogs,sweon,sweonj,sweonh,sweod,sweol,sweolg,sweolm,sweolb,sweols,sweolt,sweolp,sweolh,sweom,sweob,sweobs,sweos,sweoss,sweong,sweoj,sweoc,sweok,sweot,sweop,sweoh,swe,sweg,swegg,swegs,swen,swenj,swenh,swed,swel,swelg,swelm,swelb,swels,swelt,swelp,swelh,swem,sweb,swebs,swes,swess,sweng,swej,swec,swek,swet,swep,sweh,swi,swig,swigg,swigs,swin,swinj,swinh,swid,swil,swilg,swilm,swilb,swils,swilt,swilp,swilh,swim,swib,swibs,swis,swiss,swing,swij,swic,swik,swit,swip,swih,syu,syug,syugg,syugs,syun,syunj,syunh,syud,syul,syulg,syulm,syulb,syuls,syult,syulp,syulh,syum,syub,syubs,syus,syuss,syung,syuj,syuc,syuk,syut,syup,syuh,seu,seug,seugg,seugs,seun,seunj,seunh,seud,seul,seulg,seulm,seulb,seuls,seult,seulp,seulh,seum,seub,seubs,seus,seuss,seung,seuj,seuc,seuk,seut,seup,seuh,syi,syig,syigg,syigs,syin,syinj,syinh,syid,syil,syilg,syilm,syilb,syils,syilt,syilp,syilh,syim,syib,syibs,syis,syiss,sying,syij,syic,syik,syit,syip,syih,si,sig,sigg,sigs,sin,sinj,sinh,sid,sil,silg,silm,silb,sils,silt,silp,silh,sim,sib,sibs,sis,siss,sing,sij,sic,sik,sit,sip,sih,ssa,ssag,ssagg,ssags,ssan,ssanj,ssanh,ssad');
+
+S(0xC300,'ssal,ssalg,ssalm,ssalb,ssals,ssalt,ssalp,ssalh,ssam,ssab,ssabs,ssas,ssass,ssang,ssaj,ssac,\
+ssak,ssat,ssap,ssah,ssae,ssaeg,ssaegg,ssaegs,ssaen,ssaenj,ssaenh,ssaed,ssael,ssaelg,ssaelm,ssaelb,\
+ssaels,ssaelt,ssaelp,ssaelh,ssaem,ssaeb,ssaebs,ssaes,ssaess,ssaeng,ssaej,ssaec,ssaek,ssaet,ssaep,ssaeh,\
+ssya,ssyag,ssyagg,ssyags,ssyan,ssyanj,ssyanh,ssyad,ssyal,ssyalg,ssyalm,ssyalb,ssyals,ssyalt,ssyalp,ssyalh,\
+ssyam,ssyab,ssyabs,ssyas,ssyass,ssyang,ssyaj,ssyac,ssyak,ssyat,ssyap,ssyah,ssyae,ssyaeg,ssyaegg,ssyaegs,\
+ssyaen,ssyaenj,ssyaenh,ssyaed,ssyael,ssyaelg,ssyaelm,ssyaelb,ssyaels,ssyaelt,ssyaelp,ssyaelh,ssyaem,ssyaeb,ssyaebs,ssyaes,\
+ssyaess,ssyaeng,ssyaej,ssyaec,ssyaek,ssyaet,ssyaep,ssyaeh,sseo,sseog,sseogg,sseogs,sseon,sseonj,sseonh,sseod,\
+sseol,sseolg,sseolm,sseolb,sseols,sseolt,sseolp,sseolh,sseom,sseob,sseobs,sseos,sseoss,sseong,sseoj,sseoc,\
+sseok,sseot,sseop,sseoh,sse,sseg,ssegg,ssegs,ssen,ssenj,ssenh,ssed,ssel,sselg,sselm,sselb,\
+ssels,sselt,sselp,sselh,ssem,sseb,ssebs,sses,ssess,sseng,ssej,ssec,ssek,sset,ssep,sseh,\
+ssyeo,ssyeog,ssyeogg,ssyeogs,ssyeon,ssyeonj,ssyeonh,ssyeod,ssyeol,ssyeolg,ssyeolm,ssyeolb,ssyeols,ssyeolt,ssyeolp,ssyeolh,\
+ssyeom,ssyeob,ssyeobs,ssyeos,ssyeoss,ssyeong,ssyeoj,ssyeoc,ssyeok,ssyeot,ssyeop,ssyeoh,ssye,ssyeg,ssyegg,ssyegs,\
+ssyen,ssyenj,ssyenh,ssyed,ssyel,ssyelg,ssyelm,ssyelb,ssyels,ssyelt,ssyelp,ssyelh,ssyem,ssyeb,ssyebs,ssyes,\
+ssyess,ssyeng,ssyej,ssyec,ssyek,ssyet,ssyep,ssyeh,sso,ssog,ssogg,ssogs,sson,ssonj,ssonh,ssod,\
+ssol,ssolg,ssolm,ssolb,ssols,ssolt,ssolp,ssolh,ssom,ssob,ssobs,ssos,ssoss,ssong,ssoj,ssoc,\
+ssok,ssot,ssop,ssoh,sswa,sswag,sswagg,sswags,sswan,sswanj,sswanh,sswad,sswal,sswalg,sswalm,sswalb');
 S(0xC500,'sseum,sseub,sseubs,sseus,sseuss,sseung,sseuj,sseuc,sseuk,sseut,sseup,sseuh,ssyi,ssyig,ssyigg,ssyigs,ssyin,ssyinj,ssyinh,ssyid,ssyil,ssyilg,ssyilm,ssyilb,ssyils,ssyilt,ssyilp,ssyilh,ssyim,ssyib,ssyibs,ssyis,ssyiss,ssying,ssyij,ssyic,ssyik,ssyit,ssyip,ssyih,ssi,ssig,ssigg,ssigs,ssin,ssinj,ssinh,ssid,ssil,ssilg,ssilm,ssilb,ssils,ssilt,ssilp,ssilh,ssim,ssib,ssibs,ssis,ssiss,ssing,ssij,ssic,ssik,ssit,ssip,ssih,a,ag,agg,ags,an,anj,anh,ad,al,alg,alm,alb,als,alt,alp,alh,am,ab,abs,as,ass,ang,aj,ac,ak,at,ap,ah,ae,aeg,aegg,aegs,aen,aenj,aenh,aed,ael,aelg,aelm,aelb,aels,aelt,aelp,aelh,aem,aeb,aebs,aes,aess,aeng,aej,aec,aek,aet,aep,aeh,ya,yag,yagg,yags,yan,yanj,yanh,yad,yal,yalg,yalm,yalb,yals,yalt,yalp,yalh,yam,yab,yabs,yas,yass,yang,yaj,yac,yak,yat,yap,yah,yae,yaeg,yaegg,yaegs,yaen,yaenj,yaenh,yaed,yael,yaelg,yaelm,yaelb,yaels,yaelt,yaelp,yaelh,yaem,yaeb,yaebs,yaes,yaess,yaeng,yaej,yaec,yaek,yaet,yaep,yaeh,eo,eog,eogg,eogs,eon,eonj,eonh,eod,eol,eolg,eolm,eolb,eols,eolt,eolp,eolh,eom,eob,eobs,eos,eoss,eong,eoj,eoc,eok,eot,eop,eoh,e,eg,egg,egs,en,enj,enh,ed,el,elg,elm,elb,els,elt,elp,elh,em,eb,ebs,es,ess,eng,ej,ec,ek,et,ep,eh,yeo,yeog,yeogg,yeogs,yeon,yeonj,yeonh,yeod,yeol,yeolg,yeolm,yeolb,yeols,yeolt,yeolp,yeolh,yeom,yeob,yeobs,yeos');
 S(0xC600,'yeoss,yeong,yeoj,yeoc,yeok,yeot,yeop,yeoh,ye,yeg,yegg,yegs,yen,yenj,yenh,yed,yel,yelg,yelm,yelb,yels,yelt,yelp,yelh,yem,yeb,yebs,yes,yess,yeng,yej,yec,yek,yet,yep,yeh,o,og,ogg,ogs,on,onj,onh,od,ol,olg,olm,olb,ols,olt,olp,olh,om,ob,obs,os,oss,ong,oj,oc,ok,ot,op,oh,wa,wag,wagg,wags,wan,wanj,wanh,wad,wal,walg,walm,walb,wals,walt,walp,walh,wam,wab,wabs,was,wass,wang,waj,wac,wak,wat,wap,wah,wae,waeg,waegg,waegs,waen,waenj,waenh,waed,wael,waelg,waelm,waelb,waels,waelt,waelp,waelh,waem,waeb,waebs,waes,waess,waeng,waej,waec,waek,waet,waep,waeh,oe,oeg,oegg,oegs,oen,oenj,oenh,oed,oel,oelg,oelm,oelb,oels,oelt,oelp,oelh,oem,oeb,oebs,oes,oess,oeng,oej,oec,oek,oet,oep,oeh,yo,yog,yogg,yogs,yon,yonj,yonh,yod,yol,yolg,yolm,yolb,yols,yolt,yolp,yolh,yom,yob,yobs,yos,yoss,yong,yoj,yoc,yok,yot,yop,yoh,u,ug,ugg,ugs,un,unj,unh,ud,ul,ulg,ulm,ulb,uls,ult,ulp,ulh,um,ub,ubs,us,uss,ung,uj,uc,uk,ut,up,uh,weo,weog,weogg,weogs,weon,weonj,weonh,weod,weol,weolg,weolm,weolb,weols,weolt,weolp,weolh,weom,weob,weobs,weos,weoss,weong,weoj,weoc,weok,weot,weop,weoh,we,weg,wegg,wegs,wen,wenj,wenh,wed,wel,welg,welm,welb,wels,welt,welp,welh,wem,web,webs,wes,wess,weng,wej,wec');
 S(0xC700,'wek,wet,wep,weh,wi,wig,wigg,wigs,win,winj,winh,wid,wil,wilg,wilm,wilb,wils,wilt,wilp,wilh,wim,wib,wibs,wis,wiss,wing,wij,wic,wik,wit,wip,wih,yu,yug,yugg,yugs,yun,yunj,yunh,yud,yul,yulg,yulm,yulb,yuls,yult,yulp,yulh,yum,yub,yubs,yus,yuss,yung,yuj,yuc,yuk,yut,yup,yuh,eu,eug,eugg,eugs,eun,eunj,eunh,eud,eul,eulg,eulm,eulb,euls,eult,eulp,eulh,eum,eub,eubs,eus,euss,eung,euj,euc,euk,eut,eup,euh,yi,yig,yigg,yigs,yin,yinj,yinh,yid,yil,yilg,yilm,yilb,yils,yilt,yilp,yilh,yim,yib,yibs,yis,yiss,ying,yij,yic,yik,yit,yip,yih,i,ig,igg,igs,in,inj,inh,id,il,ilg,ilm,ilb,ils,ilt,ilp,ilh,im,ib,ibs,is,iss,ing,ij,ic,ik,it,ip,ih,ja,jag,jagg,jags,jan,janj,janh,jad,jal,jalg,jalm,jalb,jals,jalt,jalp,jalh,jam,jab,jabs,jas,jass,jang,jaj,jac,jak,jat,jap,jah,jae,jaeg,jaegg,jaegs,jaen,jaenj,jaenh,jaed,jael,jaelg,jaelm,jaelb,jaels,jaelt,jaelp,jaelh,jaem,jaeb,jaebs,jaes,jaess,jaeng,jaej,jaec,jaek,jaet,jaep,jaeh,jya,jyag,jyagg,jyags,jyan,jyanj,jyanh,jyad,jyal,jyalg,jyalm,jyalb,jyals,jyalt,jyalp,jyalh,jyam,jyab,jyabs,jyas,jyass,jyang,jyaj,jyac,jyak,jyat,jyap,jyah,jyae,jyaeg,jyaegg,jyaegs,jyaen,jyaenj,jyaenh,jyaed,jyael,jyaelg,jyaelm,jyaelb,jyaels,jyaelt,jyaelp,jyaelh,jyaem,jyaeb,jyaebs,jyaes,jyaess,jyaeng,jyaej,jyaec,jyaek,jyaet,jyaep,jyaeh');

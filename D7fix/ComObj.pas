@@ -1546,7 +1546,10 @@ type
 var
   I, J, K, ArgType, ArgCount, StrCount, DispID, InvKind, Status: Integer;
   VarFlag: Byte;
-  ParamPtr: ^Integer;
+  //fix by hkm begin
+  //--ParamPtr: ^Integer;
+  ParamPtr: ^DWORD;
+  //fix by hkm end
   ArgPtr, VarPtr: PVarArg;
   DispParams: TDispParams;
   ExcepInfo: TExcepInfo;

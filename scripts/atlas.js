@@ -12,11 +12,14 @@ ttable:0|1
 */
 //settings begin
 var cfg={
-	countryDBName:'s:\\db\\osm\\sql\\rf_mpc.db3',
-	areaFile:'atlas_cfg.js',
+	countryDBName:'s:\\db\\osm\\sql\\rf.db3',
+	areaFile:'atlas_cfg_small.js',
 	boundBackupDir:'f:\\db\\osm\\sql\\bounds',
 	workDir:'f:\\db\\osm\\regions',
-	maxTasks:2
+	outDir:'f:\\db\\osm\\out',
+	maxTasks:2,
+	cmd_mp_no_rt:'f:\\db\\cvt\\mp_no_rt.bat',//OSM2MP.PL require package LWP::Protocol::https
+	cmd_mp_rt:'f:\\db\\cvt\\mp_rt.bat'
 };
 //settings end
 
@@ -74,7 +77,7 @@ function genTasks(){
 		var rs=taskArray[0],r=rs;
 		for(var i=1;i<taskArray.length;i++){
 			r.tasks=r.tasks||[];
-			r.tasks=r.tasks.concat((taskArray[i] instanceof Array)?(taskArray[i]):([taskArray[i]]));
+			r.tasks=((taskArray[i] instanceof Array)?(taskArray[i]):([taskArray[i]])).concat(r.tasks);
 			r=r.tasks[0];
 		};
 		return rs;
@@ -89,27 +92,28 @@ function genTasks(){
 				var ali={ref:ai.bound.split(','),name:ai.name};
 				//generate names for files
 				var dstDBName=cfg.workDir+'\\'+ai.name,
-					dstOSMName=dstDBName+'.osm',
-					mpFileName=dstDBName+'.mp',
-					nmFileName=dstDBName+'.nm2',
+					dstOSMName=cfg.outDir+'\\'+ai.name,
+					mpFileName=dstOSMName+'.mp',
+					nmFileName=dstOSMName+'.nm2',
 					rtDBName=cfg.workDir+'\\rt_'+ai.name,
-					rtOSMName=rtDBName+'.osm',
-					rtMPName=rtDBName+'.mp',
-					rtNMName=rtDBName+'.nm2',
+					rtOSMName=cfg.outDir+'\\rt_'+ai.name,
+					rtMPName=rtOSMName+'.mp',
+					rtNMName=rtOSMName+'.nm2',
 					boundPolyName=dstDBName+'_b.mp';
 				dstDBName+='.db3';
+				dstOSMName+='.osm';
 				rtDBName+='.db3';
+				rtOSMName+='.osm';
 				if(!ai.flags)ai.flags={};
 				var ti=[
 					{task:'areaCut.js',cmdline:'/src:"'+srcFile+'" /dst:"'+dstDBName+'" /bound:'+ai.bound+' /xml /alreadyimported'},
 					{task:'preprocessMP.js',cmdline:'/dst:"'+dstDBName+'"'+((ai.flags.bitlevel)?(' /bitlevel:'+ai.flags.bitlevel):(''))+((ai.flags.ttable)?(''):(' /nottable'))}
 				];
-				var dstDBDeleteOffset=-1;
 				if(ai.flags.route){
 					var ers=[
 						{task:'exportRouting.js',cmdline:'/src:"'+dstDBName+'" /dst:"'+rtDBName+'"',afterEnd:'v.'+ai.name+'--'},
 						{task:'exportOSM.js',cmdline:'/src:"'+rtDBName+'" /dst:"'+rtOSMName+'"'},
-						{task:'f:\\db\\cvt\\mp_rt.bat',cmdline:'"'+rtOSMName+'" "'+rtMPName+'"'},
+						{task:cfg.cmd_mp_rt,cmdline:'"'+rtOSMName+'" "'+rtMPName+'"'},
 						{task:'mp2nm.js',cmdline:'/src:"'+rtMPName+'" /dst:"'+rtNMName+'"'}
 						];
 					if(!ai.flags.keepFile){
@@ -120,16 +124,15 @@ function genTasks(){
 				if(ai.flags.convert){
 					ti.push({task:'exportOSM.js',cmdline:'/src:"'+dstDBName+'" /dst:"'+dstOSMName+'"'});
 					ti.push({task:'exportPolyFile.js',cmdline:'/src:"'+dstDBName+'" /dst:"'+boundPolyName+'" /refs:"'+ai.bound+'"'});
-					ti.push({task:'f:\\db\\cvt\\mp_no_rt.bat',cmdline:'"'+dstOSMName+'" "'+mpFileName+'"'});
+					ti.push({task:cfg.cmd_mp_no_rt,cmdline:'"'+dstOSMName+'" "'+mpFileName+'"'});
 					ti.push({task:'mp2nm.js',cmdline:'/src:"'+mpFileName+'" /dst:"'+nmFileName
 					/*
 					do not use map cover poly
 					+'" /bound:"'+boundPolyName+'"'*/
 					});
 					ti.push({task:'%ComSpec%',cmdline:'/C del "'+boundPolyName+'"'});
-					dstDBDeleteOffset=-3;
 				};
-				ti[ti.length+dstDBDeleteOffset].afterEnd='v.'+a.name+'--';
+				ti[ti.length-1].afterEnd='v.'+a.name+'--';
 				if(ai.areas && ai.areas.length){
 					ti.push(genAreas(ai,dstDBName))
 				}else if(!ai.flags.keepFile){
@@ -167,14 +170,24 @@ function genTasks(){
 };
 
 function execTasks(tasks){
-	var taskQueue=[],activeTasks=[];
+	var taskQueue=[],activeTasks=[],cntTask=0,cntDone=0,failedTasks=[];
 	var v={};//global task variable
+	function countTasks(ts){
+		var r=ts.length||0;
+		for(var i=0;i<ts.length;i++){
+			if(ts[i].tasks)r+=countTasks(ts[i].tasks);
+		};
+		return r;
+	};
 	function checkFinished(){
 		for(var i=activeTasks.length-1;i>=0;i--){
 			var at=activeTasks[i]
 			if(at.app.status==1){
-				echot('done PID='+at.app.processId+((at.app.exitCode)?('\n\texit code='+at.app.exitCode+'\n\tcmd='+at.cmdline):(' ok'))+'\n\ttasks remain:'+(taskQueue.length+activeTasks.length));
+				echot('done PID='+at.app.processId+((at.app.exitCode)?(' fail'):(' ok'))+'\n\ttasks '+(++cntDone)+' of '+cntTask);
 				var upTime=(new Date())-at.startTime;
+				if(at.app.exitCode){
+					failedTasks.push(at.task+' '+at.cmdline+'\n\texit code='+at.app.exitCode+' upTime='+(upTime/1000).toFixed(1));
+				};
 				if(!timeStats[at.task])timeStats[at.task]=0;
 				timeStats[at.task]+=upTime;
 				try{
@@ -199,10 +212,14 @@ function execTasks(tasks){
 			activeTasks.push(task);
 			WScript.sleep(1000);
 		}catch(e){
+			failedTasks.push(task.task+' '+task.cmdline+'\n\texit code=<not started> upTime=<none>');
 			echo('	fail. Message='+e.description);
 		};
 	};
-	for(var i=0;i<tasks.length;i++)taskQueue.push(tasks[i]);
+	for(var i=0;i<tasks.length;i++){
+		taskQueue.push(tasks[i]);
+	};
+	cntTask=countTasks(tasks);
 	while((taskQueue.length+activeTasks.length)>0){
 		checkFinished();
 		var i=taskQueue.length
@@ -232,6 +249,10 @@ function execTasks(tasks){
 		};
 		WScript.sleep(1000);
 	};
+	if(failedTasks.length>0)echo('\nFailed tasks list:');
+	for(var i=0;i<failedTasks.length;i++){
+		echo(failedTasks[i]);
+	};
 };
 
 function varDump(o,s){
@@ -250,12 +271,14 @@ var tasks=genTasks();
 //jsonSave(tasks,'c:\\tmp\\cfg.js');
 execTasks(tasks);
 echo('Task timing stats:');
-var totalT=0,i;
+var totalT=0,i,sortedStats=[];
 for(i in timeStats){
 	totalT+=timeStats[i];
+	sortedStats.push({k:i,v:timeStats[i]});
 }
-for(i in timeStats){
-	echo(i+'	_	_	'+(timeStats[i]/totalT*100).toFixed(3));
+sortedStats.sort(function(a,b){return (a.v-b.v)});
+for(i=0;i<sortedStats.length;i++){
+	echo(sortedStats[i].k+'	_	_	'+(sortedStats[i].v/totalT*100).toFixed(3));
 };
 
 //WScript.echo('Tasks:');
