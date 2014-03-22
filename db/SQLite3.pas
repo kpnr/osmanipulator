@@ -10,6 +10,7 @@ unit SQLite3;
   SQLite3_open_v2 and vfs-flags added
   SQLite3_load_extension added
   SQLite3_enable_load_extension added
+  SQLite3_clear_bindings added
 }
 {$IFDEF FPC}
 {$MODE DELPHI}
@@ -122,6 +123,8 @@ function SQLite3_load_extension(
   var pzErrMsg:PAnsiChar       // Put error message here if not 0
 ):integer;cdecl;external SQLiteDLL name 'sqlite3_load_extension';
 function SQLite3_enable_load_extension(db:TSQLiteDB; onoff:integer):integer;cdecl;external SQLiteDLL name 'sqlite3_enable_load_extension';
+function SQLite3_clear_bindings(hStmt: TSQLiteStmt): integer; cdecl; external SQLiteDLL name
+  'sqlite3_clear_bindings';
 {+ hkm end}
 function SQLite3_Close(db: TSQLiteDB): integer; cdecl; external SQLiteDLL name 'sqlite3_close';
 function SQLite3_Exec(db: TSQLiteDB; SQLStatement: PAnsiChar; CallbackPtr: TSQLiteExecCallback;

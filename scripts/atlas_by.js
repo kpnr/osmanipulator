@@ -1,0 +1,36 @@
+var c={bound:'relation:59065',
+	name:'by',
+	country:'BY',
+	flags:{keepFile:1},
+	areas:[
+		{name:'by_w',
+		bound:'relation:59189,relation:59275,relation:59752,relation:59195',
+		flags:{route:1,ttable:1,bitlevel:24,keepFile:1},
+		areas:[
+			{name:'brest',
+			bound:'relation:59189',
+			flags:{convert:1,keepFile:1}},
+			{name:'hrodno',
+			bound:'relation:59275',
+			flags:{convert:1,keepFile:1}},
+			{name:'minskr',
+			bound:'relation:59752,relation:59195',
+			flags:{convert:1,keepFile:1}}
+		]},
+		{name:'by_e',
+		bound:'relation:59506,relation:59161,relation:59162',
+		flags:{route:1,ttable:1,bitlevel:24,keepFile:1},
+		areas:[
+			{name:'vitebsk',
+			bound:'relation:59506',
+			flags:{convert:1,keepFile:1}},
+			{name:'homiel',
+			bound:'relation:59161',
+			flags:{convert:1,keepFile:1}},
+			{name:'mogilev',
+			bound:'relation:59162',
+			flags:{convert:1,keepFile:1}}
+		]}
+	]
+};
+c;

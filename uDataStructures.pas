@@ -70,8 +70,16 @@ type
     procedure insertBefore(aData: pointer);
     procedure insertFirst(aData: pointer);
     procedure insertLast(aData: pointer);
+    //delete root item. If cur==root, then set cur to second
+    // (a),(root_b),(cur_c),(d) => (a),(root_cur_c),(d)
+    // (a),(root_cur_b),(c),(d) => (a),(root_cur_c),(d)
     function deleteFirst(): pointer;
+    //delete item before root
+    // (a),(cur_b),(root_c),(d) => (a),(root_cur_c),(d)
+    // (a),(b),(root_cur_c),(d) => (a),(root_cur_c),(d)
     function deleteLast(): pointer;
+    //delete cur item & set cur pos to next after deleted.
+    // (a),(cur_b),(c),(d) => (a),(cur_c),(d)
     function delete(): pointer;
     property data: pointer read getData write setData;
     property bookmark: pointer read getBookmark write setBookmark;

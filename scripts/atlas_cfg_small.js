@@ -1,16 +1,41 @@
 var c={bound:'relation:60189',
 	name:'rf',
+	country:'RU',
 	flags:{keepFile:1},
 	areas:[
-		{bound:'relation:253256,relation:85606,relation:108082,way:83806526,way:218559335',
+		{bound:'relation:253256,relation:108082,way:83806526,way:218559335,way:238797487',
 		name:'yufo_w',
 		flags:{route:1,ttable:1,bitlevel:24,keepFile:1},
 		areas:[
 			//relation:108082 krasnodar
-			{bound:'relation:2800681,relation:364171,relation:364165,relation:365306,relation:365299,relation:365302,relation:364543,relation:364545,relation:364548,relation:365231,relation:365233,relation:364169,relation:364123,relation:365308,relation:364156,relation:364150,relation:269701,relation:364116,relation:365309,relation:365311,relation:371561,relation:365303,relation:365144,relation:365147,relation:365168,way:83806526,way:218559335',
-			name:'krsnd_w',
+			{bound:'relation:2800681,relation:364171,relation:364165,relation:365306,relation:365299,relation:365302,relation:364543,relation:364545,relation:364548,relation:365231,relation:365233,relation:371561,relation:365303,way:83806526,way:218559335,way:238797487',
+			name:'krsnd_w',region:'RU-KDA',
+			flags:{convert:1,keepFile:1}},
+			{bound:'relation:365311,relation:365309,relation:365308,relation:364123,relation:364116,relation:269701,relation:364169,relation:364156,relation:364150,relation:365144,relation:365147,relation:365168',
+			name:'krsnd_c',region:'RU-KDA',
+			flags:{convert:1,keepFile:1}},
+			{bound:'relation:365297,relation:371579,relation:371580,relation:371621,relation:371614,relation:371607,relation:918967,relation:918974,relation:919000,relation:919011,relation:918999,relation:919005,relation:918986,relation:919004,relation:918994,relation:918989,relation:918995,relation:371571,relation:371556,relation:371552',
+			name:'krsnd_e',region:'RU-KDA',
+			flags:{convert:1,keepFile:1}},
+			{bound:'relation:253256',
+			name:'adyg',
+			flags:{convert:1,keepFile:1}}
+		]},
+		{bound:'relation:102269,relation:51490',
+		name:'ctfo_c',
+		flags:{route:1,ttable:1,bitlevel:24,keepFile:1},
+		areas:[
+			{bound:'relation:102269',
+			name:'moskva',
+			flags:{convert:1,keepFile:1}},
+			//bound:'relation:51490',name:'moskovskaya'
+			{bound:'relation:184075,relation:184074,relation:184073,relation:178921,relation:178922,relation:184744,relation:184751,relation:181346,relation:1644065,relation:1703087,relation:181355,relation:184072,relation:1028612,relation:184071,relation:180838,relation:1703094,relation:181345,relation:1703082,relation:173406,relation:184106,relation:1703090,relation:1703098,relation:179588,relation:974560,relation:1703084,relation:179494,relation:1703088,relation:179507,relation:171922,relation:173763,relation:171929,relation:184745,relation:1703091',
+			name:'msobl_w',region:'RU-MOS',
+			flags:{convert:1,keepFile:1}},
+			{bound:'relation:184108,relation:184107,relation:179629,relation:184746,relation:186462,relation:1703097,relation:179639,relation:1703096,relation:179640,relation:1462342,relation:180416,relation:1703083,relation:184684,relation:184667,relation:184665,relation:1026234,relation:184664,relation:184666,relation:181356,relation:181357,relation:1026233,relation:180621,relation:1703085,relation:189473,relation:1703092,relation:181290,relation:181189,relation:1703089,relation:181287,relation:184001,relation:181165,relation:184619,relation:184621,relation:184618,relation:1703081,relation:186463,relation:1703086,relation:184002,relation:1028434',
+			name:'msobl_e',region:'RU-MOS',
 			flags:{convert:1,keepFile:1}}
 		]}
-		]
+	]
 };
 c;

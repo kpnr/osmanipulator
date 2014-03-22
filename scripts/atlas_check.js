@@ -1,7 +1,7 @@
 var cfg={
-	countryDBName:'s:\\db\\osm\\sql\\rf.db3',
-	areaFile:'atlas_cfg.js',
-	boundBackupDir:'f:\\db\\osm\\sql\\bounds'
+	countryDBName:'',
+	areaFile:'',
+	boundBackupDir:'e:\\db\\osm\\sql\\bounds'
 };
 //settings end
 
@@ -10,8 +10,37 @@ function include(n){var w=WScript,h=w.createObject('WScript.Shell'),o=h.currentD
 var h=new (include('helpers.js'));
 var man=h.man;
 var gt=h.gt;
-var echo=h.echo;
+var echo=h.echo, echot=h.echot;
 var passCnt=0,failCnt=0;
+
+function checkArgs(){
+	function help(){
+	echo('Command line options:\n\
+\t/src:"source_database_name"\n\
+\t/atlas:"atlas_file_name"');
+	};
+	var ar=WScript.arguments;
+	if(!ar.length){
+		help();
+		return false;
+	};
+	ar=ar.named;
+	if(ar.exists('help')||ar.exists('?')||ar.exists('h')){
+		help();
+		return false;
+	};
+	if(ar.exists('atlas'))cfg.areaFile=ar.item('atlas');
+	if(ar.exists('src'))cfg.countryDBName=ar.item('src');
+	echo('Use config:\natlas='+cfg.areaFile+'\nsrc='+cfg.countryDBName);
+	if(!(cfg.areaFile && cfg.countryDBName)){
+		help();
+		echo('\nInvalid arguments. Exiting');
+		return false;
+	};
+	return true;
+};
+
+if(!checkArgs())WScript.quit(1);
 var src=h.mapHelper();
 src.open(cfg.countryDBName,false,true);
 
@@ -28,19 +57,19 @@ function checkBounds(ar){
 		echo(ar.name+'	',true,true);
 		try{
 			ar.bound=ar.bound.split(',');
-			bpoly=h.getMultiPoly(ar.bound,src.map,bbhm.map);
+			bpoly=h.getMultiPoly(ar.bound,src.map/*,bbhm.map*/);
 			if(bpoly.poly){
 				if(bpoly.usedMap.storage.dbName!=src.map.storage.dbName){
 					s+='	ok in '+bpoly.usedMap.storage.dbName;
 				}
 			};
-			var cutter=h.polyIntersector(bbhm);
+			var cutter=h.polyIntersector(src);
 			for(var i=0;i<ar.bound.length;i++){
 				var ref=ar.bound[i].split(':');
 				if(ref[0]=='way'){
 					bwl.push(parseFloat(ref[1]));
 				}else if(ref[0]=='relation'){
-					bwl=bwl.concat(cutter.buildWayList(bbhm.getObject(ar.bound[i]),true));
+					bwl=bwl.concat(cutter.buildWayList(src.getObject(ar.bound[i]),true));
 				};
 			};
 		}catch(e){
@@ -91,7 +120,28 @@ function checkBounds(ar){
 	return bwl;
 };
 
+function checkNames(ar){
+	checkNames.arNames=checkNames.arNames || [];
+	if(h.indexOf(checkNames.arNames,ar.name)<0){
+		checkNames.arNames.push(ar.name);
+		if(ar.areas && (ar.areas.length>0)){
+			for(var i=0;i<ar.areas.length;i++){
+				var ari=ar.areas[i];
+				if(!ari || !ari.name || !ari.bound){
+					echo('Empty or invalid subarea in '+ar.name+'/'+i);
+				}else{
+					checkNames(ari);
+				}
+			};
+		};
+	}else{
+		echo('Duplicated name <'+ar.name+'>');
+	};
+}
 var arcfg=include(cfg.areaFile);
+echot('Checking names');
+checkNames(arcfg);
+echot('Checking bounds integrity');
 checkBounds(arcfg);
 src.close();
-WScript.echo('all done. '+passCnt+' of '+(passCnt+failCnt)+' passed.');
+echot('all done. '+passCnt+' of '+(passCnt+failCnt)+' passed.');

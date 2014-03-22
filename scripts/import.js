@@ -1,7 +1,26 @@
 //settings begin
 var destDBName='f:\\db\\osm\\sql\\world.db3';
 var srcOSMName=[
-'e:\\reget\\planet-130710.osm.bz2'
+'f:\\db\\osm\\dl\\000000520.osc.gz',
+'f:\\db\\osm\\dl\\000000521.osc.gz',
+'f:\\db\\osm\\dl\\000000522.osc.gz',
+'f:\\db\\osm\\dl\\000000523.osc.gz',
+'f:\\db\\osm\\dl\\000000524.osc.gz',
+'f:\\db\\osm\\dl\\000000525.osc.gz',
+'f:\\db\\osm\\dl\\000000526.osc.gz',
+'f:\\db\\osm\\dl\\000000527.osc.gz',
+'f:\\db\\osm\\dl\\000000528.osc.gz',
+'f:\\db\\osm\\dl\\000000529.osc.gz',
+'f:\\db\\osm\\dl\\000000530.osc.gz',
+'f:\\db\\osm\\dl\\000000531.osc.gz',
+'f:\\db\\osm\\dl\\000000532.osc.gz',
+'f:\\db\\osm\\dl\\000000533.osc.gz',
+'f:\\db\\osm\\dl\\000000534.osc.gz',
+'f:\\db\\osm\\dl\\000000535.osc.gz',
+'f:\\db\\osm\\dl\\000000536.osc.gz'/*,
+'f:\\db\\osm\\dl\\000000537.osc.gz',
+'f:\\db\\osm\\dl\\000000538.osc.gz',
+'f:\\db\\osm\\dl\\000000539.osc.gz'*/
 ];
 var bpolyRelationId=false;//60189;//set to false if no bpoly needed
 var bpolyDBName=0;//'f:\\db\\osm\\sql\\rfbound121002.db3';

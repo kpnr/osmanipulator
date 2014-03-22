@@ -3,6 +3,7 @@ var dstMapName='';
 var noAddr=false;
 var noTTable=false;
 var bitLevel=0;
+var dstLang='ru';
 var intToDeg=1e-7,degToInt=1/intToDeg;
 //settings end
 function include(n){var w=WScript,h=w.createObject('WScript.Shell'),o=h.currentDirectory,s=w.createObject('Scripting.FileSystemObject'),f,t;h.currentDirectory=s.getParentFolderName(w.ScriptFullName);try{f=s.openTextFile(n,1,!1);try{t=f.ReadAll()}finally{f.close()}return eval(t)}catch(e){if(e instanceof Error)e.description+=' '+n;throw e}finally{h.currentDirectory=o}}
@@ -23,6 +24,8 @@ function checkArgs(){
     /dst:"dest_file_name.db3"\n\
     /bitlevel:nn round all coordinates up to nn bit level. nn must be\n\
       between 8 and 32 inclusive.\n\
+    /lng:us set language for `name` and `addr:*` tags.\n\
+      Copy/translate `name:us` values to `name` and `addr:*` tags\n\
     /noaddr remove address info\n\
     /nottable do not translate tag values from UTF8');
 	};
@@ -35,6 +38,7 @@ function checkArgs(){
 	if(ar.exists('dst'))dstMapName=ar.item('dst')||dstMapName;
 	if(ar.exists('noaddr'))noAddr=true;
 	if(ar.exists('nottable'))noTTable=true;
+	if(ar.exists('lng'))dstLang=ar.item('lng');
 	if(ar.exists('bitlevel')){
 		bitLevel=parseInt(ar.item('bitlevel'));
 		if((!bitLevel)||(isNaN(bitLevel))||!((8<=bitLevel)&&(bitLevel<=32)))bitLevel=0;
@@ -44,6 +48,7 @@ function checkArgs(){
 		echo('bitLevel='+(bitLevel||'none'));
 		echo('noaddr='+noAddr);
 		echo('nottable='+noTTable);
+		echo('lng='+dstLang);
 		return true;
 	}
 	help();
@@ -51,7 +56,90 @@ function checkArgs(){
 };
 
 function mergeDupNodes(hMap){
+//12:51
 	var stg=hMap.map.storage;
+	var minId=hMap.getNextNodeId();
+	var qNextDup=stg.sqlPrepare('SELECT nc1.id,nc1.minlat,nc1.minlon FROM nodes_attr as na, nodes_latlon as nc1, nodes_latlon as nc2 WHERE na.id>:minId AND nc1.id=na.id AND nc1.minlon=nc2.minlon AND nc1.minlat=nc2.minlat AND nc1.id<nc2.id ORDER BY na.id LIMIT 1');
+	var qCoordToIds=stg.sqlPrepare('SELECT id FROM nodes_latlon WHERE minlat=:ilat AND minlon=:ilon AND id>:minId');
+	while(1){
+		var sNextDup=stg.sqlExec(qNextDup,':minId',minId);
+		if(sNextDup.eos)break;
+		var aIdLatLon=sNextDup.read(1).toArray();
+		minId=aIdLatLon[0];
+		var sCoordToIds=stg.sqlExec(qCoordToIds,[':minId',':ilat',':ilon'],aIdLatLon);
+		var saIds=[minId];
+		while(!sCoordToIds.eos){
+			saIds=saIds.concat(sCoordToIds.read(1000).toArray());
+		};
+		if(saIds.length<2)continue;
+		for(var i=saIds.length-1;i>=0;i--){
+			saIds[i]=hMap.map.getNode(saIds[i]);
+			if(!saIds[i])saIds.splice(i,1);
+		};
+		if(saIds.length<2)continue;
+		var tags=saIds[0].tags;
+		echo('\r'+saIds[0].id+' x '+saIds.length+'   ',true,true);
+		for(var i=saIds.length-1;i>0;i--){
+			var tags2=saIds[i];
+			for(var j=tags2.count-1;j>=0;j--){
+				tags.setByKey(tags2.getKey(j),tags2.getValue(j));
+			};
+			hMap.replaceObject(saIds[i],[saIds[0]]);
+		};
+	};
+	echo('');
+
+	/*12:55 var stg=hMap.map.storage;
+	var sids=hMap.exec('SELECT id FROM nodes_attr ORDER BY id');
+	var dupIdList=stg.createIdList(),noCheckList=stg.createIdList();
+	var qCoordToIds=stg.sqlPrepare('SELECT id FROM nodes_latlon WHERE minlat=:ilat AND minlon=:ilon AND id>:minid AND NOT id IN(SELECT id FROM '+noCheckList.tableName+')');
+	var qIdToCoord=stg.sqlPrepare('SELECT minlat,minlon FROM nodes_latlon WHERE id=:id');
+	while(!sids.eos){
+		var asids=sids.read(1000).toArray();
+		for(var i=0;i<asids.length;i++){
+			var nid=asids[i];
+			var nca=stg.sqlExec(qIdToCoord,':id',nid).read(1).toArray();
+			nca.push(nid);
+			var sCoordToIds=stg.sqlExec(qCoordToIds,[':ilat',':ilon',':minid'],nca);
+			if(!sCoordToIds.eos){
+				dupIdList.add(nid);
+				echo(nid+'  ',true);
+			};
+			while(!sCoordToIds.eos){
+				var saIds=sCoordToIds.read(1000).toArray();
+				for(var j=0;j<saIds.length;j++){
+					noCheckList.add(saIds[j]);
+				};
+			};
+		};
+	};
+	noCheckList=0;
+	
+	sids=hMap.exec('SELECT id FROM '+dupIdList.tableName);
+	var qdup=stg.sqlPrepare('SELECT id FROM nodes_latlon WHERE minlat=:lat AND minlon=:lon');
+	while(!sids.eos){
+		var nc=stg.sqlExec(qIdToCoord,':id',sids.read(1)).read(1);
+		var qnids=stg.sqlExec(qdup,[':lat',':lon'],nc),nds=[];
+		while(!qnids.eos)nds=nds.concat(qnids.read(1000).toArray());
+		if(nds.length<2)continue;
+		for(var i=nds.length-1;i>=0;i--){
+			nds[i]=hMap.map.getNode(nds[i]);
+			if(!nds[i])nds.splice(i,1);
+		};
+		if(nds.length<2)continue;
+		var tags=nds[0].tags;
+		echo('['+nds.length+'] => '+nds[0].id+'   ',true);
+		for(var i=nds.length-1;i>0;i--){
+			var tags2=nds[i];
+			for(var j=tags2.count-1;j>=0;j--){
+				tags.setByKey(tags2.getKey(j),tags2.getValue(j));
+			};
+			hMap.replaceObject(nds[i],[nds[0]]);
+		};
+	};
+	echo('');
+	*/
+	/*12:20 var stg=hMap.map.storage;
 	var qcoord=stg.sqlPrepare('SELECT n1.minlat,n1.minlon FROM nodes_latlon AS n1,nodes_latlon AS n2 WHERE n1.minlat=n2.minlat AND n1.minlon=n2.minlon AND n1.id<>n2.id LIMIT 1');
 	var qdup=stg.sqlPrepare('SELECT id FROM nodes_latlon WHERE minlat=:lat AND minlon=:lon');
 	do{
@@ -76,16 +164,34 @@ function mergeDupNodes(hMap){
 		};
 	}while (true)
 	echo('');
+	*/
 };
 
 function ttable(hMap){
 	var ttf=include('utf2win1251.js');
 	var stg=hMap.map.storage;
-	var qtgs=stg.sqlPrepare('SELECT id,tagname,tagvalue FROM tags');
+	var qtgs=stg.sqlPrepare('SELECT id,tagname,tagvalue from tags WHERE \
+  tagname BETWEEN "addr" AND "adds" or\
+  tagname BETWEEN "alt_" AND "alt`" or \
+  tagname BETWEEN "contact" AND "contacu" or \
+  tagname BETWEEN "full_" AND "full`" or\
+  tagname BETWEEN "int_" AND "int`" or\
+  tagname BETWEEN "is_in" AND "is_io" or\
+  tagname BETWEEN "loc_" AND "loc`" or\
+  tagname BETWEEN "local_" AND "local`" or\
+  tagname BETWEEN "long_" AND "long`" or\
+  tagname BETWEEN "name" AND "namf" or\
+  tagname BETWEEN "official_name" AND "official_namf" or\
+  tagname BETWEEN "old_" AND "old`" or\
+  tagname BETWEEN "operator" AND "operatos" or\
+  tagname BETWEEN "place_name" AND "place_namf" or\
+  tagname BETWEEN "ref" AND "reg" or\
+  tagname BETWEEN "short_name" AND "short_namf" or\
+  tagname IN ("brand","description","destination","email","level","network","phone","route_ref","website")');
 	var qUpdTg=stg.sqlPrepare('UPDATE OR FAIL tags SET tagvalue=:tagvalue WHERE id=:id');
 	var qDelTg=stg.sqlPrepare('DELETE FROM tags WHERE id=:id');
 	var qUpdObjs=stg.sqlPrepare('UPDATE OR FAIL objtags SET tagid=(SELECT id FROM tags WHERE tagname=:tagname AND tagvalue=:newtagvalue) WHERE tagid=:id');
-	var hasChanges;
+	var hasChanges,cnt=0,chcnt=0;
 	do{
 		hasChanges=false;
 		var stgs=stg.sqlExec(qtgs,0,0);
@@ -93,22 +199,24 @@ function ttable(hMap){
 			var tgs=stgs.read(1000).toArray();
 			for(var i=tgs.length-3;i>=0;i-=3){
 				var otv=tgs[i+2],ttv=ttf(otv);
-				var exits=false;
+				var exists=false;
+				cnt++;
 				if(ttv!=otv){
 					hasChanges=true;
-					echo(otv+' => '+ttv+'   ',true);
+					chcnt++;
 					try{
 						stg.sqlExec(qUpdTg,[':id',':tagvalue'],[tgs[i],ttv]);
-					}catch(e){exits=true};
+					}catch(e){exists=true};
 				};
-				if(exits){
+				if(exists){
 					stg.sqlExec(qUpdObjs,[':id',':tagname',':newtagvalue'],[tgs[i],tgs[i+1],ttv]);
 					stg.sqlExec(qDelTg,':id',tgs[i]);
 				};
 			};
+			echo(chcnt+'/'+cnt+'   ',true);
 		};
-		echo('');
 	}while(hasChanges);
+	echo(chcnt+'/'+cnt+'   ');
 };
 
 function deleteAddrInfo(hMap){
@@ -237,7 +345,7 @@ function normalizeRelations(hMap){
 };
 
 function processAssociatedStreet(hMap){
-	var sRid=hMap.exec("SELECT objid>>2 FROM objtags WHERE tagid in (SELECT id FROM tags WHERE tagname='type' AND tagvalue='associatedStreet') and objid&3=2"),tagtest=/^name(:..)?$/;
+	var sRid=hMap.exec("SELECT objid>>2 FROM objtags WHERE tagid in (SELECT id FROM tags WHERE tagname='type' AND tagvalue in ('associatedStreet','street')) and objid&3=2"),tagtest=/^name(:..)?$/;
 	while(!sRid.eos){
 		var rid=sRid.read(1).toArray()[0],rel=hMap.map.getRelation(rid);
 		if(!rel)continue;
@@ -281,19 +389,58 @@ function processAssociatedStreet(hMap){
 	};
 };
 
+function processLanguage(hMap,lng){
+	var stg=hMap.map.storage;
+	hMap.exec('CREATE TEMPORARY TABLE IF NOT EXISTS lngtrans (src INTEGER PRIMARY KEY,dst INTEGER, CONSTRAINT lngstrs_pair UNIQUE(src,dst) ON CONFLICT FAIL)');
+	echot('	Make translate table');
+	var q=stg.sqlPrepare('INSERT OR IGNORE INTO lngtrans SELECT src.id AS src, dst.tagid AS dst\
+  FROM tags AS src,\
+    (SELECT objid,tagid FROM objtags WHERE tagid IN (SELECT id FROM tags WHERE tagname=:lng)) AS dst\
+  WHERE src.id IN (SELECT tagid FROM objtags WHERE objid=dst.objid)\
+    AND (src.tagname||"")="name"\
+    AND src.tagvalue NOT IN (SELECT tagvalue FROM tags WHERE id=dst.tagid)');
+	stg.sqlExec(q,':lng','name:'+lng);
+	echot('	Translating');
+	var sTagReplace=hMap.exec('SELECT tg.id AS id,tg.tagname AS tagname,dstt.tagvalue AS newval FROM\
+ (select id,tagname,tagvalue \
+  from tags\
+  where (tagname="name" or tagname>"addr:" and tagname<"addr;") \
+    and tagvalue in (select tagvalue from tags where id in (select src from lngtrans)))as tg,\
+  tags,lngtrans,tags as dstt\
+  where tags.tagname="name" and tags.tagvalue=tg.tagvalue and tags.id=lngtrans.src and dstt.id=lngtrans.dst');
+	var qSaveTag=stg.sqlPrepare('INSERT OR IGNORE INTO tags (tagname, tagvalue) VALUES (:tagname, :tagvalue)');
+	var qTagId=stg.sqlPrepare('SELECT id FROM tags WHERE tagname=:tagname AND tagvalue=:tagvalue');
+	var qUpdateObjTags=stg.sqlPrepare('UPDATE objtags SET tagid=:newtagid WHERE tagid=:oldtagid');
+	var cnt=0,chcnt=0;
+	while(!sTagReplace.eos){
+		var arReplace=sTagReplace.read(100).toArray();
+		for(var i=0;i<arReplace.length;i+=3){
+			//0 - id, 1 - name, 2 - newval
+			stg.sqlExec(qSaveTag,[':tagname',':tagvalue'],[arReplace[i+1],arReplace[i+2]]).read(1).toArray()[0];
+			var newId=stg.sqlExec(qTagId,[':tagname',':tagvalue'],[arReplace[i+1],arReplace[i+2]]).read(1).toArray()[0];
+			cnt++;
+			if(newId != arReplace[i]){
+				stg.sqlExec(qUpdateObjTags,[':oldtagid',':newtagid'],[arReplace[i],newId]);
+				chcnt++;
+			};
+		};
+		echo(''+chcnt+'/'+cnt,true);
+	};
+	hMap.exec('DELETE FROM lngtrans');
+	echo(''+chcnt+'/'+cnt);
+};
 
 function main(){
 	if(!checkArgs())return;
 	echot('Opening map');
 	var dst=h.mapHelper();
 	dst.open(dstMapName);
-	dst.exec('PRAGMA cache_size=200000');
 	if(bitLevel){
 		echot('Rounding coords to bit level '+bitLevel);
 		bitRound(dst,bitLevel);
+		echot('Merging duplicated nodes');
+		mergeDupNodes(dst);
 	};
-	echot('Merging duplicated nodes');
-	mergeDupNodes(dst);
 	if(noAddr){
 		echot('Deleting address info');
 		deleteAddrInfo(dst);
@@ -316,16 +463,20 @@ function main(){
 	dst.fixIncompleteWays();
 	echot('Fix incomplete relations');
 	dst.fixIncompleteRelations();
+	if(dstLang){
+		echot('Process "name" tag language');
+		processLanguage(dst,dstLang);
+	};
 	echot('Closing map');
 	dst.close();
 	echot('All done.');
 }
 
-try{
+//try{
 main();
-}catch(e){
+/*}catch(e){
 	echo('Exception name='+e.name+' message='+e.message+' description='+e.description+' number='+e.number);
 	echo('press Enter');
 	WScript.stdIn.readLine();
 	WScript.quit(1);
-};
+};*/

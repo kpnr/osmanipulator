@@ -328,6 +328,7 @@ end;
 
 procedure TSQLiteStmt.Reset;
 begin
+  SQLite3_clear_bindings(hStmt);
   SQLite3_Reset(hStmt);
   EOF:=true;
 end;

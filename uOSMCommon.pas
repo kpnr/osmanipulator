@@ -1,7 +1,8 @@
 unit uOSMCommon;
 interface
 
-uses ActiveX, Windows, SysConst, uModule, uInterfaces, SysUtils, Classes, Variants;
+uses ActiveX, Windows, SysConst, uModule, uInterfaces, SysUtils, Classes, Variants, ComObj,
+TntSysUtils;
 
 const
   cDegToInt = 10000000;
@@ -101,6 +102,9 @@ function strToRefType(const rt: WideString): TRefType;
 //returns session unique ID
 function getUID: int64;
 
+//returns path to OSMan. E.g. c:\osman\
+function getOSManPath: WideString;
+
 //returns true if method/property exists in IDispatch
 function isDispNameExists(const disp: IDispatch; const aName: WideString): boolean;
 
@@ -117,56 +121,56 @@ function degToInt(const deg: double): integer;
 function IntToDeg(const i: integer): double;
 
 //convert TimeStamp from WideString to Int64 and vice versa
-function wideStringToTimeStamp(const w:WideString):int64;
-function timeStampToWideString(const i64:int64):WideString;
+function wideStringToTimeStamp(const w: WideString): int64;
+function timeStampToWideString(const i64: int64): WideString;
 
 //extended version of pos procedure
 function PosEx(const SubStr, Str: WideString; FromPos, ToPos: integer): integer;
 
 //emit message to debugger
-procedure debugPrint(const msg:WideString);
+procedure debugPrint(const msg: WideString);
 
 implementation
 
-function wideStringToTimeStamp(const w:WideString):int64;
+function wideStringToTimeStamp(const w: WideString): int64;
 var
-  pWCh:pWideChar;
-  i:integer;
-  flipFlop:boolean;
-  b:array[0..9]of byte;
-  pB:pByte;
+  pWCh: pWideChar;
+  i: integer;
+  flipFlop: boolean;
+  b: array[0..9] of byte;
+  pB: pByte;
 begin
-//12345678901234567890
-//2005-07-05T07:18:37Z
-  pWCh:=pWideChar(w)-1;
-  if(length(w)<>20)or
-    ((pWCh+5)^<>'-')or
-    ((pWCh+8)^<>'-')or
-    ((pWCh+11)^<>'T')or
-    ((pWCh+14)^<>':')or
-    ((pWCh+17)^<>':')or
-    ((pWCh+20)^<>'Z')then begin
-    result:=20000101000000;
+  //12345678901234567890
+  //2005-07-05T07:18:37Z
+  pWCh := pWideChar(w) - 1;
+  if (length(w) <> 20) or
+    ((pWCh + 5)^ <> '-') or
+    ((pWCh + 8)^ <> '-') or
+    ((pWCh + 11)^ <> 'T') or
+    ((pWCh + 14)^ <> ':') or
+    ((pWCh + 17)^ <> ':') or
+    ((pWCh + 20)^ <> 'Z') then begin
+    result := 20000101000000;
     exit;
   end;
-  pB:=@b[6];
-  pDWORD(pB)^:=0;//clear not used digits and sign
-  flipFlop:=false;
-  for i:=1 to 19 do begin
+  pB := @b[6];
+  pDWORD(pB)^ := 0; //clear not used digits and sign
+  flipFlop := false;
+  for i := 1 to 19 do begin
     inc(pWCh);
-    if(i in [5,8,11,14,17])then continue;
-    if((pWCh^<'0')or(pWCh^>'9'))then begin
-      result:=20000101000001;
+    if (i in [5, 8, 11, 14, 17]) then continue;
+    if ((pWCh^ < '0') or (pWCh^ > '9')) then begin
+      result := 20000101000001;
       exit;
     end;
-    if(flipFlop)then begin
-      inc(pB^,(ord(pWCh^)-ord('0')));
+    if (flipFlop) then begin
+      inc(pB^, (ord(pWCh^) - ord('0')));
       dec(pB);
     end
     else begin
-      pB^:=byte((ord(pWCh^)-ord('0'))shl 4);
+      pB^ := byte((ord(pWCh^) - ord('0')) shl 4);
     end;
-    flipFlop:=not flipFlop;
+    flipFlop := not flipFlop;
   end;
   asm
     FBLD b
@@ -174,59 +178,55 @@ begin
   end;
 end;
 
-function timeStampToWideString(const i64:int64):WideString;
+function timeStampToWideString(const i64: int64): WideString;
 var
-  s:array[0..9] of byte;
-  pWCh:pWideChar;
-  pB:pByte;
-  i:integer;
-  flipFlop:boolean;
+  s: array[0..9] of byte;
+  pWCh: pWideChar;
+  pB: pByte;
+  i: integer;
+  flipFlop: boolean;
 begin
-//12345678901234
-//20050705071837
+  //12345678901234
+  //20050705071837
 
-//12345678901234567890
-//2005-07-05T07:18:37Z
+  //12345678901234567890
+  //2005-07-05T07:18:37Z
 
-// s index is ___________ 0  1  2  3  4  5  6  7  8  9
-//store BCD in LE format [37,18,07,05,07,05,20,00,00,00]
+  // s index is ___________ 0  1  2  3  4  5  6  7  8  9
+  //store BCD in LE format [37,18,07,05,07,05,20,00,00,00]
   asm
     FILD i64
     FBSTP s
   end;
-  setlength(result,20);
-  flipFlop:=false;
-  pB:=@s[6];
-  pWCh:=PWideChar(result);
-  for i:=1 to 19 do begin
+  setlength(result, 20);
+  flipFlop := false;
+  pB := @s[6];
+  pWCh := pWideChar(result);
+  for i := 1 to 19 do begin
     case i of
-    5,8:
-      begin
-        pWCh^:='-';
-      end;
-    11:
-      begin
-        pWCh^:='T';
-      end;
-    14,17:
-      begin
-        pWCh^:=':';
-      end;
-    else
-      begin
+      5, 8: begin
+          pWCh^ := '-';
+        end;
+      11: begin
+          pWCh^ := 'T';
+        end;
+      14, 17: begin
+          pWCh^ := ':';
+        end;
+    else begin
         if flipFlop then begin
-          pWCh^:=WideChar((pB^ and $f)+ord('0'));
+          pWCh^ := WideChar((pB^ and $F) + ord('0'));
           dec(pB);
         end
         else begin
-          pWCh^:=WideChar((pB^ shr 4)+ord('0'));
+          pWCh^ := WideChar((pB^ shr 4) + ord('0'));
         end;
-        flipFlop:=not flipFlop;
+        flipFlop := not flipFlop;
       end;
     end;
     inc(pWCh);
   end;
-  pWCh^:='Z';
+  pWCh^ := 'Z';
 end;
 
 function PosEx(const SubStr, Str: WideString; FromPos, ToPos: integer): integer;
@@ -235,14 +235,13 @@ var
 begin
   result := 0;
   StrLength := length(Str);
-  if (FromPos > StrLength) or (SubStr = '') or (FromPos <= 0) or (ToPos <= 0)
-    then exit;
+  if (FromPos > StrLength) or (SubStr = '') or (FromPos <= 0) or (ToPos <= 0) then exit;
   if ToPos > StrLength then ToPos := StrLength;
   StrLength := length(SubStr);
   dec(ToPos, StrLength - 1);
   while FromPos <= ToPos do begin
     if (Str[FromPos] = SubStr[1]) and
-      CompareMem(@SubStr[1], @Str[FromPos], StrLength*sizeof(Str[1])) then begin
+      CompareMem(@SubStr[1], @Str[FromPos], StrLength * sizeof(Str[1])) then begin
       result := FromPos;
       exit;
     end;
@@ -250,9 +249,9 @@ begin
   end;
 end;
 
-procedure debugPrint(const msg:WideString);
+procedure debugPrint(const msg: WideString);
 begin
-  OutputDebugStringW(PWideChar(msg));
+  OutputDebugStringW(pWideChar(msg));
 end;
 
 function degToInt(const deg: double): integer;
@@ -287,36 +286,37 @@ var
   l: integer;
   pv: POleVariant;
 
-  disp:IDispatchEx;
+  disp: IDispatchEx;
   DispParams: TDispParams;
-  sItem:WideString;
+  sItem: WideString;
   ExcepInfo: TExcepInfo;
-  itemiid:TDispID;
+  itemiid: TDispID;
 begin
   if VarIsType(jsObj, varDispatch) then begin
     if isDispNameExists(jsObj, 'pop') then begin
       //array object
-      disp:=IDispatch(jsObj) as IDispatchEx;
-      DispParams.cArgs:=0;
-      DispParams.rgvarg:=nil;
-      DispParams.cNamedArgs:=0;
-      DispParams.rgdispidNamedArgs:=nil;
+      disp := IDispatch(jsObj) as IDispatchEx;
+      DispParams.cArgs := 0;
+      DispParams.rgvarg := nil;
+      DispParams.cNamedArgs := 0;
+      DispParams.rgdispidNamedArgs := nil;
       //end;}
-      l := jsObj.length-1;
+      l := jsObj.length - 1;
       result := VarArrayCreate([0, l], varVariant);
       pv := varArrayLock(result);
       try
         inc(pv, l);
         while (l >= 0) do begin
-          sItem:=inttostr(l);
-          if succeeded(disp.GetIDsOfNames(GUID_NULL,@sItem,1,0,@itemiid))and
-            succeeded(disp.Invoke(itemiid,GUID_NULL,0,DISPATCH_PROPERTYGET,DispParams,pv,@ExcepInfo,nil)) then begin
+          sItem := inttostr(l);
+          if succeeded(disp.GetIDsOfNames(GUID_NULL, @sItem, 1, 0, @itemiid)) and
+            succeeded(disp.Invoke(itemiid, GUID_NULL, 0, DISPATCH_PROPERTYGET, DispParams, pv,
+              @ExcepInfo, nil)) then begin
             pv^ := varFromJsObject(pv^);
             dec(pv);
             dec(l);
           end
           else begin
-            raise EConvertError.Create('varFromJsObject : can`t get element '+inttostr(l));
+            raise EConvertError.Create('varFromJsObject : can`t get element ' + inttostr(l));
           end;
         end;
       finally
@@ -342,7 +342,7 @@ end;
 
 function isDispNameExists(const disp: IDispatch; const aName: WideString): boolean;
 var
-  did:integer;
+  did: integer;
 begin
   result := succeeded(disp.GetIDsOfNames(GUID_NULL, @aName, 1, 0
     {SORT_DEFAULT,LANG_NEUTRAL,SUBLANG_NEUTRAL}, @did));
@@ -351,6 +351,23 @@ end;
 function getUID: int64;
 begin
   AllocateLocallyUniqueId(result);
+end;
+
+//returns path to OSMan. E.g. c:\osman
+
+function getOSManPath(): WideString;
+var
+  pwc: pWideChar;
+  l: DWORD;
+begin
+  getmem(pwc, sizeof(WideChar) * MAX_PATH);
+  try
+    l := getModuleFileNameW(HInstance, pwc, MAX_PATH);
+    if l = 0 then raise EOleError.Create('getOSManPath: ' + sysErrorMessage(getLastError()));
+    result := WideExtractFilePath(pwc);
+  finally
+    freemem(pwc);
+  end;
 end;
 
 function refTypeToStr(const rt: TRefType): WideString;
@@ -483,82 +500,82 @@ begin
   else
     nItems := 0;
   pLockedVariantArray := varArrayLock(VarArray);
-  setLength(result, nItems);
+  setlength(result, nItems);
   pVR := @result[0];
   while nItems > 0 do begin
     pVar := pLockedVariantArray;
-    while (pVar.VType = varByRef or varVariant) do
+    while (pVar.vType = varByRef or varVariant) do
       pVar := pVar.VPointer;
-    vType:=pVar.VType and varTypeMask;
-    if(pVar.VType and varByRef<>0) then begin
-      pVar:=pVar.VPointer;
-      dec(pByte(pVar),cardinal(@pVar.VPointer)-cardinal(pVar));
+    vType := pVar.vType and varTypeMask;
+    if (pVar.vType and varByRef <> 0) then begin
+      pVar := pVar.VPointer;
+      dec(pByte(pVar), cardinal(@pVar.VPointer) - cardinal(pVar));
     end;
     case vType of
       varSmallInt: begin
-          pVR.VType := vtInteger;
+          pVR.vType := vtInteger;
           pVR.VInteger := pVar.VSmallInt;
         end;
       varInteger, varError, varLongWord: begin
-          pVR.VType := vtInteger;
+          pVR.vType := vtInteger;
           pVR.VInteger := pVar.VInteger;
         end;
       varSingle: begin
-          pVR.VType := vtExtended;
-          getMem(pVR.VExtended, sizeof(pVR.VExtended^));
+          pVR.vType := vtExtended;
+          getmem(pVR.VExtended, sizeof(pVR.VExtended^));
           pVR.VExtended^ := pVar.VSingle;
         end;
       varDouble, varDate: begin
-          pVR.VType := vtExtended;
-          getMem(pVR.VExtended, sizeof(pVR.VExtended^));
+          pVR.vType := vtExtended;
+          getmem(pVR.VExtended, sizeof(pVR.VExtended^));
           pVR.VExtended^ := pVar.VDouble;
         end;
       varCurrency: begin
-          pVR.VType := vtCurrency;
+          pVR.vType := vtCurrency;
           pVR.VCurrency := @pVar.VCurrency;
         end;
       varOleStr: begin
-          pVR.VType := vtWideString;
+          pVR.vType := vtWideString;
           pVR.VWideString := pVar.VOleStr;
         end;
       varDispatch: begin
-          pVR.VType := vtInterface;
+          pVR.vType := vtInterface;
           pVR.VInterface := pVar.VDispatch;
         end;
       varBoolean: begin
-          pVR.VType := vtBoolean;
+          pVR.vType := vtBoolean;
           pVR.VBoolean := pVar.VBoolean;
         end;
       varShortInt: begin
-          pVR.VType := vtInteger;
+          pVR.vType := vtInteger;
           pVR.VInteger := pVar.VShortInt;
         end;
       varByte: begin
-          pVR.VType := vtInteger;
+          pVR.vType := vtInteger;
           pVR.VInteger := pVar.VByte;
         end;
       varWord: begin
-          pVR.VType := vtInteger;
+          pVR.vType := vtInteger;
           pVR.VInteger := pVar.VWord;
         end;
       varInt64: begin
-          pVR.VType := vtInt64;
+          pVR.vType := vtInt64;
           pVR.VInt64 := @pVar.VInt64;
         end;
       varString: begin
-          pVR.VType := vtString;
+          pVR.vType := vtString;
           pVR.VString := pVar.VString;
         end;
       varUnknown, varAny: begin
-          pVR.VType := vtPointer;
+          pVR.vType := vtPointer;
           pVR.VPointer := pVar.VAny;
         end;
       varEmpty, varNull: begin
-          pVR.VType := vtPointer;
+          pVR.vType := vtPointer;
           pVR.VPointer := nil;
         end;
     else begin
-        pVR.VType := vtVariant;
+        pVR.vType := vtVariant;
         pVR.VVariant := pointer(pVar);
       end;
     end;
@@ -576,9 +593,9 @@ begin
   i := length(VarRecArray);
   pVR := @VarRecArray[0];
   while i > 0 do begin
-    case pVR.VType of
+    case pVR.vType of
       vtExtended:
-        FreeMem(pVR.VExtended);
+        freemem(pVR.VExtended);
     end;
     inc(pVR);
     dec(i);
@@ -806,9 +823,9 @@ var
 begin
   if count >= length(fRefIds) then begin
     i := (count or 3) + 1;
-    setLength(fRefTypes, i);
-    setLength(fRefIds, i);
-    setLength(fRefRoles, i);
+    setlength(fRefTypes, i);
+    setlength(fRefIds, i);
+    setlength(fRefRoles, i);
   end;
 end;
 
@@ -865,6 +882,5 @@ begin
   if result and canCallOnPutWay then
     result := fFilter.onPutWay(way);
 end;
-
 end.
 

@@ -15,14 +15,9 @@ function curTime(){
 	return (new Date()).toLocaleString();
 };
 
-function openMap(storageName,cacheSize){
+function openMap(storageName){
 	var map=h.mapHelper();
 	map.open(storageName);
-	cacheSize=(cacheSize)?(parseInt(cacheSize)):(false);
-	cacheSize=(isNaN(cacheSize))?(false):cacheSize;
-	if(cacheSize){
-		map.exec('PRAGMA cache_size='+cacheSize);
-	};
 	return map;
 };
 
@@ -51,8 +46,8 @@ function clipMap(cfg){
 	h.fso.copyFile(srcMapFileName,cfg.data['mapClipTempFile'],true);
 	h.fso.deleteFile(srcMapFileName);
 	echo('	done');
-	var dst=openMap(srcMapFileName,50000);
-	src=openMap(cfg.data['mapClipTempFile'],200000);
+	var dst=openMap(srcMapFileName);
+	src=openMap(cfg.data['mapClipTempFile']);
 	var netMap=h.man.createObject('NetMap');
 	netMap.storage=h.man.createObject('HTTPStorage');
 	var nodeList=src.map.storage.createIdList();
@@ -227,7 +222,7 @@ function main(){
 	var needMapClip=mapsz>parseFloat(cfg.data['destDBClipSz']);
 	var map=false;
 	do{
-		if(!map)map=openMap(cfg.data['destDBName'],200000);
+		if(!map)map=openMap(cfg.data['destDBName']);
 		var srcOSMName=''+nextImportNumber;
 		while(srcOSMName.length<9)srcOSMName='0'+srcOSMName;
 		srcOSMName=cfg.data['snapshotDir']+srcOSMName+'.osc.gz';

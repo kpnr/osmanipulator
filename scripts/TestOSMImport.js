@@ -1,6 +1,6 @@
 //settings
-var srcOSMName='f:\\db\\osm\\sql\\debug_o.osm';
-var destDBName='f:\\db\\osm\\sql\\debug_o.db3';
+var srcOSMName='e:\\db\\osm\\regions\\brest.osm';
+var destDBName='e:\\db\\osm\\regions\\brest.db3';
 //settings end
 var re=/wscript/i;
 if (WScript.FullName.search(re)>=0){
@@ -65,8 +65,6 @@ function openMap(storageName){
 	if (initStg){
 		stg.initSchema();
 	};
-	var q=stg.sqlPrepare('PRAGMA cache_size=300000');
-	stg.sqlExec(q,0,0);
 	return map;
 };
 

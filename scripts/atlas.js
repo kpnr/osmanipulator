@@ -12,14 +12,14 @@ ttable:0|1
 */
 //settings begin
 var cfg={
-	countryDBName:'s:\\db\\osm\\sql\\rf.db3',
-	areaFile:'atlas_cfg_small.js',
-	boundBackupDir:'f:\\db\\osm\\sql\\bounds',
-	workDir:'f:\\db\\osm\\regions',
-	outDir:'f:\\db\\osm\\out',
-	maxTasks:2,
-	cmd_mp_no_rt:'f:\\db\\cvt\\mp_no_rt.bat',//OSM2MP.PL require package LWP::Protocol::https
-	cmd_mp_rt:'f:\\db\\cvt\\mp_rt.bat'
+	countryDBName:'',
+	areaFile:'',
+	boundBackupDir:'e:\\db\\osm\\sql\\bounds',
+	workDir:'e:\\db\\osm\\regions',
+	outDir:'e:\\db\\osm\\out',
+	maxTasks:3,
+	cmd_mp_no_rt:'e:\\db\\cvt\\mp_no_rt.bat',//OSM2MP.PL require package LWP::Protocol::https
+	cmd_mp_rt:'e:\\db\\cvt\\mp_rt.bat'
 };
 //settings end
 
@@ -31,6 +31,33 @@ var gt=h.gt;
 var echo=h.echo;
 var echot=h.bindFunc(h,h.echot);
 var timeStats={};
+
+function checkArgs(){
+	function help(){
+	echo('Command line options:\n\
+\t/src:"source_database_name"\n\
+\t/atlas:"atlas_file_name"');
+	};
+	var ar=WScript.arguments;
+	if(!ar.length){
+		help();
+		return false;
+	};
+	ar=ar.named;
+	if(ar.exists('help')||ar.exists('?')||ar.exists('h')){
+		help();
+		return false;
+	};
+	if(ar.exists('atlas'))cfg.areaFile=ar.item('atlas');
+	if(ar.exists('src'))cfg.countryDBName=ar.item('src');
+	echo('Use config:\natlas='+cfg.areaFile+'\nsrc='+cfg.countryDBName);
+	if(!(cfg.areaFile && cfg.countryDBName)){
+		help();
+		echo('\nInvalid arguments. Exiting');
+		return false;
+	};
+	return true;
+};
 
 function jsonSave(o,fn){
 	var fs=WScript.createObject('Scripting.FileSystemObject');
@@ -88,6 +115,8 @@ function genTasks(){
 			var tl=[],arlist=[];
 			for(var i=0;i<a.areas.length;i++){
 				var ai=a.areas[i];
+				ai.country = ai.country || a.country;
+				ai.region = ai.region || a.region;
 				echot('genAreas for '+ai.name);
 				var ali={ref:ai.bound.split(','),name:ai.name};
 				//generate names for files
@@ -99,7 +128,8 @@ function genTasks(){
 					rtOSMName=cfg.outDir+'\\rt_'+ai.name,
 					rtMPName=rtOSMName+'.mp',
 					rtNMName=rtOSMName+'.nm2',
-					boundPolyName=dstDBName+'_b.mp';
+					boundPolyName=dstDBName+'_b.mp',
+					sOSM2MPpars=((ai.country)?('--defaultcountry='+ai.country):(' '))+((ai.region)?(' --defaultregion='+ai.region):(''));
 				dstDBName+='.db3';
 				dstOSMName+='.osm';
 				rtDBName+='.db3';
@@ -113,7 +143,7 @@ function genTasks(){
 					var ers=[
 						{task:'exportRouting.js',cmdline:'/src:"'+dstDBName+'" /dst:"'+rtDBName+'"',afterEnd:'v.'+ai.name+'--'},
 						{task:'exportOSM.js',cmdline:'/src:"'+rtDBName+'" /dst:"'+rtOSMName+'"'},
-						{task:cfg.cmd_mp_rt,cmdline:'"'+rtOSMName+'" "'+rtMPName+'"'},
+						{task:cfg.cmd_mp_rt,cmdline:'"'+rtOSMName+'" "'+rtMPName+'" "'+sOSM2MPpars+'"'},
 						{task:'mp2nm.js',cmdline:'/src:"'+rtMPName+'" /dst:"'+rtNMName+'"'}
 						];
 					if(!ai.flags.keepFile){
@@ -124,7 +154,7 @@ function genTasks(){
 				if(ai.flags.convert){
 					ti.push({task:'exportOSM.js',cmdline:'/src:"'+dstDBName+'" /dst:"'+dstOSMName+'"'});
 					ti.push({task:'exportPolyFile.js',cmdline:'/src:"'+dstDBName+'" /dst:"'+boundPolyName+'" /refs:"'+ai.bound+'"'});
-					ti.push({task:cfg.cmd_mp_no_rt,cmdline:'"'+dstOSMName+'" "'+mpFileName+'"'});
+					ti.push({task:cfg.cmd_mp_no_rt,cmdline:'"'+dstOSMName+'" "'+mpFileName+'" "'+sOSM2MPpars+'"'});
 					ti.push({task:'mp2nm.js',cmdline:'/src:"'+mpFileName+'" /dst:"'+nmFileName
 					/*
 					do not use map cover poly
@@ -157,10 +187,9 @@ function genTasks(){
 	var arcfg=include(cfg.areaFile),l=(arcfg.areas)?(arcfg.areas.length):(0),i,r;
 	if((l>1)&&(cfg.maxTasks>1)){
 		var ar=arcfg.areas,st=0,r=[];
-		for(i=cfg.maxTasks;i>0;i--){
-			var nt=Math.floor((ar.length-st)/i);
-			arcfg.areas=ar.slice(st,st+nt);
-			st+=nt;
+		for(i=1;st<l;i+=i){
+			arcfg.areas=ar.slice(st,st+i);
+			st+=i;
 			r=r.concat(genAreas(arcfg,cfg.countryDBName));
 		};
 	}else{
@@ -266,7 +295,9 @@ function varDump(o,s){
 	};
 }
 
-WScript.sleep(10000);
+if(!checkArgs()){
+	WScript.quit(1);
+};
 var tasks=genTasks();
 //jsonSave(tasks,'c:\\tmp\\cfg.js');
 execTasks(tasks);

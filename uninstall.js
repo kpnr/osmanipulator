@@ -36,7 +36,7 @@ if(fso.fileExists(osmanName)){
 	if(parseFloat(WScript.Version)>5.6){
 		reg32.invokeVerbEx('runas',osmanName);
 	}else{
-		reg32.invokeVerbEx('run',osmanName);
+		reg32.invokeVerbEx('open',osmanName);
 	}
 	WScript.sleep(30000);
 }

@@ -139,9 +139,7 @@ end;
 
 procedure TApplication.initialize();
 var
-  pwc: PWideChar;
   ws: WideString;
-  l: DWord;
   i: integer;
   sr: TSearchRecW;
   hMod: hModule;
@@ -154,13 +152,10 @@ var
 begin
   inherited;
   fLogger:=Unassigned;
-  getmem(pwc, sizeof(WideChar) * MAX_PATH);
   try
     idi:=self;
     fZeroCnt:=RefCount;
-    l := getModuleFileNameW(HInstance, pwc, MAX_PATH);
-    if l = 0 then raise EOleError.create(toString() + ': ' + sysErrorMessage(getLastError()));
-    appPath := WideExtractFilePath(pwc);
+    appPath := getOSManPath();
     ws := appPath + '*.omm';
     moduleList := TTNTStringList.create();
     moduleList.CaseSensitive := true;
@@ -199,7 +194,6 @@ begin
     end;
     WideFindClose(sr);
   finally
-    freemem(pwc);
     //compare fZeroCnt and RefCount before Release call, so add 1
     fZeroCnt:=RefCount-fZeroCnt+1;
   end;
