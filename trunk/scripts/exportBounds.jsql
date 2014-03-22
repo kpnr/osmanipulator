@@ -1,3 +1,4 @@
+j 'Export boundaries'
 create temporary table boundRels (id integer primary key)
 create temporary table boundObjs (id integer primary key)
 create temporary table boundWays (id integer primary key)

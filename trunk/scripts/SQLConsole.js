@@ -51,11 +51,11 @@ function main(){
 	echot('Opening map');
 	var src=h.mapHelper(),cmd='';
 	src.open(srcMapName);
-	src.exec('PRAGMA cache_size=200000');
 	help();
 	while(1){
 		echo('sql>',true,true);
 		cmd+=read();
+		var tm=new Date();
 		try{
 			if(cmd.slice(-1)=='\\'){
 				cmd=cmd.slice(0,-1);
@@ -65,7 +65,7 @@ function main(){
 				break;
 			}else if(cmd.slice(0,2)=='j '){
 				//js code
-				echo('js result=<'+eval(cmd.slice(2))+'>');
+				echo('js result=<'+eval(cmd.slice(2))+'> in '+(new Date()-tm)+' ms');
 			}else if(indexOf(['h','?','help'],cmd)>=0){
 				help();
 			}else if(cmd>''){
@@ -81,9 +81,9 @@ function main(){
 						for(i=0;i<cn.length;i++)echo(cn[i]+'	',true,true);
 						echo('');
 					};
-					echo('ok. Total '+rcnt+' rows');
+					echo('ok. Total '+rcnt+' rows in '+(new Date()-tm)+' ms');
 				}else{
-					echo('ok');
+					echo('ok in '+(new Date()-tm)+' ms');
 				};
 			};
 		}catch(e){

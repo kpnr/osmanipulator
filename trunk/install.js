@@ -27,7 +27,7 @@ var reg32=folder.ParseName('regsvr32.exe');
 if(parseFloat(WScript.Version)>5.6){
 	reg32.invokeVerbEx('runas',osmanName);
 }else{
-	reg32.invokeVerbEx('run',osmanName);
+	reg32.invokeVerbEx('open',osmanName);
 };
 sh.popup('If you want to set console version of scripting executive as default then run commannd\n\
 "cscript //H:CScript" from command prompt',0,msgBoxTitle,64);

@@ -667,7 +667,12 @@ var defparams={
 					break;
 				};
 			};
-			if(!curIO)throw {name:'user',message:'No outgoing ioNode found'};
+			if(!curIO){
+				//No outgoing node found, but cluster is not poly.
+				//delete this cluster. I don`t know how handle it anyway :-(
+				curClust=false;
+				break;
+			};
 			//cluster and bound intersects exactly in node because IONodes merged into boundary
 			var bs=boundIndex.keyToObject(boundIndex.idToKey(curIO.nid1));//force local reindex
 			bs=boundIndex.idToIndex(curIO.nid1);//now have valid index
@@ -910,7 +915,7 @@ function intersectMultipoly(relId,cutter,boundIndex){
 
 		var clusters=[];
 		makeClusterArray(pr,clusters);
-		var clustTree=orderClusters(clusters,map),defRole,i;
+		var clustTree=orderClusters(clusters,map);
 		filterByMinRatioAndBoundCover(clustTree,'outer');//lets treat first level as outer.
 	};
 	
@@ -1228,7 +1233,7 @@ function intersectCoastLines(cutter,boundIndex){
 };
 
 function main(){
-	h.man.logger={log:function(s){echo('OSMan: '+s)}};
+	//h.man.logger={log:function(s){echo('OSMan: '+s)}};
 	var funcName='areaCut.main: ';
 	if(!checkArgs())return;
 	cutBound=cutBound.split(',');
@@ -1238,10 +1243,10 @@ function main(){
 		if(h.fso.fileExists(smallMapFile+'.bak')){
 				echot('Copy file from backup');
 				h.fso.copyFile(smallMapFile+'.bak',smallMapFile,true);
-		}else{
+		}/*else{
 				echot('Copy file to backup');
 				h.fso.copyFile(smallMapFile,smallMapFile+'.bak',true);
-		};
+		};*/
 	};
 	//open maps
 	var hBigMap=h.mapHelper(),hSmallMap=h.mapHelper(),bPoly;
@@ -1267,6 +1272,8 @@ function main(){
 				echo('	'+nf[i]);
 			};
 		};
+		hSmallMap.close();
+		hBigMap.close();
 		throw {name:'user',message:funcName+'boundary not resolved'};
 	};
 	echot('indexing boundary');
@@ -1300,7 +1307,8 @@ function main(){
 	};
 	echot('building incomplete ways');
 	var icptWayList=hSmallMap.map.storage.createIdList();
-	hSmallMap.exec('INSERT OR IGNORE INTO '+icptWayList.tableName+'(id) SELECT wayid FROM waynodes WHERE nodeid NOT IN (SELECT id FROM nodes)');
+	//icptWayList.add(85710344);icptWayList.add(87691925);
+	hSmallMap.exec('INSERT OR IGNORE INTO '+icptWayList.tableName+'(id) SELECT wayid FROM waynodes WHERE nodeid NOT IN (SELECT id FROM nodes_attr)');
 
 	echot('building incomplete multipolygons');
 	var icptRelList=hSmallMap.map.storage.createIdList();
@@ -1327,7 +1335,7 @@ function main(){
 		};
 		ioNodes=ioNodes.concat(intersectWay(way,cutter,usedWayList,notUsedWayList,boundIndex));
 		echo(' ',true,true);
-		};
+	};
 	echo('',true);
 	echot('Merging '+ioNodes.length+' cut nodes and bound');
 	mergeIONodesAndBound(ioNodes,boundIndex,boundWays);
@@ -1374,11 +1382,11 @@ function main(){
 	hBigMap.close();
 	hSmallMap.close();
 	echot('all done.');
-	h.man.logger=0;
+	//h.man.logger=0;
 };
 
 try{
-WScript.sleep(10000);
+//WScript.sleep(10000);
 main();
 }catch(e){
 	echo('Exception name='+e.name+' message='+e.message+' description='+e.description+' number='+e.number);

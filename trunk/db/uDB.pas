@@ -66,6 +66,7 @@ type
     fDB: TSQLiteDB;
     fChildList: TObjectList;
     fReadOnly: boolean;
+    fCRTreeLoaded: boolean;
     procedure exec(const sql: WideString);
     procedure onCloseQuery(child: TObject);
     procedure initDBMode();
@@ -131,6 +132,7 @@ begin
       fDB.Commit();
     FreeAndNil(fDB);
   end;
+  fCRTreeLoaded := false;
 end;
 
 function TStorage.createIdList: OleVariant;
@@ -197,6 +199,12 @@ begin
   exec('PRAGMA fullfsync=0;');
   exec('PRAGMA recursive_triggers = 0');
   exec('PRAGMA cache_size = 32768');
+  fCRTreeLoaded := true;
+  try
+    exec('SELECT load_extension("'+getOSManPath()+'crtree.dll")');
+  except
+    fCRTreeLoaded := false;
+  end;
   fDB.StartTransaction;
 end;
 
@@ -216,7 +224,10 @@ begin
     'changeset BIGINT)');
 
   exec('DROP TABLE IF EXISTS nodes_latlon');
-  exec('CREATE VIRTUAL TABLE nodes_latlon USING rtree_i32(id,minlat,maxlat,minlon,maxlon)');
+  if fCRTreeLoaded then
+    exec('CREATE VIRTUAL TABLE nodes_latlon USING crtree_i32(id,minlat,maxlat,minlon,maxlon)')
+  else
+    exec('CREATE VIRTUAL TABLE nodes_latlon USING rtree_i32(id,minlat,maxlat,minlon,maxlon)');
 
   exec('DROP VIEW IF EXISTS nodes');
   exec('CREATE VIEW IF NOT EXISTS nodes AS SELECT nodes_latlon.id as id,' +

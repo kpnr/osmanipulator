@@ -74,7 +74,7 @@ function main(){
 			var curSeqNo=parseInt(ini.data['lastSequenceNumber']);
 			if(isNaN(curSeqNo))curSeqNo=0;
 			echo('curSeqNo='+curSeqNo);
-			for(var i=curSeqNo;i<maxSeqNo;i++){
+			for(var i=curSeqNo+1;i<=maxSeqNo;i++){
 				addSnapshot(i);
 			};
 			ini.read();

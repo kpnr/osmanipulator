@@ -140,8 +140,8 @@ type
   TMultiPoly = class(TOSManObject, IMultiPoly)
   protected
     srcList, //parentIdx ignored
-    relationList, //parentIdx=parent_relation_relationList_idx or (-1-parent_relation_srcList_idx)
-    wayList, //parentIdx=parent_relation_relationList_idx or (-1-parent_relation_srcList_idx)
+    relationList, //parentIdx=parent_relation_relationList_idx or (-1-srcList_idx)
+    wayList, //parentIdx=parent_relation_relationList_idx or (-1-srcList_idx)
     nodeList //parentIdx=parent_way_wayList_idx
     : TMultiPolyList;
     simplePolyList: array of TGTPoly;
@@ -328,9 +328,25 @@ asm //about 25+fastDistSqrM cycles
 end;
 
 function TGTPoint.distTest(pt: TGTPoint; const DistM: single): boolean;
-begin //about 24 cycles on Intel core
+const
+  c_3_4_im:single = 0.75*cIntToM;
+asm //about 24 cycles on Intel core
   //0.75~~cos(40deg)
-  result := DistM > (cIntToM * (abs(pt.y - y) + abs(pt.x - x) * 0.75));
+  //result := DistM > (cIntToM * (abs(0.0 + pt.y - y) + abs(0.0 + pt.x - x) * 0.75));
+  fld DistM
+  fild self.fy
+  fild pt.fy
+  fsubp st(1),st(0)
+  fabs
+  fild self.fx
+  fild pt.fx
+  fsubp st(1),st(0)
+  fabs
+  faddp st(1),st(0)
+  fmul c_3_4_im
+  fcomip st,st(1)
+  fstp st
+  setc al
 end;
 
 const //constants for _fastCos and _fastSinCos
@@ -1206,9 +1222,8 @@ function TMultiPoly.resolve(const srcMap: OleVariant): boolean;
     //start from tail to head
     i := wayList.count - 1;
     while i > 0 do begin
-      //$$$dbg OSManLog(inttostr(wayList.items[i].obj.id));
       //duplicate found
-      if (wayList.items[i].obj.id = wayList.items[i - 1].obj.id) then begin
+      if ( wayList.items[i].obj = wayList.items[i - 1].obj) then begin
         //move ways from tail to middle and replace dups
         //only even number of dups deleted, so (1,2,2,2,3,3,4)=>(1,2,4)
         //which is compatible to isIn test and other polygon operations
@@ -1244,7 +1259,7 @@ function TMultiPoly.resolve(const srcMap: OleVariant): boolean;
       if s = 'Relation' then
         putList(relationList, v, -1 - i)
       else
-        putList(wayList, v, -1 - i);
+        putList(wayList, v.id , -1 - i);
     end;
   end;
 
@@ -1290,13 +1305,8 @@ function TMultiPoly.resolve(const srcMap: OleVariant): boolean;
               end;
             end
             else if (s = 'way') then begin
-              varCopyNoInd(newObj, srcMap.getWay(id));
-              if VarIsType(newObj, varDispatch) then
-                putList(wayList, newObj, i)
-              else begin
-                addNotResolved('way', id);
-                result := false;
-              end;
+              //create and store new "stub". Resolve ways after duplicate test.
+              putList(wayList, id, i);
             end
           end;
         finally
@@ -1330,8 +1340,32 @@ var
     pv: POleVariant;
     id: int64;
     pwd: PWayDescItem;
+    pmpli: PMultiPolyListItem;
   begin
     result := true;
+
+    //make real ways from "stubs"
+    i := wayList.count-1;
+    while i>=0 do begin
+      pmpli := @wayList.items[i];
+      if pmpli.parentIdx < 0 then
+        //already in srcList, so don`t read map
+        pmpli.obj := srcList.items[-1-pmpli.parentIdx].obj
+      else begin
+        //need read way from map
+        varCopyNoInd(newObj, srcMap.getWay(pmpli.obj));
+        if VarIsType(newObj, varDispatch) then
+          pmpli.obj := newObj
+        else begin
+          dec(wayList.count);
+          addNotResolved('way', pmpli.obj);
+          pmpli^ := wayList.items[wayList.count];
+          result := false;
+        end;
+      end;
+      dec(i);
+    end;
+
     setLength(wayMergeList.items, wayList.count);
     wayMergeList.count := 0;
     pwd := @wayMergeList.items[0];
@@ -1585,7 +1619,7 @@ begin
     exit;
   //In case of "touching" bounds remove dupliceted ways.
   removeWayDups();
-  //resolve ways(node-ids) from wayList into nodes(Node objects) and store
+  //resolve ways "stubs" from wayList into objects and then into nodes(Node objects) and store
   // nodes in wayMergeList 2-D array
   //result==all nodes found in Map
   // if result==false see getNotResolved() for not-found object list
@@ -2317,6 +2351,8 @@ var
       resTest := polyA.isIn;
       if curList.isEmpty() then
         swapLists();
+      if not r.isEmpty then//set current position to point before first point of poly
+        r.prev();
       pb := TPolyBuilder.create(r);
       pb.addSeg(curList);
       //debugPrint('add first seg ('+inttostr(pSeg.pNode1^.id)+'-'+inttostr(pSeg.pNode2^.id)+')');//$$$
@@ -2400,7 +2436,9 @@ var
                 if (pb.isBackStepSegment(i641,i642)) then begin
                   //'backstep' segment. Delete & continue search.
                   deleteSeg();
-                  continue;
+                  if not curList.isEmpty then
+                    continue;
+                  bm := nil; //empty curList, set bm to nil to force swapLists()
                 end
                 else begin
                   //continue poly building
@@ -2438,6 +2476,8 @@ var
           end;
         end;
         if not (r.isEmpty) then
+          //set current pos from last point of poly
+          // to first point of next poly
           r.next();
       finally
         freeAndNil(pt);
@@ -2487,8 +2527,6 @@ var
       end;
       if action = acBuild then begin
         include(pSeg.flags, sfVisited);
-        if not result.isEmpty then
-          result.prev();
         buildPolygon(result);
       end
       else if action = acDel then begin
@@ -2881,11 +2919,11 @@ var
   dx21, dxba, dy21, dyba, dx1a, dy1a, sa2b1, k, t: double;
 begin
   result := nil;
-  dx21 := pt2.x - pt1.x;
+  dx21 := 0.0 + pt2.x - pt1.x;//convert into double for very large distances
   dy21 := pt2.y - pt1.y;
-  dxba := ptB.x - ptA.x;
+  dxba := 0.0 + ptB.x - ptA.x;//convert into double for very large distances
   dyba := ptB.y - ptA.y;
-  dx1a := pt1.x - ptA.x;
+  dx1a := 0.0 + pt1.x - ptA.x;//convert into double for very large distances
   dy1a := pt1.y - ptA.y;
   sa2b1 := dyba * dx21 - dxba * dy21;
   if sa2b1 <> 0 then begin
@@ -3087,8 +3125,8 @@ function TMultiPoly.cmpWayList(i, j: integer): integer;
 var
   iid, jid: int64;
 begin
-  iid := wayList.items[i].obj.id;
-  jid := wayList.items[j].obj.id;
+  iid := wayList.items[i].obj;
+  jid := wayList.items[j].obj;
   if (iid < jid) then result := -1 else if (jid < iid) then result := 1 else result := 0;
 end;
 
@@ -3252,17 +3290,15 @@ begin
     end
     else if (first1 = id2) then begin
       //last segment of poly
+      dst.insert(pSeg);
+      last1 := id1;
+      last2 := id2;
       bmLast := dst.bookmark;
       while (first2 = id1) do begin
         //handle case (a,b),(b,c),(c,d),[d,b] + [b,a] => (b,c),(c,d),[d,b]
-        freeSeg(pSeg);
         dst.bookmark := bmFirst;
         pSeg := dst.delete();
         freeSeg(pSeg);
-        if (bmFirst = bmLast) then begin
-          fIsEmpty := true;
-          break;
-        end;
         bmFirst := dst.bookmark;
         pSeg := dst.data;
         fillIds();
@@ -3270,14 +3306,21 @@ begin
         first2 := id2;
         dst.bookmark := bmLast;
         pSeg := dst.delete();
-        fillIds();
+        freeSeg(pSeg);
+        if(dst.isEmpty) then begin
+          fIsEmpty := true;
+          break;
+        end;
         dst.prev();
-        bmLast := dst.bookmark;
-      end;
-      if not isEmpty then begin
-        dst.insert(pSeg);
+        pSeg := dst.data;
+        fillIds();
         last1 := id1;
         last2 := id2;
+        bmLast := dst.bookmark;
+        if (bmFirst = bmLast) then begin
+          fIsEmpty := true;
+          break;
+        end;
       end;
     end
     else begin

@@ -50,7 +50,6 @@ function main(){
 	var src=h.mapHelper();
 	src.open(srcMapName);
 	src.exec('PRAGMA locking_mode=NORMAL');
-	src.exec('PRAGMA cache_size=200000');
 	var bpoly=false;
 	if(boundaryObject){
 		echot('Resolving boundary');

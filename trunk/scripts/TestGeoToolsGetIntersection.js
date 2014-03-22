@@ -1,7 +1,7 @@
 //settings start
-var testFileDir='F:\\db\\osm\\testdata';
-var testFileIn='polyclip.osm';
-var testFileOut='polyclipped.osm';
+var testFileDir='E:\\db\\osm\\sql';
+var testFileIn='cut_test.db3.osm';
+var testFileOut='ad_t.osm';
 //boundary objects has 'name=osmanbound'
 //settings end
 function include(n){var w=WScript,h=w.createObject('WScript.Shell'),o=h.currentDirectory,s=w.createObject('Scripting.FileSystemObject'),f,t;h.currentDirectory=s.getParentFolderName(w.ScriptFullName);try{f=s.openTextFile(n,1,!1);try{t=f.ReadAll()}finally{f.close()}return eval(t)}catch(e){if(e instanceof Error)e.description+=' '+n;throw e}finally{h.currentDirectory=o}}
@@ -312,7 +312,7 @@ function testGeoTools(){
 			mpoly=0;
 		};
 	var q=stg.sqlPrepare("select (objid>>2) from strobjtags where tagname='name' and tagvalue='osmanbound' and (objid&3)=2");
-	var q=stg.sqlExec(q,'','');
+	q=stg.sqlExec(q,'','');
 	var mobj=false;
 	while(!q.eos){
 		mobj=map.getRelation(q.read(1).toArray()[0]);

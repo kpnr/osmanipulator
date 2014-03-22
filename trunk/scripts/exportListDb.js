@@ -193,8 +193,6 @@ function exportMaps(hMap,bounds){
 
 function main(){
 	if(!checkArgs()){
-		echo('hit enter');
-		WScript.stdIn.read(1);
 		return;
 	};
 	echot('opening src map '+srcMapName);

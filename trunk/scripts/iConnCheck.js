@@ -1,7 +1,7 @@
 var ws=WScript.createObject('WScript.Shell');
 
 function rebootRouter(){
-	WScript.echo(''+(new Date())+' rebooting router');
+	WScript.echo(''+(new Date())+' rebooting modem');
 	var rq=WScript.createObject('WinHttp.WinHttpRequest.5.1');
 	rq.open('GET','http://192.168.1.1/rebootinfo.cgi',false);
 	var p=-1;
@@ -11,6 +11,20 @@ function rebootRouter(){
 	}catch(e){
 	};
 	WScript.echo(''+(new Date())+' reboot status='+p);
+	if(p==200) return;
+	var rq=WScript.createObject('WinHttp.WinHttpRequest.5.1');
+	WScript.echo(''+(new Date())+' rebooting router');
+	rq.open('GET','http://192.168.1.3/index.cgi?res_cmd=6&res_buf=null&res_cmd_type=nbl&v2=y&rq=y',false);
+	rq.setCredentials('admin','admin',0);//0 - server, 1 - proxy
+	rq.setRequestHeader('Cookie','client_login=admin; client_password=admin; url_hash=');
+	var p=-1;
+	try{
+		rq.send();
+		p=rq.status;
+	}catch(e){
+	};
+	WScript.echo(''+(new Date())+' reboot status='+p+' text='+((p>=0)?(rq.statusText):('unknown')));
+	return;
 /*	function activate(){
 		var r=ws.appActivate('telnet.exe')||ws.appActivate('Telnet');
 		return r;

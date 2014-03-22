@@ -67,7 +67,6 @@ function exportOSM(srcMap,exportFilter,dstFileName){
 }
 
 var srcMap=openMap(srcMapName);
-srcMap.storage.sqlExec(srcMap.storage.sqlPrepare('PRAGMA cache_size=250000'),0,0);
 var bounds=srcMap.getRelation(regionBoundaryCollectionRelationId);
 var netmap=man.createObject('NetMap');
 netmap.storage=man.createObject('HTTPStorage');
