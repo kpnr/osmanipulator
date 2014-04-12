@@ -56,6 +56,7 @@ MapHelper members:
 	completeRelationRelations(bigMap) - import from 'bigMap' relations which used in 'map' relations.
 		Returns array of not found relations ids. If all relations found in 'bigMap' then empty array returned
 	exec(sqlStr,params,values) - execute sql statement with optional parameters and values.
+		Returns IQueryResult object.
 	findOrStore(newNode,tagPolicy) - find node on map with same coords and returns it. If no node in this coords
 		then newNode stored and returned.
 		newNode - node to find-store operation
@@ -354,7 +355,7 @@ MapHelper.prototype.fixIncompleteRelations=function(){
 	t.exec('DELETE FROM relationmembers WHERE memberidxtype&3=0 AND memberid IN (SELECT id FROM '+sil.tableName+')');
 
 	t.exec('DELETE FROM '+sil.tableName);
-	t.exec('INSERT OR IGNORE INTO '+sil.tableName+'(id) SELECT memberid FROM relationmembers WHERE memberidxtype&3=1 and memberid NOT IN (SELECT id FROM ways)');
+	t.exec('INSERT OR IGNORE INTO '+sil.tableName+'(id) SELECT memberid FROM relationmembers WHERE memberid NOT IN (SELECT id FROM ways) AND memberidxtype&3=1');
 	t.exec('DELETE FROM relationmembers WHERE memberidxtype&3=1 AND memberid IN (SELECT id FROM '+sil.tableName+')');
 
 	t.exec('DELETE FROM '+sil.tableName);

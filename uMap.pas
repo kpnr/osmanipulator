@@ -69,48 +69,10 @@ const
   mapClassGuid: TGuid = '{7B3FBE69-1232-4C22-AAF5-C649EFB89981}';
 
 type
-
-  TTags = class(TOSManObject, IKeyList)
-  protected
-    fKeys, fValues: array of WideString;
-    fCount: integer;
-    procedure grow();
-  public
-    function get_count: integer;
-  published
-    //delete item by key. If no such key, no actions performed
-    procedure deleteByKey(const key: WideString);
-    //delete item by index in list. If index out of bounds then exception raised
-    procedure deleteById(const id: integer);
-    //get all keys in list. Result is SafeArray of string variants.
-    //Keys and Values interlived - [0]=key[0],[1]=value[0]...[10]=key[5],[11]=value[5],...
-    function getAll: OleVariant;
-    //add items to list. On key conflict replaces old value with new one.
-    //kvArray interlived as in getAll() method
-    procedure setAll(const kvArray: OleVariant);
-    //returns true if key exists in list.
-    function hasKey(const key: WideString): WordBool;
-    //returns value assiciated with key. If no such key empty string('') returned
-    function getByKey(const key: WideString): WideString;
-    //add or replace key-value pair
-    procedure setByKey(const key: WideString; const value: WideString);
-    //returns value by index. If index out of bounds [0..count-1] exception raised
-    function getValue(const id: integer): WideString;
-    //sets value by index. If index out of bounds [0..count-1] exception raised
-    procedure setValue(const id: integer; const value: WideString);
-    //returns key by index. If index out of bounds [0..count-1] exception raised
-    function getKey(const id: integer): WideString;
-    //sets key by index. If index out of bounds [0..count-1] exception raised
-    procedure setKey(const id: integer; const key: WideString);
-
-    //returns number of pairs in list
-    property count: integer read get_count;
-  end;
-
   TMapObject = class(TOSManObject, IMapObject)
   protected
     //IKeyList
-    fTags: OleVariant;
+    fTags: TWideStringArray;
     fId, fChangeset, fTimeStamp: int64;
     fVersion, fUserId: integer;
     fUserName: WideString;
@@ -144,6 +106,42 @@ type
     property changeset: int64 read get_changeset write set_changeset;
     //OSM object timestamp. Format "yyyy-mm-ddThh:nn:ssZ" like in OSM files
     property timestamp: WideString read get_timestamp write set_timestamp;
+  end;
+
+  TTags = class(TOSManObject, IKeyList)
+  protected
+    fMapObj: TMapObject;
+  public
+    function get_count: integer;
+    destructor destroy;override;
+  published
+    //delete item by key. If no such key, no actions performed
+    procedure deleteByKey(const key: WideString);
+    //delete item by index in list. If index out of bounds then exception raised
+    procedure deleteById(const id: integer);
+    //get all keys in list. Result is SafeArray of string variants.
+    //Keys and Values interlived - [0]=key[0],[1]=value[0]...[10]=key[5],[11]=value[5],...
+    function getAll: OleVariant;
+    //add items to list. On key conflict replaces old value with new one.
+    //kvArray interlived as in getAll() method
+    procedure setAll(const kvArray: OleVariant);
+    //returns true if key exists in list.
+    function hasKey(const key: WideString): WordBool;
+    //returns value assiciated with key. If no such key empty string('') returned
+    function getByKey(const key: WideString): WideString;
+    //add or replace key-value pair
+    procedure setByKey(const key: WideString; const value: WideString);
+    //returns value by index. If index out of bounds [0..count-1] exception raised
+    function getValue(const id: integer): WideString;
+    //sets value by index. If index out of bounds [0..count-1] exception raised
+    procedure setValue(const id: integer; const value: WideString);
+    //returns key by index. If index out of bounds [0..count-1] exception raised
+    function getKey(const id: integer): WideString;
+    //sets key by index. If index out of bounds [0..count-1] exception raised
+    procedure setKey(const id: integer; const key: WideString);
+
+    //returns number of pairs in list
+    property count: integer read get_count;
   end;
 
   TNode = class(TMapObject, INode)
@@ -736,7 +734,7 @@ begin
   k := aWay.nodes;
   if (VarArrayDimCount(k) <> 1) or ((VarType(k) and varTypeMask) <> varVariant) then
     raise EInOutError(toString() + '.putWay: illegal nodes set');
-  n := VarArrayHighBound(k, 1) - VarArrayLowBound(k, 1) + 1;
+  n := varArrayLength(k);
   if n <= 0 then
     exit;
   if VarIsEmpty(fQryPutWayNode) then begin
@@ -805,10 +803,13 @@ begin
 end;
 
 function TMapObject.get_tags: OleVariant;
+var
+  tg:TTags;
 begin
-  if VarIsEmpty(fTags) then
-    fTags := TTags.create() as IDispatch;
-  result := fTags;
+  tg:=TTags.create();
+  tg.fMapObj:=self;
+  _AddRef();
+  result := tg as IDispatch;
 end;
 
 function TMapObject.get_timestamp: WideString;
@@ -842,8 +843,20 @@ begin
 end;
 
 procedure TMapObject.set_tags(const newTags: OleVariant);
+var
+  nt:OleVariant;
+  i:integer;
 begin
-  fTags := newTags;
+  nt:=varFromJsObject(newTags.getAll());
+  if(VarIsArray(nt)) then begin
+    i:=varArrayLength(nt);
+    if(odd(i)) then i:=0;//should be even length
+    setLength(fTags,i);
+    while(i>0)do begin
+      dec(i);
+      fTags[i]:=nt[i];
+    end;
+  end;
 end;
 
 procedure TMapObject.set_timestamp(const newTimeStamp: WideString);
@@ -872,9 +885,11 @@ end;
 procedure TTags.deleteByKey(const key: WideString);
 var
   i: integer;
+  fTags: TWideStringArray;
 begin
+  fTags:=fMapObj.fTags;
   for i := 0 to count - 1 do
-    if fKeys[i] = key then begin
+    if fTags[i*2] = key then begin
       deleteById(i);
       break;
     end;
@@ -883,36 +898,35 @@ end;
 procedure TTags.deleteById(const id: integer);
 var
   i: integer;
+  fTags: TWideStringArray;
 begin
+  fTags:=fMapObj.fTags;
   if (id < 0) or (id >= count) then
     raise ERangeError.create(toString() + '.deteteById: id out of bounds');
-  for i := id to count - 2 do begin
-    fKeys[i] := fKeys[i + 1];
-    fValues[i] := fValues[i + 1];
+  for i := id*2 to high(fTags)-2 do begin
+    fTags[i] := fTags[i + 2];
   end;
-  dec(fCount);
+  setLength(fMapObj.fTags,length(fTags)-2);
 end;
 
 function TTags.get_count: integer;
 begin
-  result := fCount;
+  result := length(fMapObj.fTags) div 2;
 end;
 
 function TTags.getAll: OleVariant;
 var
-  pk, pv: PVariant;
+  pk: PVariant;
   i: integer;
+  fTags: TWideStringArray;
 begin
+  fTags:=fMapObj.fTags;
   result := VarArrayCreate([0, count * 2 - 1], varVariant);
   pk := VarArrayLock(result);
-  pv := pk;
-  inc(pv);
   try
-    for i := 0 to count - 1 do begin
-      pk^ := fKeys[i];
-      pv^ := fValues[i];
-      inc(pk, 2);
-      inc(pv, 2);
+    for i := 0 to high(fTags) do begin
+      pk^ := fTags[i];
+      inc(pk);
     end;
   finally
     VarArrayUnlock(result);
@@ -922,11 +936,13 @@ end;
 function TTags.getByKey(const key: WideString): WideString;
 var
   i: integer;
+  fTags: TWideStringArray;
 begin
+  fTags:=fMapObj.fTags;
   result := '';
-  for i := 0 to count - 1 do begin
-    if key = fKeys[i] then begin
-      result := fValues[i];
+  for i := 0 to count-1 do begin
+    if key = fTags[i*2] then begin
+      result := fTags[i*2+1];
       break;
     end;
   end;
@@ -936,23 +952,25 @@ function TTags.getKey(const id: integer): WideString;
 begin
   if (id >= count) or (id < 0) then
     raise ERangeError.create(toString() + '.getKey: index out of range');
-  result := fKeys[id];
+  result := fMapObj.fTags[id*2];
 end;
 
 function TTags.getValue(const id: integer): WideString;
 begin
   if (id >= count) or (id < 0) then
     raise ERangeError.create(toString() + '.getValue: index out of range');
-  result := fValues[id];
+  result := fMapObj.fTags[id*2+1];
 end;
 
 function TTags.hasKey(const key: WideString): WordBool;
 var
   i: integer;
+  fTags: TWideStringArray;
 begin
+  fTags:=fMapObj.fTags;
   result := false;
-  for i := 0 to count - 1 do
-    if key = fKeys[i] then begin
+  for i := 0 to count-1 do
+    if key = fTags[i*2] then begin
       result := true;
       break;
     end;
@@ -962,21 +980,20 @@ procedure TTags.setAll(const kvArray: OleVariant);
 var
   i, l: integer;
   a: OleVariant;
-  pv1, pv2: POleVariant;
+  pv1: POleVariant;
+  fTags: TWideStringArray;
 begin
   a := varFromJsObject(kvArray);
   if (VarArrayDimCount(a) <> 1) or odd(varArrayLength(a)) then
     raise ERangeError.create(toString() + '.setAll: need even-length array');
-  l := varArrayLength(a) div 2;
+  l := varArrayLength(a);
+  setLength(fMapObj.fTags,l);
+  fTags:=fMapObj.fTags;
   pv1 := VarArrayLock(a);
   try
-    pv2 := pv1;
-    inc(pv2);
-    fCount := 0;
     for i := 0 to l - 1 do begin
-      setByKey(pv1^, pv2^);
-      inc(pv1, 2);
-      inc(pv2, 2);
+      fTags[i]:=pv1^;
+      inc(pv1);
     end;
   finally
     VarArrayUnlock(a);
@@ -986,42 +1003,42 @@ end;
 procedure TTags.setByKey(const key, value: WideString);
 var
   i: integer;
+  fTags: TWideStringArray;
 begin
+  fTags:=fMapObj.fTags;
   for i := 0 to count - 1 do begin
-    if key = fKeys[i] then begin
-      fValues[i] := value;
+    if key = fTags[i*2] then begin
+      fTags[i*2+1] := value;
       exit;
     end;
   end;
-  inc(fCount);
-  grow();
-  fKeys[count - 1] := key;
-  fValues[count - 1] := value;
+  setLength(fMapObj.fTags,length(fTags)+2);
+  fTags:=fMapObj.fTags;
+  fTags[high(fTags) - 1] := key;
+  fTags[high(fTags)] := value;
 end;
 
 procedure TTags.setKey(const id: integer; const key: WideString);
 begin
   if (id >= count) or (id < 0) then
     raise ERangeError.create(toString() + '.setKey: index out of range');
-  fKeys[id] := key;
+  fMapObj.fTags[id*2] := key;
 end;
 
 procedure TTags.setValue(const id: integer; const value: WideString);
 begin
   if (id >= count) or (id < 0) then
     raise ERangeError.create(toString() + '.setValue: index out of range');
-  fValues[id] := value;
+  fMapObj.fTags[id*2+1] := value;
 end;
 
-procedure TTags.grow;
-var
-  i: integer;
+destructor TTags.destroy;
 begin
-  if count >= length(fKeys) then begin
-    i := (count or 3) + 1;
-    setLength(fKeys, i);
-    setLength(fValues, i);
+  if assigned(fMapObj) then begin
+    fMapObj._release();
+    fMapObj:=nil;
   end;
+  inherited;
 end;
 
 { TNode }

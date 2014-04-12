@@ -1118,15 +1118,33 @@ begin
 end;
 
 procedure TFastOSMWriter.writeNodes;
+  function coordFromVar(i32:integer):UTF8String;
+  var
+    l:integer;
+  begin
+    result:=inttostr(abs(i32));
+    l:=length(result);
+    case l of
+      1:result:='0.000000'+result;
+      2:result:='0.00000'+result;
+      3:result:='0.0000'+result;
+      4:result:='0.000'+result;
+      5:result:='0.00'+result;
+      6:result:='0.0'+result;
+      7:result:='0.'+result;
+      else result:=copy(result,1,l-7)+'.'+copy(result,l-7+1,7)
+    end;
+    if(i32<0)then result:='-'+result;
+  end;
 var
   qAtt,qTgs,sAtt,sTgs,aAtt,aTgs:Variant;
   pV,pVt:PVariant;
   n,l:integer;
   i64:int64;
-  su8:UTF8String;
   hasTags:boolean;
   ws:WideString;
 begin
+  if(cDegToInt<>10000000)then raise EConvertError.Create('cDegToInt changed, so fix coordFromVar routine');
   qAtt:=inStg.sqlPrepare('SELECT nodes.id,version,timestamp,userid,users.name,changeset,lat,lon FROM nodes,users WHERE nodes.userid=users.id');
   qTgs:=inStg.sqlPrepare('SELECT tagname,tagvalue FROM objtags,tags WHERE :id*4+0=objid AND tagid=tags.id');
   sAtt:=inStg.sqlExec(qAtt,0,0);
@@ -1161,10 +1179,10 @@ begin
         writeUTF16(quote(pV^));
         inc(pV);
         writeUTF8('" changeset="'+inttostr(pV^)+'" lat="');
-        inc(pV);su8:=inttostr(pV^);l:=length(su8);
-        writeUTF8(copy(su8,1,l-7)+'.'+copy(su8,l-7+1,7)+'" lon="');
-        inc(pV);su8:=inttostr(pV^);l:=length(su8);
-        writeUTF8(copy(su8,1,l-7)+'.'+copy(su8,l-7+1,7)+'"');
+        inc(pV);
+        writeUTF8(coordFromVar(pV^)+'" lon="');
+        inc(pV);
+        writeUTF8(coordFromVar(pV^)+'"');
         inc(pV);
         hasTags:=false;
         sTgs:=inStg.sqlExec(qTgs,':id',i64);

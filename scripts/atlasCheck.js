@@ -45,60 +45,83 @@ var src=h.mapHelper();
 src.open(cfg.countryDBName,false,true);
 
 function checkBounds(ar){
-	var bbhm=h.mapHelper();
-	var bpoly=0,s='',bwl=[],awl=[];
+	var s='',bwl=[],awl=[],notFound=[],notClosed=[];
 	if((!ar)||(!ar.name)){
 		s='			empty region';
 	}else{
 		if(ar.areas && (ar.areas.length>0)){
 			for(var i=0;i<ar.areas.length;i++)awl=awl.concat(checkBounds(ar.areas[i]));
 		};
-		bbhm.open(h.fso.buildPath(cfg.boundBackupDir,ar.name+'.db3'));
 		echo(ar.name+'	',true,true);
 		try{
 			ar.bound=ar.bound.split(',');
-			bpoly=h.getMultiPoly(ar.bound,src.map/*,bbhm.map*/);
-			if(bpoly.poly){
-				if(bpoly.usedMap.storage.dbName!=src.map.storage.dbName){
-					s+='	ok in '+bpoly.usedMap.storage.dbName;
-				}
-			};
 			var cutter=h.polyIntersector(src);
 			for(var i=0;i<ar.bound.length;i++){
-				var ref=ar.bound[i].split(':');
+				var ref=ar.bound[i],o=src.getObject(ref);
+				ref=ref.split(':');
 				if(ref[0]=='way'){
-					bwl.push(parseFloat(ref[1]));
+					if(!o){
+						notFound.push(ar.bound[i]+' ref by ['+ar.name+']');
+						continue;
+					};
+					o.tags.setByKey('osman:parent',ar.name);
+					bwl.push(o);
 				}else if(ref[0]=='relation'){
-					bwl=bwl.concat(cutter.buildWayList(src.getObject(ar.bound[i]),true));
+					o=src.getObject(ar.bound[i]);
+					if(!o){
+						notFound.push(ar.bound[i]+' ref by ['+ar.name+']');
+						continue;
+					};
+					ref=cutter.buildWayList(o,true);//get ways ids
+					for(var j=0;j<ref.length;j++){
+						o=src.map.getWay(ref[j]);
+						if(!o){
+							notFound.push('way:'+ref[j]+' ref by ['+ar.name+' '+ar.bound[i]+']');
+							continue;
+						}
+						o.tags.setByKey('osman:parent',ar.name+' '+ar.bound[i]);
+						bwl.push(o);
+					}
+				};
+			};
+			//now check for closed polygons and nodes
+			var clusters=cutter.mergeWayList(bwl),
+				qNodeExist=src.map.storage.sqlPrepare('SELECT EXISTS(SELECT id FROM nodes_attr WHERE id=:id)');
+			for(var i=clusters.length-1; i>=0; i--){
+				var clust=clusters[i];
+				if(clust.id1!=clust.idn){
+					notClosed.push('node:'+clust.id1+',node:'+clust.idn);
+				}else{
+					//check is nodes exists
+					for(var j=0;j<clust.ways.length;j++){
+						var nds=clust.ways[j].nodes.toArray();
+						for(var k=0; k<nds.length; k++){
+							if(!src.map.storage.sqlExec(qNodeExist,':id',nds[k]).read(1).toArray()[0])notFound.push('node:'+nds[k]+' ref by way:'+clust.ways[j]);
+						}
+					}
 				};
 			};
 		}catch(e){
 			s='		fail. Exception['+e.name+']='+e.description+'\n';
 		};
-		bbhm.close();
 	};
-	if(!bpoly){
+	if(notFound.length || notClosed.length){
 		failCnt++;
-	}else if(!bpoly.poly){
-		failCnt++;
-		if(bpoly.notFoundRefs.length>0){
+		if(notFound.length>0){
 			s+='\n	not found objects:\n';
-			for(var i=0;i<bpoly.notFoundRefs.length;i++){s+='		'+bpoly.notFoundRefs[i]+'\n'};
+			for(var i=0;i<notFound.length;i++){s+='		'+notFound[i]+'\n'};
 		};
-		if(bpoly.notClosedRefs.length>0){
+		if(notClosed.length>0){
 			s+='\n	not closed objects:\n';
-			for(var i=0;i<bpoly.notClosedRefs.length;i++){s+='		'+bpoly.notClosedRefs[i]+'\n'};
-		};
-		if((bpoly.notFoundRefs.length==0)&&(bpoly.notClosedRefs.length==0)){
-			s+='\n	object is empty\n';
+			for(var i=0;i<notClosed.length;i++){s+='		'+notClosed[i]+'\n'};
 		};
 	}else{
 		if(ar.areas && ar.areas.length){
 			//do coverage test
 			awl=awl.concat(bwl);
-			awl.sort(function(a,b){return (a-b)});
+			awl.sort(function(a,b){return (a.id-b.id)});
 			for(var i=awl.length-1;i>0;i--){
-				if(awl[i]==awl[i-1]){
+				if(awl[i].id==awl[i-1].id){
 					i--;
 					awl.splice(i,2);
 				};
@@ -109,7 +132,7 @@ function checkBounds(ar){
 		if(awl.length){
 			s+='		fail subarea cover test. Not covered ways:\n';
 			for(var i=0;i<awl.length;i++){
-				s+=awl[i]+'\n';
+				s+=awl[i].id+' ref by ['+awl[i].tags.getByKey('osman:parent')+']\n';
 			};
 			failCnt++;
 		}else{
