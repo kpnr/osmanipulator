@@ -1307,7 +1307,6 @@ function main(){
 	};
 	echot('building incomplete ways');
 	var icptWayList=hSmallMap.map.storage.createIdList();
-	//icptWayList.add(85710344);icptWayList.add(87691925);
 	hSmallMap.exec('INSERT OR IGNORE INTO '+icptWayList.tableName+'(id) SELECT wayid FROM waynodes WHERE nodeid NOT IN (SELECT id FROM nodes_attr)');
 
 	echot('building incomplete multipolygons');

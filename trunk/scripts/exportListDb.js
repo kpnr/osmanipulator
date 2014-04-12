@@ -94,11 +94,11 @@ function exportMaps(hMap,bounds){
 			echo('from backup');
 			var bbhm=h.mapHelper();
 			bbhm.open(h.fso.buildPath(boundBackupDir,r.name+'.db3'),false,true);
-			bbhm.exportMultiPoly(r.hMap.map,r.ref);
+			bbhm.exportMultiPoly(r.hMap.map,r.bound);
 			bbhm.close();
 		}else{
 			echo('from main');
-			hMap.exportMultiPoly(r.hMap.map,r.ref);
+			hMap.exportMultiPoly(r.hMap.map,r.bound);
 		};
 		echo('done');
 		r.hMap.exec('COMMIT');
@@ -213,8 +213,8 @@ function main(){
 			var bs=boundsCollection[i],bo=[];
 			var bbkMap=h.mapHelper();
 			if (boundBackupDir) bbkMap.open(h.fso.buildPath(boundBackupDir,bs.name+'.db3'));
-			if(typeof(bs.ref)=='string')bs.ref=bs.ref.split(',');
-			var mpr=h.getMultiPoly(bs.ref,srcMap.map,(boundBackupDir)?(bbkMap.map):(false));
+			if(typeof(bs.bound)=='string')bs.bound=bs.bound.split(',');
+			var mpr=h.getMultiPoly(bs.bound,srcMap.map,(boundBackupDir)?(bbkMap.map):(false));
 			if(!mpr.poly){
 				echo('	'+bs.name+' boundary not resolved. Skipped.');
 			}else{

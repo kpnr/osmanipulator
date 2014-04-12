@@ -18,6 +18,7 @@ const
   cIntToRad_dbl: double = cIntToRad;
 
 type
+  TWideStringArray = array of WideString;
   TRefType = (rtNode, rtWay, rtRelation);
 
   TRefList = class(TOSManObject, IRefList)

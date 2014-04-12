@@ -118,7 +118,7 @@ function genTasks(){
 				ai.country = ai.country || a.country;
 				ai.region = ai.region || a.region;
 				echot('genAreas for '+ai.name);
-				var ali={ref:ai.bound.split(','),name:ai.name};
+				var ali={bound:ai.bound.split(','),name:ai.name};
 				//generate names for files
 				var dstDBName=cfg.workDir+'\\'+ai.name,
 					dstOSMName=cfg.outDir+'\\'+ai.name,

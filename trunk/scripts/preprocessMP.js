@@ -187,7 +187,7 @@ function ttable(hMap){
   tagname BETWEEN "place_name" AND "place_namf" or\
   tagname BETWEEN "ref" AND "reg" or\
   tagname BETWEEN "short_name" AND "short_namf" or\
-  tagname IN ("brand","description","destination","email","level","network","phone","route_ref","website")');
+  tagname IN ("brand","description","destination")');
 	var qUpdTg=stg.sqlPrepare('UPDATE OR FAIL tags SET tagvalue=:tagvalue WHERE id=:id');
 	var qDelTg=stg.sqlPrepare('DELETE FROM tags WHERE id=:id');
 	var qUpdObjs=stg.sqlPrepare('UPDATE OR FAIL objtags SET tagid=(SELECT id FROM tags WHERE tagname=:tagname AND tagvalue=:newtagvalue) WHERE tagid=:id');
