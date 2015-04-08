@@ -1,4 +1,4 @@
-ttable=function(old){
+utf2win1251=function(old){
 	var t=arguments.callee;
 	if(!t.chtt){
 var c=[];
@@ -314,7 +314,7 @@ S(0x0E10,'th,th,th,n,d,t,th,th,th,n,b,p,ph,f,ph,f');
 S(0x0E20,'ph,m,y,r,R,l,L,w,s,s,s,h,l,`,h,~');
 S(0x0E30,'a,a,aa,am,i,ii,ue,uue,u,uu,\'');
 c[0x0E3F]='Bh.';
-S(0x0E40,'e,ae,o,ai,ai,ao,+, , , , , , ,M, ,*');
+S(0x0E40,'e,ae,o,ai,ai,ao,+,e, , , , , ,M, ,*');
 S(0x0E50,'0,1,2,3,4,5,6,7,8,9,//,///');
 S(0x0E81,'k,kh,,kh,,,ng,ch,,s,,,ny');
 S(0x0E90,',,,,d,h,th,th,,n,b,p,ph,f,ph,f');
@@ -725,4 +725,4 @@ t.chtt=c;
 	};
 	return newstr;
 };
-ttable;
+utf2win1251;

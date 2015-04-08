@@ -329,7 +329,7 @@ MapHelper.prototype.findOrStore=function(newNode,tagPolicy){
 		tagPolicy=tagPolicy||0;
 		switch(tagPolicy){
 		case 0:
-			for(var i=0;i<newNode.tags.count-1;i++){
+			for(var i=0;i<newNode.tags.count;i++){
 				oldNode.tags.setByKey(newNode.tags.getKey(i),newNode.tags.getValue(i));
 				storeNode=true;
 			};
@@ -1401,14 +1401,40 @@ Hlp.prototype.getMultiPoly=function(refs,srcMaps,backupMap){
 	var rs={poly:false,usedMap:false,notFoundRefs:[],notClosedRefs:[]};
 	if((srcMaps.length<1)||!(refs.length>0))return rs;
 	for(var i=0;i<srcMaps.length;i++){
-		var mp=t.gt.createPoly();
 		var hMap=t.mapHelper();
 		hMap.map=srcMaps[i];
+		var pi=t.polyIntersector(hMap,hMap,0),wl=[];
 		rs.notFoundRefs=[];
+		//make way id list from refs to relations and ways
 		for(var j=0;j<refs.length;j++){
-			var mo=hMap.getObject(refs[j]);
+			var sp=refs[j].split(':');
+			switch(sp[0]){
+			case 'relation':
+				var rel=hMap.map.getRelation(parseFloat(sp[1]));
+				if(!rel){
+					rs.notFoundRefs.push(refs[j])
+				}else{
+					wl=wl.concat(pi.buildWayList(rel,true));
+				};
+				break;
+			case 'way':
+				wl.push(parseFloat(sp[1]));break;
+			};
+		};
+		//remove duplicates
+		wl.sort(function(a,b){return (a-b)});
+		for(var j=wl.length-1;j>0;j--){
+			if(wl[j]==wl[j-1]){
+				j--;
+				wl.splice(j,2);
+			};
+		};
+		//create multipoly object from way id list
+		var mp=t.gt.createPoly();
+		for(var j=0;j<wl.length;j++){
+			var mo=hMap.map.getWay(wl[j]);
 			if(!mo){
-				rs.notFoundRefs.push(refs[j]);
+				rs.notFoundRefs.push('way:'+wl[j]);
 			}else{
 				mp.addObject(mo);
 			};
