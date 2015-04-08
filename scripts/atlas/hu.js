@@ -1,0 +1,28 @@
+var c={bound:'relation:21335',
+	name:'hungary',
+	country:'HU',
+	flags:{keepFile:1},
+	areas:[
+		{name:'hudnntl',
+		bound:'relation:22787',
+		flags:{route:1,ttable:1,bitlevel:24,keepFile:1},
+		areas:[
+			{name:'hundntl',region:'HU-2',
+			bound:'relation:22784',
+			flags:{convert:1,keepFile:1}},
+			{name:'huddntl',region:'HU-2',
+			bound:'relation:22785',
+			flags:{convert:1,keepFile:1}},
+			{name:'hukdntl',region:'HU-2',
+			bound:'relation:22783',
+			flags:{convert:1,keepFile:1}}			
+		]},
+		{name:'hukozep',
+		bound:'relation:22786',
+		flags:{route:1,ttable:1,bitlevel:24,convert:1,keepFile:1}},
+		{name:'hualfld',
+		bound:'relation:22793',
+		flags:{route:1,ttable:1,bitlevel:24,convert:1,keepFile:1}}
+	]
+};
+c;

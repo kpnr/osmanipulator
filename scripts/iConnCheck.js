@@ -1,4 +1,5 @@
 var ws=WScript.createObject('WScript.Shell');
+var ddnsurl='http://freedns.afraid.org/dynamic/update.php?dXZ4VTE4MzhhMlVpNmh2ZnhqRHVkc0dNOjExNjk4Mjcy';
 
 function rebootRouter(){
 	WScript.echo(''+(new Date())+' rebooting modem');
@@ -65,9 +66,10 @@ function rebootRouter(){
 	};*/
 };
 
-var checkPeriod=60*1000;
+var checkPeriod=60*1000;//ms units
 var failCnt=0;
 var pb=0;
+var ddnsUpdate=0;
 while(true){
 	var rq=WScript.createObject('WinHttp.WinHttpRequest.5.1'),tStart=new Date();
 	rq.open('HEAD','http://ya.ru',false);
@@ -79,6 +81,7 @@ while(true){
 	};
 	if(p!=200)failCnt++;else failCnt=0;
 	if(failCnt>0){
+		ddnsUpdate=0;
 		WScript.echo(((failCnt==1)?('\n'):(''))+(new Date())+'	fail count='+failCnt);
 		if(failCnt>=5){
 			rebootRouter();
@@ -87,6 +90,24 @@ while(true){
 	}else{
 		WScript.stdOut.write(''+pb);
 		pb++;if(pb>8)pb=0;
+	}
+	if(!ddnsUpdate){
+		var rq=WScript.createObject('WinHttp.WinHttpRequest.5.1');
+		rq.open('GET',ddnsurl,false);
+		var p=-1;
+		try{
+			rq.send();
+			p=rq.status;
+		}catch(e){
+		};
+		if(p==200){
+			WScript.stdOut.write('D');
+			ddnsUpdate=60;//checkPeriod units
+		}else{
+			WScript.stdOut.write('d'+p+' ');
+		}
+	}else{
+		ddnsUpdate--;
 	}
 	var st=(new Date())-tStart;
 	st=checkPeriod-st;

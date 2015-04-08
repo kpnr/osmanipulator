@@ -54,7 +54,7 @@ function resolvePoly(mp,rel,map){
 			n.userid=0;
 			nNodes++;
 			if(!(nNodes&1023)){
-				echo('RelId='+relation.id+' Ways='+nWays+' Nodes='+nNodes+' ',1);
+				echo('RelId='+rel.id+' Ways='+nWays+' Nodes='+nNodes+' ',1);
 			}
 			return n;
 		},
@@ -65,7 +65,7 @@ function resolvePoly(mp,rel,map){
 			w.userid=0;
 			nWays++;
 			if(!(nWays&1023)){
-				echo('RelId='+relation.id+' Ways='+nWays+' Nodes='+nNodes+' ',1);
+				echo('RelId='+rel.id+' Ways='+nWays+' Nodes='+nNodes+' ',1);
 			}
 			return w;
 		}
@@ -116,7 +116,11 @@ function main(){
 	dst.exec('DELETE FROM '+ilWays.tableName);
 	dst.exec('DELETE FROM '+ilRelations.tableName);
 	dst.exec('COMMIT');
-	dst.exec('DETACH world');
+	try{
+		dst.exec('DETACH world');
+	}catch(e){
+		echo('world db not detached.'+e.message);
+	};
 	dst.exec('BEGIN');
 	echot('Searching coastlines...');
 	var nRings=0,nWays=0,nNodes=0;
@@ -184,7 +188,7 @@ function main(){
 		var mpoly=h.gt.createPoly();
 		nWays=0;nNodes=0;
 		echo('RelId='+relation.id+' Ways='+nWays+' Nodes='+nNodes+' ',1);
-		if(!resolvePoly(mpoly,relation,src.map){
+		if(!resolvePoly(mpoly,relation,src.map)){
 			echo('Can`t resolve relation['+relation.id+']');
 			continue;
 		};
@@ -219,7 +223,7 @@ function main(){
 	qGetObjBBox=dstg.sqlPrepare('SELECT objid,minlat,maxlat,minlon,maxlon FROM bboxes WHERE objid=:objid');
 	while(!qGetRelIdByArea.eos){
 		var relId=qGetRelIdByArea.read(1).toArray();
-		echo('rel/area='+relId,1);
+		echo('rel/area='+relId[0]+'/'+relId[1],1);
 		relId=relId[0];
 		var bbox=dstg.sqlExec(qGetObjBBox,':objid',relId*4+2),
 			mpoly=h.gt.createPoly(),
@@ -237,7 +241,7 @@ function main(){
 			if(!((mrole=='') && (mtype=='way')))continue;
 			var node=src.map.getNode(src.map.getWay(mid).nodes.toArray()[0]);
 			if(mpoly.isIn(node)){
-				childRel.members.insertBefore(MAX_INT,'
+				childRel.members.insertBefore(MAX_INT,'relation',relId,'parent');
 			};
 		};
 	};

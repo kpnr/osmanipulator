@@ -1,0 +1,68 @@
+----------R49
+fix tag merging routine in helpers.js/MapHelper/findOrStore
+added addr:interpolation proccessing in preprocessMP.js
+added OSMan/GeoTools/interpolate method
+fix relation members doubling in areaCut.js/intersectMultipoly/parseRel routine
+restrict multipolygon relations to type 'boundary' and 'multipolygon' in OSMan/MutiPoly/resolve and areaCut.js
+fix recurcive multipoly processing in areaCut.js
+fix boundary indexing in areaCut.js for duplicated ways
+speedups in atlasCheck.js
+region list format changed in exportListDB.js - use 'bound' instead of 'refs'
+fix lat/lon conversion in FastOSMWriter.
+some memory optimizations. Memory requrements reduced about 15%
+----------R48
+changed behavior in MultiPoly.resolve(). Now ways resolved after duplicate test, not before as earlier.
+fix in areaCut.js for some zero-area multipoly intersections
+fix several bugs in MultiPoly.getIntersection/getPolyIntersection
+fix in MultiPoly.getIntersection/getSegmentIntersection for very long segments
+fix in helpers.js/MapHelper/exportRecurcive out of memory error for very long ways
+added autoloading of crtree on sqlite-db open and create operations
+added optional crtree.dll module for compressed rtree in sqlite3 databases. db size reduced upto 20%
+fix verb in install/uninstall scripts
+added optional parameters in helpers.js/MapHelper/exec
+fix in helpers.js/MapHelper/renumberNewObjects new timestamp assignment
+-----------R46
+added check for recurcive or too complex relations IMultiPoly.resolve()
+require windows hot fix http://support.microsoft.com/kb/2632503
+fix in ComObj/DispatchInvoke routine. Range check error eliminated.
+added support for <changeset> element in OSM-XML files
+fix in exportListDB.js boundary export routine
+added 30 seconds wait timeout for locked database or table
+added bitness and windowness test in helpers.js. Now scripts should run in 32-bit console automatically.
+added support for Win7/Vista UAC & x64 in install/uninstall scripts
+fix task generation in atlas.js
+fix in linear intersection routine
+-----------R44
+fix timestamps save in FastOSMWriter 
+fixes in areaCut.js
+fix timeStamp parsing.
+-----------r43
+changed database schema. Now timestamps are Int64.
+massive fixes in areaCut.js for speedups and rare intersection cases processing
+less restritive Node object. Now -181<lon<181, -91<lat<91.
+fix IMultiPoly.getArea()
+fix bugs in IMultiPoly.getIntersection/getPolyIntersection 
+added mergeWayList() method to PolyIntersector object in helpers.js
+fix in distance calculation routines
+added 'action' attribute support in OSM-XML parsing routine.
+fixes and improvements in IMultiPoly.getIntersection()
+added coastline processing in areaCut.js
+fix in helper.js.PolyIntersector.mergeNodeLists(). Speed increased.
+fixed bug in IMultiPoly.getIntersection() 'osman:node1' and 'osman:node2' tags assignments
+fixed bug in TNetMap.getNodes()
+--------
+added custom sqlite build with RTree compression.
+added IMultiPoly.getOrientation() method.
+changed IMultiPoly.getIntersection for lines.
+  On-bound nodes tags 'osman:node1' and 'osman:node2' added.
+added multithreaded archive support in UnBZ2 object
+added getPolygons method to IMultiPoly interface
+added 'visible' attribute support in NetMap.get???s methods
+added exec method to IGeoTools interface. IAppExec interface introduced
+fixed EOS handling in uXML.TFastOSMWriter
+changed role handling in uMultipoly.TMultiPoly.resolve.resolveRelations(). 
+  Now only ['','outer','inner','enclave','exclave'] roles used in multipoly resolution.
+change in multipoly roles handling in areaCut.js, helpers.js, TestGeoToolsGetIntersection.js.
+  Now only ['','outer','inner','enclave','exclave'] roles used in multipoly processing.
+added function getMultiPoly(...) in helpers.js.Hlp
+fix OSM-API calls for TNetMap.getNodes, TNetMap.getWays, TNetMap.getRelations

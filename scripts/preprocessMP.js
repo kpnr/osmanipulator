@@ -1,7 +1,7 @@
 //settings begin
 var dstMapName='';
 var noAddr=false;
-var noTTable=false;
+var ttableName='';
 var bitLevel=0;
 var dstLang='ru';
 var intToDeg=1e-7,degToInt=1/intToDeg;
@@ -27,7 +27,7 @@ function checkArgs(){
     /lng:us set language for `name` and `addr:*` tags.\n\
       Copy/translate `name:us` values to `name` and `addr:*` tags\n\
     /noaddr remove address info\n\
-    /nottable do not translate tag values from UTF8');
+    /ttable:"ttable.js" script to translate tag values into other codepage');
 	};
 	var ar=WScript.arguments;
 	ar=ar.named;
@@ -37,7 +37,7 @@ function checkArgs(){
 	};
 	if(ar.exists('dst'))dstMapName=ar.item('dst')||dstMapName;
 	if(ar.exists('noaddr'))noAddr=true;
-	if(ar.exists('nottable'))noTTable=true;
+	if(ar.exists('ttable'))ttableName=ar.item('ttable');
 	if(ar.exists('lng'))dstLang=ar.item('lng');
 	if(ar.exists('bitlevel')){
 		bitLevel=parseInt(ar.item('bitlevel'));
@@ -47,7 +47,7 @@ function checkArgs(){
 		echo('Use config:\ndst='+dstMapName);
 		echo('bitLevel='+(bitLevel||'none'));
 		echo('noaddr='+noAddr);
-		echo('nottable='+noTTable);
+		echo('ttable='+ttableName);
 		echo('lng='+dstLang);
 		return true;
 	}
@@ -168,7 +168,7 @@ function mergeDupNodes(hMap){
 };
 
 function ttable(hMap){
-	var ttf=include('utf2win1251.js');
+	var ttf=include(ttableName);
 	var stg=hMap.map.storage;
 	var qtgs=stg.sqlPrepare('SELECT id,tagname,tagvalue from tags WHERE \
   tagname BETWEEN "addr" AND "adds" or\
@@ -187,7 +187,7 @@ function ttable(hMap){
   tagname BETWEEN "place_name" AND "place_namf" or\
   tagname BETWEEN "ref" AND "reg" or\
   tagname BETWEEN "short_name" AND "short_namf" or\
-  tagname IN ("brand","description","destination")');
+  tagname IN ("brand","description","denomination","destination","opening_hours","phone","surface","sport","tracktype","website")');
 	var qUpdTg=stg.sqlPrepare('UPDATE OR FAIL tags SET tagvalue=:tagvalue WHERE id=:id');
 	var qDelTg=stg.sqlPrepare('DELETE FROM tags WHERE id=:id');
 	var qUpdObjs=stg.sqlPrepare('UPDATE OR FAIL objtags SET tagid=(SELECT id FROM tags WHERE tagname=:tagname AND tagvalue=:newtagvalue) WHERE tagid=:id');
@@ -389,6 +389,59 @@ function processAssociatedStreet(hMap){
 	};
 };
 
+function processAddrInterpolation(hMap){
+	var newNodeId=hMap.exec("SELECT id FROM nodes ORDER by id DESC").read(1).toArray()[0];
+	var sWid=hMap.exec("SELECT objid>>2 FROM objtags WHERE tagid IN (SELECT id FROM tags WHERE tagname='addr:interpolation') AND objid&3=1");
+	while(!sWid.eos){
+		var wid=sWid.read(1).toArray()[0], way=hMap.map.getWay(wid);
+		if(!way)continue;
+		var istep=way.tags.getByKey('addr:interpolation');
+		switch(istep){
+		case 'even':
+		case 'odd':
+			istep=2;
+			break;
+		case 'all':
+			istep=1;
+			break;
+		case 'alphabetic':
+			istep=NaN;
+			break;
+		default:
+			istep=1*istep;
+		};
+		if(isNaN(istep))continue;
+		var nds=h.gt.wayToNodeArray(hMap.map,way).toArray();
+		if(nds.length<2)continue;
+		var house1=parseInt(nds[0].tags.getByKey('addr:housenumber')),street=nds[0].tags.getByKey('addr:street'),house2,i1=0,i2=0;
+		if(isNaN(house1))continue;
+		do{
+			house2=NaN;
+			while(++i2<nds.length){
+				if(!nds[i2].tags.hasKey('addr:housenumber'))continue;
+				house2=parseInt(nds[i2].tags.getByKey('addr:housenumber'));
+				break;
+			};
+			if(isNaN(house2))continue;
+			var ihouse=h.gt.interpolate(hMap.map,nds.slice(i1,i2+1),(Math.abs(house2-house1)-istep)/istep);
+			if(!ihouse.toArray)continue;
+			ihouse=ihouse.toArray();
+			for(i=0,d=(house2-house1)/(ihouse.length+1),r=1;i<ihouse.length;i++,r++){
+				var ihi=ihouse[i];
+				ihi.tags.setByKey('addr:housenumber',''+Math.round(house1+d*r));
+				ihi.tags.setByKey('addr:street',street);
+				ihi.id=(++newNodeId);
+				ihi.version=1;
+				ihi.changeset=1;
+				hMap.map.putNode(ihi);
+			};
+			house1=house2;
+			i1=i2;
+		}while(i2<nds.length-1);
+		way.tags.deleteByKey('addr:interpolation');
+		hMap.map.putWay(way);
+	}
+}
 function processLanguage(hMap,lng){
 	var stg=hMap.map.storage;
 	hMap.exec('CREATE TEMPORARY TABLE IF NOT EXISTS lngtrans (src INTEGER PRIMARY KEY,dst INTEGER, CONSTRAINT lngstrs_pair UNIQUE(src,dst) ON CONFLICT FAIL)');
@@ -444,21 +497,24 @@ function main(){
 	if(noAddr){
 		echot('Deleting address info');
 		deleteAddrInfo(dst);
+	}else{
+		echot('Process address interpolation');
+		processAddrInterpolation(dst);
 	};
-	if(!noTTable){
-		echot('Translating tag values from UTF to ANSI');
+	if(ttableName){
+		echot('Translating tag values via '+ttableName+' script');
 		ttable(dst);
 	};
 	echot('Remove duplicated nodes from ways');
 	removeWayNodeDup(dst);
+	echot('Process associatedStreet names');
+	processAssociatedStreet(dst);
 	echot('Remove not used ways');
 	removeNotUsedWays(dst);
 	echot('Remove not used nodes');
 	removeNotUsedNodes(dst);
 	echot('Normalize relations');
 	normalizeRelations(dst);
-	echot('Process associatedStreet names');
-	processAssociatedStreet(dst);
 	echot('Fix incomplete ways');
 	dst.fixIncompleteWays();
 	echot('Fix incomplete relations');

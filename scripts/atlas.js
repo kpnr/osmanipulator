@@ -17,6 +17,7 @@ var cfg={
 	boundBackupDir:'e:\\db\\osm\\sql\\bounds',
 	workDir:'e:\\db\\osm\\regions',
 	outDir:'e:\\db\\osm\\out',
+	ttables:['utf2win1251.js'],
 	maxTasks:3,
 	cmd_mp_no_rt:'e:\\db\\cvt\\mp_no_rt.bat',//OSM2MP.PL require package LWP::Protocol::https
 	cmd_mp_rt:'e:\\db\\cvt\\mp_rt.bat'
@@ -117,6 +118,7 @@ function genTasks(){
 				var ai=a.areas[i];
 				ai.country = ai.country || a.country;
 				ai.region = ai.region || a.region;
+				ai.ttables = ai.ttables || a.ttables;
 				echot('genAreas for '+ai.name);
 				var ali={bound:ai.bound.split(','),name:ai.name};
 				//generate names for files
@@ -137,7 +139,7 @@ function genTasks(){
 				if(!ai.flags)ai.flags={};
 				var ti=[
 					{task:'areaCut.js',cmdline:'/src:"'+srcFile+'" /dst:"'+dstDBName+'" /bound:'+ai.bound+' /xml /alreadyimported'},
-					{task:'preprocessMP.js',cmdline:'/dst:"'+dstDBName+'"'+((ai.flags.bitlevel)?(' /bitlevel:'+ai.flags.bitlevel):(''))+((ai.flags.ttable)?(''):(' /nottable'))}
+					{task:'preprocessMP.js',cmdline:'/dst:"'+dstDBName+'"'+((ai.flags.bitlevel)?(' /bitlevel:'+ai.flags.bitlevel):(''))+((ai.flags.ttable)?(' /ttable:'+ai.ttables[ai.flags.ttable-1]):(''))}
 				];
 				if(ai.flags.route){
 					var ers=[
@@ -185,6 +187,7 @@ function genTasks(){
 		return rs
 	};
 	var arcfg=include(cfg.areaFile),l=(arcfg.areas)?(arcfg.areas.length):(0),i,r;
+	arcfg.ttables=arcfg.ttables || cfg.ttables;
 	if((l>1)&&(cfg.maxTasks>1)){
 		var ar=arcfg.areas,st=0,r=[];
 		for(i=1;st<l;i+=i){

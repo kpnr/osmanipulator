@@ -1,0 +1,29 @@
+var c={bound:'relation:90689',
+	name:'ro',
+	country:'RO',
+	flags:{keepFile:1},
+	areas:[
+		{name:'row',
+		bound:'relation:1426985',
+		flags:{route:1,ttable:1,bitlevel:24,convert:1,keepFile:1}},
+		{name:'ronw',
+		bound:'relation:1427499',
+		flags:{route:1,ttable:1,bitlevel:24,convert:1,keepFile:1}},
+		{name:'rosw',
+		bound:'relation:1426984',
+		flags:{route:1,ttable:1,bitlevel:24,convert:1,keepFile:1}},
+		{name:'roc',
+		bound:'relation:1427500',
+		flags:{route:1,ttable:1,bitlevel:24,convert:1,keepFile:1}},
+		{name:'ros',
+		bound:'relation:1426803',
+		flags:{route:1,ttable:1,bitlevel:24,convert:1,keepFile:1}},
+		{name:'rone',
+		bound:'relation:1427498',
+		flags:{route:1,ttable:1,bitlevel:24,convert:1,keepFile:1}},
+		{name:'rose',
+		bound:'relation:1426802',
+		flags:{route:1,ttable:1,bitlevel:24,convert:1,keepFile:1}}
+	]
+};
+c;

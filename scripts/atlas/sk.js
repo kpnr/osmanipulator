@@ -1,0 +1,32 @@
+var c={bound:'relation:14296',
+	name:'Slovakia',
+	country:'SK',
+	flags:{keepFile:1},
+	areas:[
+		{name:'skbrtsl',
+		bound:'relation:388265',
+		flags:{route:1,ttable:1,bitlevel:24,convert:1,keepFile:1}},
+		{name:'sktrnv',
+		bound:'relation:388266',
+		flags:{route:1,ttable:1,bitlevel:24,convert:1,keepFile:1}},
+		{name:'sktrncn',
+		bound:'relation:388267',
+		flags:{route:1,ttable:1,bitlevel:24,convert:1,keepFile:1}},
+		{name:'sknitra',
+		bound:'relation:388268',
+		flags:{route:1,ttable:1,bitlevel:24,convert:1,keepFile:1}},
+		{name:'skzilina',
+		bound:'relation:388269',
+		flags:{route:1,ttable:1,bitlevel:24,convert:1,keepFile:1}},
+		{name:'skbnskb',
+		bound:'relation:388270',
+		flags:{route:1,ttable:1,bitlevel:24,convert:1,keepFile:1}},
+		{name:'skpresov',
+		bound:'relation:388271',
+		flags:{route:1,ttable:1,bitlevel:24,convert:1,keepFile:1}},
+		{name:'skkosice',
+		bound:'relation:388272',
+		flags:{route:1,ttable:1,bitlevel:24,convert:1,keepFile:1}}
+	]
+};
+c;

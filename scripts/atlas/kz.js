@@ -1,0 +1,21 @@
+var c={bound:'relation:	',
+	name:'kz',
+	country:'KZ',
+	bound:'relation:214665',
+	flags:{keepFile:1},
+	areas:[
+		{name:'kz_',
+		bound:'relation:214665',
+		flags:{route:1,ttable:1,bitlevel:24,keepFile:1},
+		areas:[
+			{name:'kzw',
+			bound:'relation:215441,relation:214834,relation:215686,relation:215683,relation:215727,relation:1288730',
+			flags:{convert:1,keepFile:1}},
+			{name:'kze',
+			bound:'relation:215776,relation:215743,relation:3087155,relation:215760,relation:215739,relation:215722,relation:215772,relation:215718,relation:2465058,relation:215699',
+			flags:{convert:1,keepFile:1}}
+		]
+		}
+	]
+};
+c;

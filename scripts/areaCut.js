@@ -746,51 +746,62 @@ function intersectMultipoly(relId,cutter,boundIndex){
 		hSmallMap.replaceObject(rel,[]);
 	};
 
-	function parseRel(rid,parsed,map){
+	function parseRel(rid,parsed,map,_rids){
 		var nrObj=map.getRelation(rid);
 		if(!nrObj){
 			removeRelation(rid);
 			return false;
 		};
-		parsed.obj=nrObj;
-		var m=nrObj.members.getAll().toArray();
-		parsed.members=m;
-		for(var i=m.length-3;i>=0;i-=3){
-			if(h.indexOf(['','outer','inner','enclave','exclave'],m[i+2])<0)continue;
-			switch(m[i]){
-				case 'relation':
-					var pr={members:[],ways:[],subPoly:[],obj:0,clusters:[]};
-					if(parseRel(m[i+1],pr,map))parsed.subPoly.push(pr);
-					m.splice(i,3);
-					break;
-				case 'way':
-					var w=map.getWay(m[i+1]);
-					m.splice(i,3);
-					if(w){
-						parsed.ways.push(w);
-					};
-					break;
-				case 'node':
-					break;
-				default:
-					throw {name:'intersectMultipoly/parseRel',message:'unknown object type <'+m[i]+'>'};
-			};
-		};
-		if((parsed.ways.length+parsed.subPoly.length)==0){
-			removeRelation(rid);
+		if(h.indexOf(['boundary','multipolygon'],nrObj.tags.getByKey('type'))<0){
+			echo('	Relation ['+rid+'] has invalid type <'+nrObj.tags.getByKey('type')+'>');
 			return false;
-		}else{
-			return true;
 		};
+		(_rids=_rids||[]).push(rid);
+		try{
+			parsed.obj=nrObj;
+			var m=nrObj.members.getAll().toArray();
+			for(var i=m.length-3;i>=0;i-=3){
+				if(h.indexOf(['','outer','inner','enclave','exclave'],m[i+2])<0)continue;
+				switch(m[i]){
+					case 'relation':
+						var pr={members:[],ways:[],subPoly:[],obj:0,clusters:[]},srid=m[i+1];
+						if(h.indexOf(_rids,srid)>=0){
+							echo('	Recurcive relation ['+srid+']');
+							return false;
+						}else{
+							if(parseRel(srid,pr,map,_rids)){
+								parsed.subPoly.push(pr);
+								m.splice(i,3);
+							}
+						};
+						break;
+					case 'way':
+						var w=map.getWay(m[i+1]);
+						if(w){
+							parsed.ways.push(w);
+							m.splice(i,3);
+						};
+						break;
+					case 'node':
+						break;
+					default:
+						throw {name:'intersectMultipoly/parseRel',message:'unknown object type <'+m[i]+'>'};
+				};
+			};
+			parsed.members=m;
+			if((parsed.ways.length+parsed.subPoly.length)==0){
+				removeRelation(rid);
+				return false;
+			}else{
+				return true;
+			};
+		}finally{
+			_rids.pop();
+		}
 	};
 
 	function mergeWays(pr){
 		//returns true if all clusters and subclusters are polygons
-		var mw=[];
-		for(var i=0;i<pr.ways.length;i++){
-			var w=pr.ways[i],n=w.nodes.toArray();
-			mw.push({id1:n[0],idn:n.slice(-1)[0],ways:[w]});
-		};
 		pr.clusters=cutter.mergeWayList(pr.ways);
 		delete pr.ways;
 		var res=pr.clusters.length==0;
@@ -1280,20 +1291,33 @@ function main(){
 	var boundIndex=new BoundIndexer(bPoly.poly);
 	//add boundary to `used` list
 	var usedWayList=hSmallMap.map.storage.createIdList();
-	var boundWays=[],hBoundMap=h.mapHelper();
+	var boundWays=[],hBoundMap=h.mapHelper(),
+		addOrRemoveBoundWay=function(way){
+			if(!usedWayList.isIn(way.id)){
+				usedWayList.add(way.id);
+				boundWays.push(way);
+			}else{
+				usedWayList.remove(way.id);
+				for(var i=boundWays.length-1,wid=way.id;i>=0;i--){
+					if(boundWays[i].id==wid){
+						boundWays.splice(i,1);
+						return;
+					};
+				};
+				throw {name:'developer',message:'Way '+way.id+' is duplicated but not found in boundWays array'};
+			};
+		};
 	hBoundMap.map=bPoly.usedMap;
 	for(var i=0;i<cutBound.length;i++){
 		var bound=hBoundMap.getObject(cutBound[i]);
 		if(bound.getClassName()=='Way'){
-			usedWayList.add(bound.id);
-			boundWays.push(bound);
+			addOrRemoveBoundWay(bound);
 		}else{//bound is relation
 			var wl=(h.polyIntersector(hBoundMap,hSmallMap,boundIndex.poly)).buildWayList(bound);
 			for(var j=0;j<wl.length;j++){
 				bound=wl[j];
 				bound.tags.deleteByKey('osman:parent');
-				usedWayList.add(bound.id);
-				boundWays.push(bound);
+				addOrRemoveBoundWay(bound);
 			};
 		};
 	};
@@ -1307,6 +1331,7 @@ function main(){
 	};
 	echot('building incomplete ways');
 	var icptWayList=hSmallMap.map.storage.createIdList();
+	//icptWayList.add(85710344);icptWayList.add(87691925);
 	hSmallMap.exec('INSERT OR IGNORE INTO '+icptWayList.tableName+'(id) SELECT wayid FROM waynodes WHERE nodeid NOT IN (SELECT id FROM nodes_attr)');
 
 	echot('building incomplete multipolygons');
@@ -1334,7 +1359,7 @@ function main(){
 		};
 		ioNodes=ioNodes.concat(intersectWay(way,cutter,usedWayList,notUsedWayList,boundIndex));
 		echo(' ',true,true);
-	};
+		};
 	echo('',true);
 	echot('Merging '+ioNodes.length+' cut nodes and bound');
 	mergeIONodesAndBound(ioNodes,boundIndex,boundWays);
